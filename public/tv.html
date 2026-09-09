@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Share</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  /* Designed for one 1920x1080 screen on a break-room wall, read from across
+     the room. The whole board is laid out at that size and then scaled to
+     whatever it is actually shown on, so nothing reflows between the office
+     monitor it gets checked on and the TV it lives on. */
+  :root{
+    --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
+    --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
+    --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--plane);color:var(--ink-2);
+    font-family:var(--sans);overflow:hidden}
+  #wrap{width:100vw;height:100vh;overflow:hidden}
+  #board{width:1920px;height:1080px;transform-origin:top left;padding:34px 40px;
+    display:flex;flex-direction:column;gap:20px;background:var(--plane)}
+
+  /* masthead */
+  .top{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2px solid var(--seam);padding-bottom:16px}
+  .brand{font-family:var(--cond);font-weight:700;font-size:40px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink)}
+  .brand em{color:var(--brand);font-style:normal}
+  .month{font-family:var(--cond);font-weight:600;font-size:26px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--ink-3);margin-left:20px}
+  .right{display:flex;align-items:center;gap:26px}
+  .live{display:flex;align-items:center;gap:10px;font-size:18px;color:var(--ink-3)}
+  .live i{width:11px;height:11px;border-radius:50%;background:var(--good);display:block;
+    animation:pulse 2.6s ease-in-out infinite}
+  .live.stale i{background:var(--warn);animation:none}
+  .live.dead i{background:var(--crit);animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .clock{font-family:var(--cond);font-weight:700;font-size:34px;color:var(--ink);
+    font-variant-numeric:tabular-nums}
+
+  .qrow{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0}
+  .q{background:var(--panel);border:1px solid var(--seam);border-radius:14px;
+    padding:22px 26px;display:flex;flex-direction:column;min-height:0}
+  .qhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+  .qhead h2{font-family:var(--cond);font-weight:700;font-size:28px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink);margin:0}
+  .tag{font-family:var(--cond);font-weight:600;font-size:19px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .tag b{color:var(--ink)}
+
+  /* pool */
+  .hero{font-family:var(--cond);font-weight:700;font-size:118px;line-height:.95;
+    color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .heroNote{font-size:19px;color:var(--ink-3);margin:8px 0 20px}
+  .chain{display:flex;border-top:1px solid var(--seam);border-bottom:1px solid var(--seam)}
+  .chain .cell{flex:1;padding:15px 0 16px}
+  .chain .cell+.cell{border-left:1px solid var(--seam);padding-left:22px}
+  .chain .k{font-family:var(--cond);font-weight:600;font-size:17px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+  .chain .v{font-family:var(--cond);font-weight:700;font-size:36px;line-height:1.05;
+    font-variant-numeric:tabular-nums;color:var(--ink)}
+  .chain .v.neg{color:var(--crit)}
+  .chain .v.warn{color:var(--warn)}
+  .splitbar{display:flex;height:16px;border-radius:8px;overflow:hidden;margin:22px 0 12px;
+    background:var(--panel-2)}
+  .splitbar i{display:block;height:100%}
+  .splitlegend{display:flex;gap:34px;font-size:20px;color:var(--ink-2)}
+  .splitlegend b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block;margin-right:9px}
+
+  /* standings — rows share whatever height is left, so the roster can grow
+     from 13 to 20 without the last one sliding under the footer */
+  .stand{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
+    min-height:0;overflow:hidden}
+  .srow{display:grid;grid-template-columns:38px 132px 1fr 116px;align-items:center;gap:12px;
+    flex:1 1 0;min-height:0;max-height:44px}
+  .srow .rk{font-family:var(--cond);font-weight:600;font-size:21px;color:var(--ink-3);
+    text-align:right;font-variant-numeric:tabular-nums}
+  .srow .nm{font-family:var(--cond);font-weight:700;font-size:25px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .tk{height:13px;background:var(--panel-2);border-radius:4px;overflow:hidden;display:flex;gap:2px}
+  .srow .tk i{display:block;height:100%}
+  .srow .am{font-family:var(--cond);font-weight:700;font-size:24px;text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--ink)}
+
+  /* mini lists */
+  .mini{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
+    min-height:0;overflow:hidden}
+  .mrow{display:grid;grid-template-columns:126px 1fr 44px 100px;align-items:center;gap:11px;
+    flex:1 1 0;min-height:0;max-height:38px}
+  .mrow .nm{font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrow .tk{height:15px;background:var(--panel-2);border-radius:4px;overflow:hidden}
+  .mrow .tk i{display:block;height:100%;border-radius:0 4px 4px 0}
+  .mrow .n{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--ink-2)}
+  .mrow .am{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--ink)}
+
+  /* someone short on hours is dimmed; someone who walked is red */
+  .nq{opacity:.42}
+  .nq .am{color:var(--ink-3)}
+  .ff .nm,.ff .am{color:var(--crit)}
+  .ff{opacity:.9}
+
+  .qfoot{font-size:17px;color:var(--ink-3);margin-top:14px;border-top:1px solid var(--seam);
+    padding-top:12px}
+  .qfoot b{color:var(--ink-2)}
+
+  /* a state the board will genuinely be in until hours arrive each month */
+  .pending{margin:18px 0 0;padding:14px 18px;border-radius:10px;
+    background:rgba(250,178,25,.09);border-left:4px solid var(--warn);
+    font-size:20px;color:var(--ink-2)}
+  .pending b{color:var(--ink)}
+
+  #err{position:fixed;left:0;right:0;bottom:0;background:var(--crit);color:#fff;
+    padding:12px 20px;font-size:18px;text-align:center;display:none}
+</style>
+</head>
+<body>
+
+<div id="wrap"><div id="board">
+
+  <div class="top">
+    <div>
+      <span class="brand">Immediate Movers <em>&amp;</em> Storage</span>
+      <span class="month" id="month">&mdash;</span>
+    </div>
+    <div class="right">
+      <div class="live" id="live"><i></i><span id="liveText">live</span></div>
+      <div class="clock" id="clock">--:--</div>
+    </div>
+  </div>
+
+  <div class="qrow">
+    <div class="q">
+      <div class="qhead">
+        <h2>The pool</h2>
+        <div class="tag"><b id="qualN">0</b> of <span id="crewN">0</span> sharing</div>
+      </div>
+      <div class="hero" id="pool">$0.00</div>
+      <div class="heroNote">Total pool to share this month</div>
+      <div class="chain">
+        <div class="cell"><div class="k">Jobs completed</div><div class="v" id="jobs">0</div></div>
+        <div class="cell"><div class="k">Claims <span id="claimN"></span></div><div class="v neg" id="claims">$0.00</div></div>
+        <div class="cell"><div class="k" id="thirdK">Sharing</div><div class="v" id="third">0</div></div>
+      </div>
+      <div class="splitbar"><i id="sbP" style="background:var(--s-points)"></i><i id="sbR" style="background:var(--s-reviews)"></i></div>
+      <div class="splitlegend">
+        <div><span class="sw" style="background:var(--s-points)"></span>Points 60% &mdash; <b id="lgP">$0.00</b></div>
+        <div><span class="sw" style="background:var(--s-reviews)"></span>5-star reviews 40% &mdash; <b id="lgR">$0.00</b></div>
+      </div>
+      <div id="pending"></div>
+    </div>
+
+    <div class="q">
+      <div class="qhead"><h2>Where everyone stands</h2><div class="tag">Total share</div></div>
+      <div class="stand" id="stand"></div>
+    </div>
+  </div>
+
+  <div class="qrow">
+    <div class="q">
+      <div class="qhead"><h2>Performance points</h2><div class="tag">60% &mdash; <b id="q3">$0.00</b></div></div>
+      <div class="mini" id="ptsList"></div>
+      <div class="qfoot">Everyone starts the month at <b>15 points</b>. A second job in a day is <b>+1</b>. Hit <b>0</b> and this half pays nothing &mdash; your reviews still do.</div>
+    </div>
+    <div class="q">
+      <div class="qhead"><h2>5-star reviews</h2><div class="tag">40% &mdash; <b id="q4">$0.00</b></div></div>
+      <div class="mini" id="revList"></div>
+      <div class="qfoot">Review without a photo = <b>1</b> &middot; with a photo = <b>3</b> &middot; every mover on the job gets credit. Faded = <b>under 75 hours</b> &middot; red = <b>left without notice</b>.</div>
+    </div>
+  </div>
+
+</div></div>
+<div id="err"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var TOKEN = (location.pathname.match(/\/tv\/([^/?#]+)/) || [])[1] || "";
+  /* ?month=2026-08 pins the board to a month. Left off it follows the calendar,
+     which is what the wall screen does — but in the first days of a new month
+     you may want it still showing the one being closed out. */
+  var MONTH = (location.search.match(/[?&]month=(\d{4}-\d{2})/) || [])[1] || "";
+  var REFRESH_MS = 60000;
+  var $ = function(id){ return document.getElementById(id); };
+  var usd = function(n){
+    return "$" + Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  };
+  var esc = function(s){
+    return String(s).replace(/[&<>"]/g,function(c){
+      return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c];
+    });
+  };
+
+  /* scale the 1920x1080 board to whatever screen it lands on */
+  function fit(){
+    var w = window.innerWidth, h = window.innerHeight;
+    var s = Math.min(w/1920, h/1080);
+    var b = $("board");
+    b.style.transform = "scale(" + s + ")";
+    b.style.marginLeft = Math.max(0,(w - 1920*s)/2) + "px";
+    b.style.marginTop  = Math.max(0,(h - 1080*s)/2) + "px";
+  }
+
+  function clock(){
+    var n = new Date(), h = n.getHours(), m = n.getMinutes();
+    var ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+    $("clock").textContent = h + ":" + (m<10?"0":"") + m + " " + ap;
+  }
+
+  /* paid first, then anyone who forfeited, then anyone short on hours */
+  function tier(c){ return c.paid ? 0 : (c.forfeits ? 1 : 2); }
+  function rank(crew, key){
+    return crew.slice().sort(function(a,b){
+      return tier(a)-tier(b) || (b[key]-a[key]) || (b.share-a.share);
+    });
+  }
+  function cls(c){ return c.paid ? "" : (c.forfeits ? " ff" : " nq"); }
+
+  function renderStandings(d){
+    var rows = rank(d.crew, "share");
+    var max = 1;
+    rows.forEach(function(c){ max = Math.max(max, c.share, c.forfeited); });
+
+    $("stand").innerHTML = rows.map(function(c, i){
+      var bars, amt;
+      if (c.paid){
+        bars = '<i style="width:'+((c.points_amount/max)*100).toFixed(2)+'%;background:var(--s-points)"></i>'
+             + '<i style="width:'+((c.reviews_amount/max)*100).toFixed(2)+'%;background:var(--s-reviews)"></i>';
+        amt = usd(c.share);
+      } else if (c.forfeits){
+        bars = '<i style="width:'+((c.forfeited/max)*100).toFixed(2)+'%;background:var(--crit);opacity:.55"></i>';
+        amt = "−" + usd(c.forfeited);
+      } else {
+        bars = "";
+        amt = c.hours + " h";
+      }
+      return '<div class="srow'+cls(c)+'">'
+        + '<div class="rk">'+(c.paid ? (i+1) : "—")+'</div>'
+        + '<div class="nm">'+esc(c.code_name)+'</div>'
+        + '<div class="tk">'+bars+'</div>'
+        + '<div class="am">'+amt+'</div></div>';
+    }).join("");
+  }
+
+  function renderMini(id, d, key, amtKey, colour){
+    var rows = rank(d.crew, key);
+    var max = 1;
+    rows.forEach(function(c){ max = Math.max(max, c[key]); });
+
+    $(id).innerHTML = rows.map(function(c){
+      var amt = c.paid ? usd(c[amtKey]) : "—";
+      return '<div class="mrow'+cls(c)+'">'
+        + '<div class="nm">'+esc(c.code_name)+'</div>'
+        + '<div class="tk"><i style="width:'+((c[key]/max)*100).toFixed(2)+'%;background:'
+        + (c.forfeits ? "var(--crit)" : colour) + '"></i></div>'
+        + '<div class="n">'+c[key]+'</div>'
+        + '<div class="am">'+amt+'</div></div>';
+    }).join("");
+  }
+
+  function monthLabel(period){
+    var p = String(period||"").split("-");
+    if (p.length < 2) return "";
+    var names = ["January","February","March","April","May","June","July",
+                 "August","September","October","November","December"];
+    return names[Number(p[1])-1] + " " + p[0];
+  }
+
+  function render(d){
+    $("month").textContent = monthLabel(d.period);
+    $("pool").textContent  = usd(d.pool);
+    $("jobs").textContent  = d.completed_jobs == null ? "—" : d.completed_jobs;
+    $("claims").textContent = d.claims_total ? "−" + usd(d.claims_total) : usd(0);
+    $("claimN").textContent = d.claims_count ? "("+d.claims_count+")" : "";
+
+    if (d.forfeited > 0){
+      $("thirdK").textContent = "Redistributed";
+      $("third").textContent = usd(d.forfeited);
+      $("third").className = "v warn";
+    } else {
+      $("thirdK").textContent = "Sharing this month";
+      $("third").textContent = d.counts.qualified + " crew";
+      $("third").className = "v";
+    }
+
+    $("lgP").textContent = usd(d.points_pool);
+    $("lgR").textContent = usd(d.reviews_pool);
+    $("q3").textContent  = usd(d.points_pool);
+    $("q4").textContent  = usd(d.reviews_pool);
+    $("qualN").textContent = d.counts.qualified;
+    $("crewN").textContent = d.counts.roster;
+    $("sbP").style.width = "60%";
+    $("sbR").style.width = "40%";
+
+    /* Until hours are entered nobody clears the 75-hour gate, so every dollar
+       column is empty. Say why, rather than showing a wall of dashes. */
+    $("pending").innerHTML = (d.counts.qualified === 0 && d.counts.roster > 0)
+      ? '<div class="pending"><b>Hours not in yet.</b> Points and reviews are counting. '
+        + 'Nothing pays out until the month’s hours are entered and the 75-hour minimum can be checked.</div>'
+      : "";
+
+    renderStandings(d);
+    renderMini("ptsList", d, "points", "points_amount", "var(--s-points)");
+    renderMini("revList", d, "review_points", "reviews_amount", "var(--s-reviews)");
+  }
+
+  var failures = 0;
+  function setLive(state, text){
+    $("live").className = "live" + (state ? " " + state : "");
+    $("liveText").textContent = text;
+  }
+
+  function load(){
+    fetch("/api/board/" + encodeURIComponent(TOKEN) + (MONTH ? "?month=" + MONTH : ""),
+          { cache: "no-store" })
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(d){
+        failures = 0;
+        render(d);
+        setLive("", "live");
+        $("err").style.display = "none";
+        fit();
+      })
+      .catch(function(e){
+        failures++;
+        /* a TV nobody is watching should not go blank on one bad request —
+           keep the last good numbers up and just mark them as ageing */
+        setLive(failures > 3 ? "dead" : "stale",
+                failures > 3 ? "not updating" : "retrying");
+        if (failures > 3){
+          $("err").style.display = "block";
+          $("err").textContent = "Cannot reach the server — showing the last figures received.";
+        }
+      });
+  }
+
+  window.addEventListener("resize", fit);
+  fit(); clock(); load();
+  setInterval(clock, 20000);
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

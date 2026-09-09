@@ -1,0 +1,21 @@
+node_modules/
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.sm-key
+service-account*.json
+*-service-account*.json
+client_secret*.json
+credentials*.json
+
+# local scratch
+*.log
+opps-cache.json
+pay-cache.json
+months-cache.json
+roster.json
+probe-out.json

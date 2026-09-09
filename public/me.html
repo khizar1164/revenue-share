@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Revenue Share</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  /* Read on a phone in a truck cab as often as on a desk, so it is one column
+     and the type stays large. The job of this page is to answer "why is my
+     number what it is" without anyone having to ask. */
+  :root{
+    --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
+    --hair:rgba(255,255,255,.07);
+    --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
+    --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink-2);font-family:var(--sans);
+    font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .page{max-width:760px;margin:0 auto;padding:0 18px 72px}
+
+  header{padding:26px 0 18px;border-bottom:1px solid var(--seam);margin-bottom:20px}
+  .who{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-family:var(--cond);font-weight:700;font-size:34px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink);margin:0}
+  .code{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.14em;
+    color:var(--brand);border:1px solid var(--brand);border-radius:6px;padding:2px 10px}
+  .sub{font-size:14px;color:var(--ink-3);margin-top:6px}
+  .private{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:9px}
+
+  .headline{background:var(--panel);border:1px solid var(--seam);border-radius:13px;
+    padding:22px 24px;margin-bottom:16px}
+  .big{font-family:var(--cond);font-weight:700;font-size:62px;line-height:1;color:var(--brand);
+    font-variant-numeric:tabular-nums}
+  .biglabel{font-family:var(--cond);font-weight:600;font-size:13px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+  .breakdown{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px;padding-top:16px;
+    border-top:1px solid var(--seam)}
+  .bd .k{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .bd .v{font-family:var(--cond);font-weight:700;font-size:26px;color:var(--ink);
+    font-variant-numeric:tabular-nums;line-height:1.2}
+  .bd .m{font-size:12.5px;color:var(--ink-3)}
+
+  section.card{background:var(--panel);border:1px solid var(--seam);border-radius:13px;
+    padding:20px 22px;margin-bottom:16px}
+  h2{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-2);margin:0 0 4px}
+  .dek{font-size:13.5px;color:var(--ink-3);margin:0 0 14px}
+
+  table{border-collapse:collapse;width:100%;font-size:14.5px}
+  th{font-family:var(--cond);font-weight:600;font-size:11.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);text-align:left;padding:0 10px 8px 0;
+    border-bottom:1px solid var(--seam);white-space:nowrap}
+  td{padding:9px 10px 9px 0;border-bottom:1px solid var(--hair)}
+  tbody tr:last-child td{border-bottom:0}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tfoot td{padding-top:12px;border-bottom:0;font-weight:600;color:var(--ink)}
+
+  .pill{display:inline-block;font-family:var(--cond);font-weight:700;font-size:12px;
+    letter-spacing:.09em;text-transform:uppercase;padding:2px 9px;border-radius:5px}
+  .pill.plus{color:var(--good);background:rgba(12,163,12,.15)}
+  .pill.minus{color:var(--crit);background:rgba(208,59,59,.15)}
+  .pill.warn{color:var(--warn);background:rgba(250,178,25,.15)}
+
+  .banner{border-left:4px solid var(--warn);background:rgba(250,178,25,.08);
+    padding:15px 18px;border-radius:0 10px 10px 0;margin-bottom:16px;font-size:15px}
+  .banner.bad{border-left-color:var(--crit);background:rgba(208,59,59,.08)}
+  .banner.ok{border-left-color:var(--good);background:rgba(12,163,12,.07)}
+  .banner b{color:var(--ink)}
+
+  .meter{height:13px;border-radius:7px;background:var(--panel-2);overflow:hidden;margin:12px 0 7px}
+  .meter i{display:block;height:100%;transition:width .3s}
+  .ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3)}
+  .standNum{font-family:var(--cond);font-weight:700;font-size:36px;line-height:1.1;color:var(--ink)}
+
+  .hoursbar{height:11px;border-radius:6px;background:var(--panel-2);overflow:hidden;margin:10px 0 6px}
+  .hoursbar i{display:block;height:100%}
+
+  #err{background:var(--crit);color:#fff;padding:14px 18px;border-radius:10px;margin:20px 0;display:none}
+  .picker{background:var(--panel-2);border:1px dashed var(--seam);border-radius:10px;
+    padding:14px 16px;margin-bottom:18px}
+  .picker .lbl{font-size:12px;color:var(--warn);letter-spacing:.1em;text-transform:uppercase;
+    font-weight:600;margin-bottom:8px}
+  .picker select{font:inherit;font-size:14px;color:var(--ink);background:var(--plane);
+    border:1px solid var(--seam);border-radius:7px;padding:8px 10px;width:100%;max-width:340px}
+
+  /* sign in */
+  .signin{max-width:440px;margin:56px auto;background:var(--panel);border:1px solid var(--seam);
+    border-radius:14px;padding:32px 30px;text-align:center}
+  .signin h2{font-family:var(--cond);font-weight:700;font-size:26px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink);margin:0 0 8px}
+  .signin p{font-size:15px;color:var(--ink-2);margin:0 0 22px}
+  .signin input{font:inherit;font-size:16px;color:var(--ink);background:var(--plane);
+    border:1px solid var(--seam);border-radius:9px;padding:13px 14px;width:100%;text-align:center}
+  .signin input:focus{outline:2px solid var(--brand);outline-offset:1px}
+  .signin button{font:inherit;font-weight:700;font-size:16px;color:#1a0e05;background:var(--brand);
+    border:0;border-radius:9px;padding:14px 20px;width:100%;margin-top:12px;cursor:pointer}
+  .signin button:hover{filter:brightness(1.07)}
+  .signin button:disabled{opacity:.55;cursor:default}
+  .signin .msg{margin-top:18px;font-size:14.5px;line-height:1.5}
+  .signin .msg.ok{color:var(--good)}
+  .signin .msg.bad{color:var(--crit)}
+  .signout{background:none;border:1px solid var(--seam);color:var(--ink-3);font:inherit;
+    font-size:13px;border-radius:7px;padding:6px 12px;cursor:pointer}
+  .signout:hover{color:var(--ink-2);border-color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="signin" id="signin" hidden>
+    <h2>Your revenue share</h2>
+    <p>Enter your work email and we'll send you a link. No password to remember.</p>
+    <form id="signinForm">
+      <input type="email" id="signinEmail" placeholder="you@immediatemoversnwi.com"
+             autocomplete="email" required>
+      <button type="submit" id="signinGo">Send me the link</button>
+    </form>
+    <div class="msg" id="signinMsg"></div>
+  </div>
+
+  <div id="app" hidden>
+
+  <div class="picker" id="picker" hidden>
+    <div class="lbl">Preview — replaced by email sign-in</div>
+    <select id="whoPick"></select>
+  </div>
+
+  <header>
+    <p class="private">Private &mdash; never shown on the break-room TV</p>
+    <div class="who"><h1 id="name">&mdash;</h1><span class="code" id="code">&mdash;</span></div>
+    <div class="sub" id="month">&mdash;</div>
+  </header>
+
+  <div id="err"></div>
+  <div id="banner"></div>
+
+  <div class="headline">
+    <div class="biglabel">Take home this month</div>
+    <div class="big" id="take">$0.00</div>
+    <div class="breakdown" id="breakdown"></div>
+  </div>
+
+  <section class="card">
+    <h2>Your points this month</h2>
+    <p class="dek">Everyone starts at 15. A second job in a day earns <b>+1</b> and is added automatically from the schedule &mdash; you don't have to log it.</p>
+    <table id="ledger"></table>
+  </section>
+
+  <section class="card" id="adjCard">
+    <h2>Extras and deductions</h2>
+    <p class="dek">Paid on top of your share, or charged to you alone. Nobody else sees these.</p>
+    <table id="adj"></table>
+  </section>
+
+  <section class="card">
+    <h2>Your reviews this month</h2>
+    <p class="dek">Every mover on the job gets the full value &mdash; it isn't split between you.</p>
+    <table id="reviews"></table>
+  </section>
+
+  <section class="card">
+    <h2>Standing &mdash; rolling 60 days</h2>
+    <div class="standNum" id="standNum">0 points lost</div>
+    <div class="meter" id="meter"></div>
+    <div class="ticks"><span>0</span><span>15 · warning</span><span>30 · suspension</span><span>45 · termination</span></div>
+    <p style="font-size:13.5px;margin:14px 0 0" id="standNote"></p>
+  </section>
+
+  <section class="card">
+    <h2>Eligibility</h2>
+    <table id="elig"></table>
+  </section>
+
+  <div style="text-align:center;margin-top:26px">
+    <button class="signout" id="signout" hidden>Sign out</button>
+  </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var usd = function(n){ return "$" + Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
+  var MONTHS = ["January","February","March","April","May","June","July",
+                "August","September","October","November","December"];
+
+  var who = (location.pathname.match(/\/me\/([0-9a-f-]{36})/i) || [])[1] || "";
+  var month = (location.search.match(/[?&]month=(\d{4}-\d{2})/) || [])[1] || "";
+  var qs = month ? "?month=" + month : "";
+
+  function day(d){
+    var s = String(d).slice(0,10).split("-");
+    return s.length === 3 ? MONTHS[Number(s[1])-1].slice(0,3) + " " + Number(s[2]) : String(d);
+  }
+
+  function render(d){
+    $("name").textContent = d.full_name;
+    $("code").textContent = d.code_name;
+    var p = String(d.period).split("-");
+    $("month").textContent = MONTHS[Number(p[1])-1] + " " + p[0] +
+      " · you are shown as " + d.code_name + " on the break-room screen";
+
+    $("take").textContent = usd(d.take_home);
+
+    var bits = [
+      ["Points 60%", usd(d.points_amount),
+        d.points + " points" + (d.paid ? " · " + (d.points_pct*100).toFixed(1) + "% of " + usd(d.points_pool) : "")],
+      ["Reviews 40%", usd(d.reviews_amount),
+        d.review_points + " review points" + (d.paid ? " · " + (d.reviews_pct*100).toFixed(1) + "% of " + usd(d.reviews_pool) : "")]
+    ];
+    if (d.bonuses)    bits.push(["Extras", "+" + usd(d.bonuses), "paid on top"]);
+    if (d.deductions) bits.push(["Deductions", "−" + usd(d.deductions), "charged to you"]);
+    $("breakdown").innerHTML = bits.map(function(b){
+      return '<div class="bd"><div class="k">'+esc(b[0])+'</div><div class="v">'+esc(b[1])+
+             '</div><div class="m">'+esc(b[2])+'</div></div>';
+    }).join("");
+
+    /* the one thing this page exists to explain */
+    var b = "";
+    if (d.forfeits){
+      b = '<div class="banner bad"><b>No two weeks notice on file.</b> Your share for this month — '
+        + usd(d.forfeited) + ' — has been forfeited and shared out among the crew still working.</div>';
+    } else if (!d.paid && !d.hours_ok){
+      b = '<div class="banner"><b>Not eligible this month.</b> ' + d.hours + ' hours worked, '
+        + (75 - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the 75-hour minimum. '
+        + 'Your points and reviews still count — they just don’t pay this month.</div>';
+    } else if (d.paid && d.points === 0){
+      b = '<div class="banner"><b>No points left.</b> The points half pays nothing this month. '
+        + 'Your reviews still pay ' + usd(d.reviews_amount) + '.</div>';
+    } else if (d.paid){
+      b = '<div class="banner ok"><b>You’re sharing this month.</b> '
+        + d.hours + ' hours worked, over the 75-hour minimum.</div>';
+    }
+    $("banner").innerHTML = b;
+
+    /* ledger with a running total, so any number can be traced */
+    var run = 15;
+    var h = '<thead><tr><th>Date</th><th>What happened</th><th class="n">Pts</th><th class="n">Running</th></tr></thead><tbody>'
+          + '<tr><td>' + day(d.period) + '</td><td style="color:var(--ink-3)">Month starts</td>'
+          + '<td class="n">—</td><td class="n"><b>15</b></td></tr>';
+    (d.ledger||[]).forEach(function(e){
+      run += e.delta;
+      h += '<tr><td>'+day(e.occurred_on)+'</td><td>'+esc(e.reason)
+        + (e.job_number ? ' <span style="color:var(--ink-3)">· job '+esc(e.job_number)+'</span>' : '')
+        + '</td><td class="n"><span class="pill '+(e.delta>0?"plus":"minus")+'">'
+        + (e.delta>0?"+":"−")+Math.abs(e.delta)+'</span></td>'
+        + '<td class="n"><b>'+run+'</b></td></tr>';
+    });
+    $("ledger").innerHTML = h + '</tbody><tfoot><tr><td colspan="3">Points now</td>'
+      + '<td class="n">'+d.points+'</td></tr></tfoot>';
+
+    /* extras and deductions */
+    var adj = d.adjustments || [];
+    if (!adj.length){
+      $("adj").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">Nothing added or taken off this month.</td></tr></tbody>';
+    } else {
+      var net = 0;
+      var ah = '<thead><tr><th>Date</th><th>What for</th><th class="n">Amount</th></tr></thead><tbody>';
+      adj.forEach(function(a){
+        var plus = a.kind === "bonus";
+        net += plus ? Number(a.amount) : -Number(a.amount);
+        ah += '<tr><td>'+day(a.occurred_on)+'</td><td>'+esc(a.reason)+'</td>'
+           +  '<td class="n" style="color:'+(plus?"var(--good)":"var(--crit)")+'"><b>'
+           +  (plus?"+":"−")+usd(a.amount)+'</b></td></tr>';
+      });
+      $("adj").innerHTML = ah + '</tbody><tfoot><tr><td colspan="2">Net</td><td class="n">'
+        + (net>=0?"+":"−") + usd(Math.abs(net)) + '</td></tr></tfoot>';
+    }
+
+    /* reviews */
+    var rv = d.reviews || [];
+    if (!rv.length){
+      $("reviews").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">No reviews credited to you yet this month.</td></tr></tbody>';
+    } else {
+      $("reviews").innerHTML = '<thead><tr><th>Date</th><th>Job #</th><th>Source</th><th class="n">Pts</th></tr></thead><tbody>'
+        + rv.map(function(r){
+            return '<tr><td>'+day(r.occurred_on)+'</td><td>'+esc(r.job_number||"—")+'</td>'
+              + '<td>'+esc(r.source||"—")+'</td><td class="n"><b>'+r.points+'</b>'
+              + (r.has_photo?' <span style="color:var(--ink-3);font-size:12px">photo</span>':'')+'</td></tr>';
+          }).join("")
+        + '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">'+d.review_points+'</td></tr></tfoot>';
+    }
+
+    /* discipline */
+    var lost = d.discipline_lost || 0;
+    $("standNum").textContent = lost + (lost === 1 ? " point lost" : " points lost");
+    var col = lost >= 45 ? "var(--crit)" : lost >= 30 ? "var(--crit)"
+            : lost >= 15 ? "var(--warn)" : "var(--good)";
+    $("meter").innerHTML = '<i style="width:'+Math.min(100,(lost/45)*100).toFixed(1)+'%;background:'+col+'"></i>';
+    $("standNote").textContent =
+      lost >= 45 ? "At or past the termination threshold."
+    : lost >= 30 ? "Past 30 — seven-day unpaid suspension."
+    : lost >= 15 ? "Past 15 — written warning. " + (30-lost) + " more reaches suspension."
+    : "Clear. " + (15-lost) + " more points lost in a rolling 60 days reaches a written warning.";
+
+    /* eligibility */
+    var pctH = Math.min(100, (d.hours/75)*100);
+    $("elig").innerHTML = '<tbody>'
+      + '<tr><td>Hours worked</td><td class="n"><b>'+d.hours+'</b> / 75 &nbsp;'
+      +   '<span class="pill '+(d.hours_ok?"plus":"minus")+'">'
+      +   (d.hours_ok?"Qualified":"Short "+(75-d.hours).toFixed(2).replace(/\.00$/,"")+" h")+'</span>'
+      +   '<div class="hoursbar"><i style="width:'+pctH.toFixed(1)+'%;background:'
+      +   (d.hours_ok?"var(--good)":"var(--warn)")+'"></i></div></td></tr>'
+      + '<tr><td>Points left</td><td class="n"><b>'+d.points+'</b> &nbsp;<span class="pill '
+      +   (d.points>0?"plus":"minus")+'">'+(d.points>0?"Earning":"$0 from points")+'</span></td></tr>'
+      + '<tr><td>Review points</td><td class="n"><b>'+d.review_points+'</b></td></tr>'
+      + '<tr><td>Two weeks notice</td><td class="n">'
+      +   (d.forfeits ? '<span class="pill minus">Not given — share forfeited</span>'
+                      : '<span class="pill plus">Nothing on file</span>')+'</td></tr>'
+      + '</tbody>';
+
+    $("adjCard").hidden = false;
+  }
+
+  function showReport(d){
+    $("signin").hidden = true;
+    $("app").hidden = false;
+    render(d);
+  }
+
+  function showSignIn(msg, bad){
+    $("app").hidden = true;
+    $("signin").hidden = false;
+    if (msg){
+      $("signinMsg").textContent = msg;
+      $("signinMsg").className = "msg " + (bad ? "bad" : "ok");
+    }
+  }
+
+  /* Try the signed-in report first. Falling back to the preview picker only
+     happens while the server still allows it. */
+  function start(){
+    fetch("/api/me" + qs)
+      .then(function(r){
+        if (r.ok) return r.json().then(function(d){
+          showReport(d);
+          $("signout").hidden = false;
+        });
+        if (r.status === 401) return preview();
+        return r.json().then(function(b){ throw new Error(b.error || "HTTP " + r.status); });
+      })
+      .catch(function(e){
+        $("app").hidden = false;
+        $("err").style.display = "block";
+        $("err").textContent = e.message;
+      });
+  }
+
+  function loadById(id){
+    fetch("/api/me/" + encodeURIComponent(id) + qs)
+      .then(function(r){
+        if (!r.ok) return r.json().then(function(b){ throw new Error(b.error || "HTTP "+r.status); });
+        return r.json();
+      })
+      .then(showReport)
+      .catch(function(e){
+        $("app").hidden = false;
+        $("err").style.display = "block";
+        $("err").textContent = e.message;
+      });
+  }
+
+  function preview(){
+    return fetch("/api/me-preview")
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(list){
+        if (!list || !list.length) {
+          showSignIn(location.search.indexOf("expired") >= 0
+            ? "That link had already been used, or it ran out. Ask for a new one."
+            : "", location.search.indexOf("expired") >= 0);
+          return;
+        }
+        $("picker").hidden = false;
+        $("whoPick").innerHTML = list.map(function(e){
+          return '<option value="'+e.id+'"'+(e.id===who?" selected":"")+'>'
+               + esc(e.code_name + " · " + e.full_name) + '</option>';
+        }).join("");
+        $("whoPick").addEventListener("change", function(){
+          history.replaceState(null, "", "/me/" + this.value + location.search);
+          loadById(this.value);
+        });
+        if (!who) who = list[0].id;
+        loadById(who);
+      });
+  }
+
+  $("signinForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var btn = $("signinGo"), email = $("signinEmail").value.trim();
+    if (!email) return;
+    btn.disabled = true; btn.textContent = "Sending…";
+    fetch("/api/auth/request", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: email })
+    })
+      .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, b: b }; }); })
+      .then(function(x){
+        if (!x.ok) throw new Error(x.b.error || "could not send");
+        $("signinMsg").textContent = x.b.message;
+        $("signinMsg").className = "msg ok";
+        btn.textContent = "Sent — check your email";
+      })
+      .catch(function(err){
+        $("signinMsg").textContent = err.message;
+        $("signinMsg").className = "msg bad";
+        btn.disabled = false; btn.textContent = "Send me the link";
+      });
+  });
+
+  $("signout").addEventListener("click", function(){
+    fetch("/api/auth/logout", { method: "POST" })
+      .then(function(){ location.href = "/me"; });
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Share — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
+    --hair:rgba(255,255,255,.07);
+    --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
+    --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink-2);font-family:var(--sans);
+    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .page{max-width:1360px;margin:0 auto;padding:0 22px 80px}
+
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+    padding:26px 0 18px;border-bottom:1px solid var(--seam);margin-bottom:22px;flex-wrap:wrap}
+  h1{font-family:var(--cond);font-weight:700;font-size:30px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink);margin:0}
+  h1 em{color:var(--brand);font-style:normal}
+  .mo{display:flex;align-items:center;gap:10px}
+
+  h2{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-2);margin:0 0 4px}
+  .dek{font-size:13.5px;color:var(--ink-3);margin:0 0 14px}
+
+  .grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media(max-width:1000px){.grid{grid-template-columns:1fr}}
+  .col{display:grid;gap:16px}
+  .panel{background:var(--panel);border:1px solid var(--seam);border-radius:11px;padding:19px 21px}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--seam);border-radius:10px;padding:14px 16px}
+  .stat .k{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .stat .v{font-family:var(--cond);font-weight:700;font-size:27px;color:var(--ink);
+    font-variant-numeric:tabular-nums;line-height:1.15}
+  .stat .m{font-size:12.5px;color:var(--ink-3)}
+
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th{font-family:var(--cond);font-weight:600;font-size:11.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);text-align:left;padding:0 10px 8px 0;
+    border-bottom:1px solid var(--seam);white-space:nowrap}
+  td{padding:8px 10px 8px 0;border-bottom:1px solid var(--hair);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .code{font-family:var(--cond);font-weight:700;letter-spacing:.05em;color:var(--ink)}
+  .tblwrap{overflow-x:auto}
+  .scrolly{max-height:330px;overflow-y:auto}
+
+  label{font-size:11.5px;color:var(--ink-3);display:block;margin-bottom:4px;
+    letter-spacing:.07em;text-transform:uppercase;font-weight:600}
+  input,select,textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--plane);
+    border:1px solid var(--seam);border-radius:7px;padding:8px 10px;width:100%}
+  textarea{resize:vertical;min-height:88px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+  .frow{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-top:12px}
+  .frow>div{flex:1;min-width:110px}
+
+  button{font:inherit;font-weight:600;font-size:13.5px;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--seam);border-radius:7px;padding:8px 14px;cursor:pointer;white-space:nowrap}
+  button:hover{border-color:var(--ink-3)}
+  button.go{background:var(--brand);border-color:var(--brand);color:#1a0e05}
+  button.go:hover{filter:brightness(1.08)}
+  button.sm{padding:5px 9px;font-size:12.5px}
+  button.danger{color:var(--crit)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin:11px 0 4px}
+  .chips button{font-family:var(--cond);font-weight:700;font-size:12.5px;letter-spacing:.06em;
+    color:var(--ink-3);padding:5px 10px}
+  .chips button[aria-pressed="true"]{color:var(--ink);border-color:var(--s-reviews);
+    background:rgba(217,89,38,.16)}
+  .hint{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
+  .hint b{color:var(--ink-2)}
+
+  .pill{display:inline-block;font-family:var(--cond);font-weight:700;font-size:11.5px;
+    letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:5px}
+  .pill.ok{color:var(--good);background:rgba(12,163,12,.15)}
+  .pill.no{color:var(--crit);background:rgba(208,59,59,.15)}
+  .pill.warn{color:var(--warn);background:rgba(250,178,25,.15)}
+
+  .note{border-left:3px solid var(--warn);background:rgba(250,178,25,.07);
+    padding:12px 15px;border-radius:0 8px 8px 0;margin:0 0 15px;font-size:13.5px}
+  .note b{color:var(--ink)}
+  .note.ok{border-left-color:var(--good);background:rgba(12,163,12,.07)}
+
+  #toast{position:fixed;right:18px;bottom:18px;background:var(--panel-2);color:var(--ink);
+    border:1px solid var(--seam);border-left:3px solid var(--good);border-radius:9px;
+    padding:12px 18px;font-size:14px;opacity:0;transform:translateY(8px);
+    transition:opacity .18s,transform .18s;pointer-events:none;max-width:380px;z-index:50}
+  #toast.on{opacity:1;transform:none}
+  #toast.bad{border-left-color:var(--crit)}
+  .switch{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink-2)}
+  .switch input{width:auto}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Revenue Share <em>&middot;</em> Admin</h1>
+  <div class="mo">
+    <label for="month" style="margin:0">Month</label>
+    <input type="month" id="month" style="width:auto">
+    <button id="reload">Refresh</button>
+  </div>
+</header>
+
+<div class="stats" id="stats"></div>
+<div id="gateNote"></div>
+
+<div class="grid">
+  <div class="col">
+
+    <div class="panel">
+      <h2>Log a review</h2>
+      <p class="dek">Type the job number and the crew who worked it fills in from SmartMoving. Tap a name to add or drop them.</p>
+      <div class="frow">
+        <div style="max-width:130px"><label for="rvDate">Date</label><input type="date" id="rvDate"></div>
+        <div style="max-width:130px"><label for="rvJob">Job #</label><input type="text" id="rvJob" placeholder="10122-1" autocomplete="off"></div>
+        <div><label for="rvCust">Customer</label><input type="text" id="rvCust" placeholder="Name on the review"></div>
+        <div style="max-width:190px"><label for="rvSrc">Source</label>
+          <select id="rvSrc">
+            <option>LP Google</option><option>SB Google</option><option>Merrillville Google</option>
+            <option>Facebook</option><option>Snoball</option><option>BBB</option>
+          </select>
+        </div>
+      </div>
+      <div class="chips" id="rvCrew"></div>
+      <p class="hint" id="rvHint">Type a job number to pull its crew.</p>
+      <div class="frow">
+        <label class="switch" style="flex:1"><input type="checkbox" id="rvPhoto"> Has a photo &mdash; worth 3 instead of 1</label>
+        <button class="go" id="rvSave">Save review</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Hours <span id="hoursCount" style="color:var(--ink-3);font-size:13px"></span></h2>
+      <p class="dek">Paste Matthew's weekly Connecteam export &mdash; name and hours, one per line. Names are matched to the roster; anything that doesn't match comes back so you can decide.</p>
+      <textarea id="hoursPaste" placeholder="Aaron Schwark	41.5
+Adam Fredenburg	38
+Tyler Johnston  44.25"></textarea>
+      <div class="frow">
+        <label class="switch" style="flex:1"><input type="checkbox" id="hoursAdd"> These are extra hours &mdash; add to what's already recorded</label>
+        <button class="go" id="hoursSave">Save hours</button>
+      </div>
+      <p class="hint" id="hoursHint"></p>
+      <div class="tblwrap" style="margin-top:14px"><table id="hoursTbl"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>Reviews this month</h2>
+      <p class="dek">The customer name is recorded but never used to match anyone &mdash; only the job number decides credit.</p>
+      <div class="tblwrap scrolly"><table id="revTbl"></table></div>
+    </div>
+
+  </div>
+
+  <div class="col">
+
+    <div class="panel">
+      <h2>Claim deductions</h2>
+      <p class="dek">Comes off the whole pool before it splits.</p>
+      <div class="frow">
+        <div style="max-width:130px"><label for="clDate">Date</label><input type="date" id="clDate"></div>
+        <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
+        <div><label for="clNote">Reason</label><input type="text" id="clNote" placeholder="What happened"></div>
+        <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="500"></div>
+        <button id="clSave">Add</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Bonus or individual deduction</h2>
+      <p class="dek">Charged to one person, not the crew. <b>Private</b> &mdash; shows on their report only, never on the TV.</p>
+      <div class="frow">
+        <div style="max-width:130px"><label for="ajDate">Date</label><input type="date" id="ajDate"></div>
+        <div style="max-width:120px"><label for="ajKind">Type</label>
+          <select id="ajKind"><option value="bonus">Bonus</option><option value="deduction">Deduction</option></select>
+        </div>
+        <div><label for="ajWho">Who</label><select id="ajWho"></select></div>
+      </div>
+      <div class="frow">
+        <div><label for="ajNote">What for</label><input type="text" id="ajNote" placeholder="Hoarder house clean-out"></div>
+        <div style="max-width:105px"><label for="ajAmt">Amount</label><input type="number" id="ajAmt" min="0" step="25" value="150"></div>
+        <button id="ajSave">Add</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Points</h2>
+      <p class="dek">Same-day jobs are added automatically from SmartMoving. This is for everything a manager sees.</p>
+      <div class="frow">
+        <div style="max-width:130px"><label for="ptDate">Date</label><input type="date" id="ptDate"></div>
+        <div><label for="ptWho">Who</label><select id="ptWho"></select></div>
+      </div>
+      <div class="frow">
+        <div><label for="ptReason">What happened</label>
+          <select id="ptReason">
+            <option value="-5">Customer complaint naming you (−5)</option>
+            <option value="-3">Claim (−3)</option>
+            <option value="-2">Call off (−2)</option>
+            <option value="-2">Lost equipment (−2)</option>
+            <option value="-2">Stopped before first job, no fuel need (−2)</option>
+            <option value="-1">Late (−1)</option>
+            <option value="-1">Not out by shop time (−1)</option>
+            <option value="-1">Pads not neatly organized on truck (−1)</option>
+            <option value="-1">Policy violation (−1)</option>
+            <option value="-1">Missed pre-inspection walkthrough (−1)</option>
+          </select>
+        </div>
+        <button id="ptSave">Add</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Background jobs</h2>
+      <p class="dek">What runs on its own, and when it last did.</p>
+      <div class="tblwrap"><table id="jobsTbl"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>The month</h2>
+      <div class="tblwrap"><table id="poolTbl"></table></div>
+      <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
+        <label class="switch"><input type="checkbox" id="gateWaive">
+          Waive the 75-hour minimum for this month</label>
+        <p class="hint">Everyone on the roster shares regardless of hours. The roster only holds crew who actually worked jobs, so this never pays someone who wasn't there.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="panel" style="margin-top:16px">
+  <h2>Roster</h2>
+  <p class="dek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.</p>
+  <div class="tblwrap"><table id="rosterTbl"></table></div>
+</div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var usd = function(n){ return "$" + Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
+
+  var STATE = { month:"", summary:null, roster:[], reviews:[], revCrew:[], settings:null };
+
+  function toast(msg, bad){
+    var t = $("toast");
+    t.textContent = msg;
+    t.className = "on" + (bad ? " bad" : "");
+    clearTimeout(t._h);
+    t._h = setTimeout(function(){ t.className = ""; }, 3200);
+  }
+
+  function api(path, opts){
+    return fetch(path, Object.assign({ headers:{ "content-type":"application/json" } }, opts||{}))
+      .then(function(r){
+        if (r.status === 204) return null;
+        return r.json().then(function(b){
+          if (!r.ok) throw new Error(b && b.error ? b.error : "HTTP " + r.status);
+          return b;
+        });
+      });
+  }
+  var q = function(){ return "?month=" + STATE.month; };
+  var period = function(){ return STATE.month + "-01"; };
+
+  /* ------------------------------------------------------------- render --- */
+
+  function renderStats(d){
+    var waived = d.hours_gate_waived;
+    $("stats").innerHTML =
+      stat("Pool", usd(d.pool), usd(d.revenue) + " revenue, " + (d.completed_jobs==null?"—":d.completed_jobs) + " jobs") +
+      stat("Points 60%", usd(d.points_pool), d.totals.points + " points across " + d.counts.qualified) +
+      stat("Reviews 40%", usd(d.reviews_pool), d.totals.reviews + " review points") +
+      stat("Sharing", d.counts.qualified + " of " + d.counts.roster,
+           waived ? "75-hour minimum waived" : d.counts.short + " short on hours") +
+      (d.forfeited > 0 ? stat("Redistributed", usd(d.forfeited), d.counts.forfeited + " forfeited") : "");
+
+    var notes = "";
+    if (waived) {
+      notes += '<div class="note ok"><b>The 75-hour minimum is waived for this month.</b> '
+             + 'Everyone on the roster is sharing. Untick it in <em>The month</em> once hours are in.</div>';
+    } else if (d.hours_entered === 0) {
+      notes += '<div class="note"><b>No hours entered yet, so nobody is being paid.</b> '
+             + 'Points and reviews are still counting. Paste Matthew’s Connecteam export below, '
+             + 'or waive the minimum for this month.</div>';
+    }
+    if (d.unallocated > 0.01) {
+      var closed = new Date(STATE.month + "-01");
+      var thisMonth = STATE.month === new Date().toISOString().slice(0, 7);
+      notes += '<div class="note"><b>' + esc(usd(d.unallocated)) + ' not allocated yet</b> — '
+             + esc(d.unallocated_why.join("; ")) + '. '
+             + (thisMonth
+                 ? 'It stays here while the month runs, so there is still time for someone to earn it. '
+                 + 'Anything still unallocated when the month closes stays with the company.'
+                 : 'This month has closed, so this stayed with the company.')
+             + '</div>';
+    }
+    $("gateNote").innerHTML = notes;
+  }
+  function stat(k,v,m){
+    return '<div class="stat"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+
+           '</div><div class="m">'+esc(m)+'</div></div>';
+  }
+
+  function renderPool(d){
+    var r = [
+      ["Completed revenue", usd(d.revenue), ""],
+      ["Commission &times; 2%", usd(d.commission), ""],
+      ["Claims (" + d.claims_count + ")", "−" + usd(d.claims_total), "var(--crit)"],
+      ["<b>Pool</b>", "<b>" + usd(d.pool) + "</b>", ""],
+      ["Points 60%", usd(d.points_pool), ""],
+      ["Reviews 40%", usd(d.reviews_pool), ""]
+    ];
+    if (d.forfeited > 0) r.push(["Forfeited &amp; redistributed", usd(d.forfeited), "var(--warn)"]);
+    r.push(["Paying out", usd(d.allocated), ""]);
+    if (d.unallocated > 0.01) r.push(["<b>Not allocated</b>", "<b>" + usd(d.unallocated) + "</b>", "var(--warn)"]);
+    r.push(["Total take-home", usd(d.totals.take_home), ""]);
+    $("poolTbl").innerHTML = "<tbody>" + r.map(function(x){
+      return '<tr><td>'+x[0]+'</td><td class="n"'+(x[2]?' style="color:'+x[2]+'"':'')+'>'+x[1]+'</td></tr>';
+    }).join("") + "</tbody>";
+  }
+
+  function renderRoster(d){
+    var h = '<thead><tr><th>Code</th><th>Name</th><th class="n">Hours</th><th>Standing</th>'
+          + '<th class="n">Pts</th><th class="n">Rev</th><th class="n">Share</th>'
+          + '<th class="n">+/−</th><th class="n">Take home</th><th></th></tr></thead><tbody>';
+    d.rows.slice().sort(function(a,b){
+      var t = function(x){ return x.paid?0:(x.forfeits?1:2); };
+      return t(a)-t(b) || b.share-a.share;
+    }).forEach(function(p){
+      var dim = p.paid ? "" : ' style="color:var(--ink-3)"';
+      var adj = (p.bonuses||0) - (p.deductions||0);
+      h += '<tr'+dim+'>'
+        + '<td class="code">'+esc(p.code_name)+'</td><td>'+esc(p.full_name)+'</td>'
+        + '<td class="n"><input type="number" min="0" step="0.25" value="'+p.hours+'" data-hrs="'+p.employee_id+'" style="width:78px;text-align:right;padding:4px 7px"></td>'
+        + '<td><select data-st="'+p.employee_id+'" style="padding:4px 7px">'
+        +   '<option value="active"'+(p.status==="active"?" selected":"")+'>Working</option>'
+        +   '<option value="no_notice"'+(p.status==="no_notice"?" selected":"")+'>Left, no notice</option>'
+        +   '<option value="left"'+(p.status==="left"?" selected":"")+'>Left, gave notice</option>'
+        + '</select></td>'
+        + '<td class="n">'+p.points+'</td><td class="n">'+p.review_points+'</td>'
+        + '<td class="n">'+(p.paid?usd(p.share):(p.forfeits?'<span style="color:var(--crit)">−'+usd(p.forfeited)+'</span>':"—"))+'</td>'
+        + '<td class="n"'+(adj?' style="color:'+(adj>0?"var(--good)":"var(--crit)")+'"':'')+'>'+(adj?(adj>0?"+":"−")+usd(Math.abs(adj)):"—")+'</td>'
+        + '<td class="n"><b>'+usd(p.take_home)+'</b></td>'
+        + '<td class="n" style="font-size:12px;color:var(--ink-3)">'+esc(p.reason||"")+'</td></tr>';
+    });
+    $("rosterTbl").innerHTML = h + "</tbody>";
+
+    var opts = d.rows.map(function(p){
+      return '<option value="'+p.employee_id+'">'+esc(p.code_name+" · "+p.full_name)+'</option>';
+    }).join("");
+    ["ajWho","ptWho"].forEach(function(id){
+      var keep = $(id).value; $(id).innerHTML = opts; if (keep) $(id).value = keep;
+    });
+
+    $("hoursCount").textContent = "— " + d.hours_entered + " of " + d.counts.roster + " entered";
+    $("hoursTbl").innerHTML = '<thead><tr><th>Name</th><th class="n">Hours</th><th class="n">Gate</th></tr></thead><tbody>'
+      + d.rows.map(function(p){
+          return '<tr><td>'+esc(p.full_name)+'</td><td class="n">'+p.hours+'</td>'
+               + '<td class="n">'+(p.hours_ok?'<span class="pill ok">In</span>':'<span class="pill no">Short</span>')+'</td></tr>';
+        }).join("") + "</tbody>";
+  }
+
+  function renderReviews(){
+    var h = '<thead><tr><th>Date</th><th>Job #</th><th>Customer</th><th>Source</th>'
+          + '<th class="n">Pts</th><th>Credited to</th><th></th></tr></thead><tbody>';
+    if (!STATE.reviews.length) h += '<tr><td colspan="7" style="color:var(--ink-3)">Nothing logged this month yet.</td></tr>';
+    STATE.reviews.forEach(function(r){
+      h += '<tr><td>'+String(r.occurred_on).slice(5,10)+'</td><td class="code">'+esc(r.job_number||"—")+'</td>'
+        + '<td>'+esc(r.customer_name||"—")+'</td><td>'+esc(r.source||"—")+'</td>'
+        + '<td class="n"><b>'+r.points+'</b></td>'
+        + '<td style="font-size:12.5px">'+(r.crew||[]).map(function(c){return esc(c.full_name);}).join(", ")+'</td>'
+        + '<td class="n"><button class="sm danger" data-delrev="'+r.id+'">Remove</button></td></tr>';
+    });
+    $("revTbl").innerHTML = h + "</tbody>";
+  }
+
+  function renderCrewChips(){
+    $("rvCrew").innerHTML = STATE.roster.map(function(e){
+      var on = STATE.revCrew.indexOf(e.id) >= 0;
+      return '<button type="button" data-rc="'+e.id+'" aria-pressed="'+on+'">'+esc(e.code_name)+'</button>';
+    }).join("");
+  }
+
+  /* --------------------------------------------------------------- load --- */
+
+  function ago(t){
+    if (!t) return "never";
+    var s = Math.round((Date.now() - new Date(t).getTime())/1000);
+    if (s < 60) return s + "s ago";
+    if (s < 3600) return Math.round(s/60) + "m ago";
+    if (s < 86400) return Math.round(s/3600) + "h ago";
+    return Math.round(s/86400) + "d ago";
+  }
+
+  function renderJobs(jobs){
+    if (!jobs || !jobs.length){
+      $("jobsTbl").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">'
+        + 'Not running here — the background jobs start with the deployed service.</td></tr></tbody>';
+      return;
+    }
+    $("jobsTbl").innerHTML = '<thead><tr><th>Job</th><th>Runs</th><th>Last</th><th></th></tr></thead><tbody>'
+      + jobs.map(function(j){
+          var bad = j.consecutive_failures > 0;
+          var state = j.running ? '<span class="pill warn">Running</span>'
+                    : bad ? '<span class="pill no">Failing</span>'
+                    : j.last_ok ? '<span class="pill ok">'+esc(ago(j.last_ok))+'</span>'
+                    : '<span class="pill warn">Not yet</span>';
+          return '<tr><td class="code">'+esc(j.name)+'</td>'
+            + '<td style="font-size:12.5px;color:var(--ink-3)">'+esc(j.schedule)+'</td>'
+            + '<td>'+state+(bad ? '<div style="font-size:12px;color:var(--crit)">'+esc(j.last_error)+'</div>' : '')
+            + (j.last_detail && !bad ? '<div style="font-size:12px;color:var(--ink-3)">'+esc(String(j.last_detail).slice(0,70))+'</div>' : '')
+            + '</td>'
+            + '<td class="n"><button class="sm" data-runjob="'+esc(j.name)+'">Run now</button></td></tr>';
+        }).join("") + "</tbody>";
+  }
+
+  function load(){
+    return Promise.all([
+      api("/api/admin/summary" + q()),
+      api("/api/admin/roster"),
+      api("/api/admin/reviews" + q()),
+      api("/api/admin/settings" + q()),
+      api("/api/admin/jobs").catch(function(){ return []; })
+    ]).then(function(r){
+      STATE.summary = r[0]; STATE.roster = r[1]; STATE.reviews = r[2]; STATE.settings = r[3];
+      $("gateWaive").checked = !!r[3].hours_gate_waived;
+      renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
+      renderReviews(); renderCrewChips(); renderJobs(r[4]);
+    }).catch(function(e){ toast(e.message, true); });
+  }
+
+  $("jobsTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-runjob]"); if (!b) return;
+    var name = b.getAttribute("data-runjob");
+    b.disabled = true; b.textContent = "Running…";
+    api("/api/admin/jobs/" + encodeURIComponent(name) + "/run", { method:"POST" })
+      .then(function(r){ toast(name + ": " + (typeof r.detail === "string" ? r.detail : "done")); load(); })
+      .catch(function(e){ toast(name + " failed — " + e.message, true); load(); });
+  });
+
+  /* -------------------------------------------------------------- wire --- */
+
+  var today = new Date().toISOString().slice(0,10);
+  ["rvDate","clDate","ajDate","ptDate"].forEach(function(id){ $(id).value = today; });
+  STATE.month = today.slice(0,7);
+  $("month").value = STATE.month;
+
+  $("month").addEventListener("change", function(){ STATE.month = this.value; load(); });
+  $("reload").addEventListener("click", load);
+
+  /* review — job number pulls the crew */
+  var jobTimer;
+  $("rvJob").addEventListener("input", function(){
+    var v = this.value.trim();
+    clearTimeout(jobTimer);
+    if (!v){ STATE.revCrew = []; renderCrewChips(); $("rvHint").textContent = "Type a job number to pull its crew."; return; }
+    jobTimer = setTimeout(function(){
+      api("/api/admin/job/" + encodeURIComponent(v)).then(function(j){
+        STATE.revCrew = j.found ? j.crew.map(function(c){ return c.id; }) : [];
+        renderCrewChips();
+        $("rvHint").innerHTML = j.found
+          ? "Job <b>"+esc(j.job_number)+"</b> — SmartMoving has <b>"+j.crew.length+"</b> on it. Tap a name to add or drop."
+          : "Job <b>"+esc(v)+"</b> isn’t in SmartMoving. Pick the crew by hand.";
+      }).catch(function(e){ toast(e.message, true); });
+    }, 320);
+  });
+  $("rvCrew").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-rc]"); if (!b) return;
+    var id = b.getAttribute("data-rc"), i = STATE.revCrew.indexOf(id);
+    if (i >= 0) STATE.revCrew.splice(i,1); else STATE.revCrew.push(id);
+    renderCrewChips();
+  });
+  $("rvSave").addEventListener("click", function(){
+    if (!STATE.revCrew.length) return toast("Credit at least one mover.", true);
+    api("/api/admin/reviews", { method:"POST", body: JSON.stringify({
+      occurred_on: $("rvDate").value, job_number: $("rvJob").value.trim(),
+      customer_name: $("rvCust").value.trim(), source: $("rvSrc").value,
+      has_photo: $("rvPhoto").checked, crew: STATE.revCrew
+    })}).then(function(r){
+      toast("Review saved — " + r.credited + " credited " + r.points + " points each.");
+      $("rvJob").value = ""; $("rvCust").value = ""; $("rvPhoto").checked = false;
+      STATE.revCrew = []; renderCrewChips();
+      $("rvHint").textContent = "Type a job number to pull its crew.";
+      load();
+    }).catch(function(e){ toast(e.message, true); });
+  });
+  $("revTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-delrev]"); if (!b) return;
+    api("/api/admin/reviews/" + b.getAttribute("data-delrev"), { method:"DELETE" })
+      .then(function(){ toast("Review removed."); load(); })
+      .catch(function(e){ toast(e.message, true); });
+  });
+
+  /* hours — paste the export */
+  $("hoursSave").addEventListener("click", function(){
+    var lines = $("hoursPaste").value.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (!lines.length) return toast("Nothing to save.", true);
+    var rows = [];
+    lines.forEach(function(l){
+      var m = l.match(/^(.*?)[\t,;]+\s*([\d.]+)\s*$/) || l.match(/^(.*?)\s{2,}([\d.]+)$/) || l.match(/^(.+?)\s+([\d.]+)$/);
+      if (m) rows.push({ name: m[1].trim(), hours: Number(m[2]) });
+    });
+    if (!rows.length) return toast("Couldn’t read any name/hours pairs.", true);
+    api("/api/admin/hours/bulk", { method:"PUT", body: JSON.stringify({
+      period: period(), rows: rows, add: $("hoursAdd").checked
+    })}).then(function(r){
+      var msg = r.saved.length + " saved";
+      if (r.unmatched.length) msg += ", " + r.unmatched.length + " unmatched";
+      toast(msg + ".", r.unmatched.length > 0);
+      $("hoursHint").innerHTML = r.unmatched.length
+        ? "<b>Not matched to anyone:</b> " + r.unmatched.map(function(u){ return esc(u.name); }).join(", ")
+          + ". Check the spelling against the roster below, or type their hours in directly."
+        : "All " + r.saved.length + " matched to the roster.";
+      if (!r.unmatched.length) $("hoursPaste").value = "";
+      load();
+    }).catch(function(e){ toast(e.message, true); });
+  });
+
+  /* roster inline edits */
+  $("rosterTbl").addEventListener("change", function(e){
+    var h = e.target.closest("input[data-hrs]");
+    if (h){
+      api("/api/admin/hours", { method:"PUT", body: JSON.stringify({
+        employee_id: h.getAttribute("data-hrs"), period: period(), hours: Number(h.value)
+      })}).then(function(){ toast("Hours updated."); load(); })
+        .catch(function(e){ toast(e.message, true); });
+      return;
+    }
+    var s = e.target.closest("select[data-st]");
+    if (s){
+      api("/api/admin/employee/" + s.getAttribute("data-st"), { method:"PATCH",
+        body: JSON.stringify({ status: s.value })
+      }).then(function(){ toast("Standing updated."); load(); })
+        .catch(function(e){ toast(e.message, true); });
+    }
+  });
+
+  $("clSave").addEventListener("click", function(){
+    api("/api/admin/claims", { method:"POST", body: JSON.stringify({
+      occurred_on: $("clDate").value, job_number: $("clJob").value.trim(),
+      reason: $("clNote").value.trim() || "Claim", amount: Number($("clAmt").value)
+    })}).then(function(){ toast("Claim added."); $("clJob").value=""; $("clNote").value=""; load(); })
+      .catch(function(e){ toast(e.message, true); });
+  });
+
+  $("ajSave").addEventListener("click", function(){
+    api("/api/admin/adjustments", { method:"POST", body: JSON.stringify({
+      employee_id: $("ajWho").value, occurred_on: $("ajDate").value, kind: $("ajKind").value,
+      reason: $("ajNote").value.trim() || $("ajKind").value, amount: Number($("ajAmt").value)
+    })}).then(function(){ toast($("ajKind").value === "bonus" ? "Bonus added." : "Deduction added.");
+      $("ajNote").value=""; load(); })
+      .catch(function(e){ toast(e.message, true); });
+  });
+
+  $("ptSave").addEventListener("click", function(){
+    var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\(−?\d+\)$/, "");
+    api("/api/admin/points", { method:"POST", body: JSON.stringify({
+      employee_id: $("ptWho").value, occurred_on: $("ptDate").value,
+      delta: Number(sel.value), reason: text
+    })}).then(function(){ toast("Point event recorded."); load(); })
+      .catch(function(e){ toast(e.message, true); });
+  });
+
+  $("gateWaive").addEventListener("change", function(){
+    var on = this.checked;
+    api("/api/admin/settings", { method:"PUT", body: JSON.stringify({
+      period: period(), hours_gate_waived: on,
+      note: on ? "Waived from the admin panel" : null
+    })}).then(function(){ toast(on ? "75-hour minimum waived for this month." : "75-hour minimum back on."); load(); })
+      .catch(function(e){ toast(e.message, true); });
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

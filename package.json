@@ -1,0 +1,23 @@
+{
+  "name": "revenue-share",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "verify": "node scripts/verify.js",
+    "calc": "node scripts/calc-check.js",
+    "test": "node scripts/calc-test.js && node scripts/api-check.js",
+    "test:live": "node scripts/admin-check.js && node scripts/report-check.js",
+    "sync": "node scripts/sync.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

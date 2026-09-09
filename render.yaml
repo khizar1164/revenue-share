@@ -1,0 +1,73 @@
+# Render blueprint.
+#
+# One always-on web service beside the Postgres that is already there. The
+# scheduler runs inside it rather than as separate cron services — the process
+# is up anyway, and one process means one set of logs and nothing extra to pay
+# for.
+#
+# The free plan is not an option here: it sleeps after fifteen minutes of quiet,
+# which would leave the break-room TV on a loading screen for most of the day.
+
+services:
+  - type: web
+    name: revenue-share
+    runtime: node
+    plan: starter                  # always on — see above
+    region: oregon                 # same region as immediate-movers-db
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Turns the background jobs on. Off everywhere else so a local run never
+      # starts hitting SmartMoving or rewriting Andrew's sheet.
+      - key: RUN_SCHEDULER
+        value: "on"
+
+      # Andrew has not approved sign-in emails to the crew yet. Nothing sends
+      # while this is anything other than "on".
+      - key: SEND_EMAILS
+        value: "off"
+
+      # A second, independent stop: while this is set, only these addresses can
+      # receive anything at all. Clear it when the crew are meant to have access.
+      - key: MAIL_ALLOWLIST
+        value: khizarh@immediatemoversnwi.com
+
+      # The report page must not let a URL decide who you are once it is public.
+      - key: ALLOW_REPORT_PREVIEW
+        value: "off"
+
+      - key: TIMEZONE
+        value: America/Chicago     # La Porte is Central, unlike most of Indiana
+
+      - key: SHEET_ID
+        value: 1cHxgw2eoKJy9TTzAfLOBJqodaA11_V-l29Hdey1uUz8
+
+      - key: MAIL_FROM
+        value: Immediate Movers <revenue-share@share.immediatemover.com>
+
+      # Internal connection string — never leaves Render's network, and lets
+      # external access to the database be switched off entirely.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: immediate-movers-db
+          property: connectionString
+
+      # Set by hand in the dashboard, not here. Values in this file end up in
+      # the repository.
+      - key: PUBLIC_URL
+        sync: false
+      - key: TV_TOKEN
+        sync: false
+      - key: SMARTMOVING_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
