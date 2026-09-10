@@ -101,10 +101,31 @@
   #toast.bad{border-left-color:var(--crit)}
   .switch{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink-2)}
   .switch input{width:auto}
+
+  /* sign in — the panel shows everyone's pay, so nothing renders until this passes */
+  #gate{position:fixed;inset:0;background:var(--plane);display:flex;align-items:center;
+    justify-content:center;z-index:100;padding:20px}
+  #gate .box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--seam);
+    border-radius:14px;padding:30px 28px;text-align:center}
+  #gate h2{font-family:var(--cond);font-weight:700;font-size:24px;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink);margin:0 0 6px}
+  #gate p{font-size:14px;color:var(--ink-3);margin:0 0 20px}
+  #gate input{font-size:16px;text-align:center;padding:12px}
+  #gate button{width:100%;margin-top:11px;padding:12px;font-size:15px}
+  #gate .err{color:var(--crit);font-size:13.5px;margin-top:13px;min-height:1em}
 </style>
 </head>
 <body>
-<div class="page">
+<div id="gate">
+  <form class="box" id="gateForm">
+    <h2>Revenue Share Admin</h2>
+    <p>Andrew and Nicole only.</p>
+    <input type="password" id="gatePw" placeholder="Admin password" autocomplete="current-password" required>
+    <button type="submit" class="go" id="gateGo">Sign in</button>
+    <div class="err" id="gateErr"></div>
+  </form>
+</div>
+<div class="page" id="adminPage" hidden>
 
 <header>
   <h1>Revenue Share <em>&middot;</em> Admin</h1>
@@ -589,7 +610,44 @@ Tyler Johnston  44.25"></textarea>
       .catch(function(e){ toast(e.message, true); });
   });
 
-  load();
+  /* ------------------------------------------------------------ gate --- */
+  /* Nothing on this page renders until the server says we are an admin.
+     The check is the server's, not the page's — hiding a div is not security. */
+  function unlock(){
+    $("gate").hidden = true;
+    $("adminPage").hidden = false;
+    load();
+  }
+
+  fetch("/api/admin/whoami").then(function(r){ return r.json(); }).then(function(w){
+    if (w.admin) return unlock();
+    if (!w.configured) {
+      $("gateErr").textContent = "Admin isn't set up yet — the ADMIN_PASSWORD variable is missing on the server.";
+      $("gateGo").disabled = true;
+    }
+    $("gatePw").focus();
+  }).catch(function(){ $("gateErr").textContent = "Can't reach the server."; });
+
+  $("gateForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var btn = $("gateGo");
+    btn.disabled = true; btn.textContent = "Checking…";
+    fetch("/api/admin/login", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: $("gatePw").value })
+    })
+      .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, b: b }; }); })
+      .then(function(x){
+        if (!x.ok) throw new Error(x.b.error || "sign-in failed");
+        $("gatePw").value = "";
+        unlock();
+      })
+      .catch(function(err){
+        $("gateErr").textContent = err.message;
+        btn.disabled = false; btn.textContent = "Sign in";
+        $("gatePw").select();
+      });
+  });
 })();
 </script>
 </body>

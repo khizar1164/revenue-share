@@ -21,7 +21,9 @@ import { query, loadEnv, safeTarget } from "./db.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
-         readCookie, setSessionCookie, clearSessionCookie, isAdmin } from "./auth.js";
+         readCookie, setSessionCookie, clearSessionCookie, isAdmin,
+         adminConfigured, adminLoginAllowed, checkAdminPassword,
+         setAdminCookie, clearAdminCookie, isAdminRequest } from "./auth.js";
 import { sendSignInLink, mailConfigured } from "./mail.js";
 
 loadEnv();
@@ -29,10 +31,62 @@ loadEnv();
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);                   // Render terminates TLS in front of us
 app.use(express.json({ limit: "256kb" }));
 
-/* The TV URL carries a token instead of a login. Long and random, set once. */
-const TV_TOKEN = process.env.TV_TOKEN || "dev-only-token";
+/* Anything served over https is public, whatever NODE_ENV says. That is the
+   test for "is this reachable by strangers", and every default below keys off
+   it rather than off a variable someone has to remember to set. */
+const PUBLIC = /^https:/.test(process.env.PUBLIC_URL ?? "") || process.env.NODE_ENV === "production";
+
+/* The TV URL carries a token instead of a login. Long and random, set once.
+   In public there is no fallback token: an unset TV_TOKEN means no board. */
+const TV_TOKEN = process.env.TV_TOKEN || (PUBLIC ? null : "dev-only-token");
+const tvTokenOk = t => Boolean(TV_TOKEN) && t === TV_TOKEN;
+
+/* Reports by id exist only for local previewing. Public by default means OFF
+   unless someone deliberately says "on" — the first deploy had this backwards. */
+const PREVIEWING = PUBLIC
+  ? process.env.ALLOW_REPORT_PREVIEW === "on"
+  : process.env.ALLOW_REPORT_PREVIEW !== "off";
+
+/* ------------------------------------------------------------ admin gate ---- */
+
+const clientIp = req => req.ip || req.socket.remoteAddress || "?";
+
+app.post("/api/admin/login", (req, res) => {
+  if (!adminConfigured()) {
+    return res.status(503).json({ error: "admin sign-in is not set up — ADMIN_PASSWORD is missing" });
+  }
+  const ip = clientIp(req);
+  if (!adminLoginAllowed(ip)) {
+    return res.status(429).json({ error: "too many attempts — wait fifteen minutes and try again" });
+  }
+  if (!checkAdminPassword(req.body?.password, ip)) {
+    return res.status(401).json({ error: "that password is not right" });
+  }
+  setAdminCookie(res, { secure: PUBLIC });
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/logout", (_req, res) => {
+  clearAdminCookie(res);
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/whoami", (req, res) => {
+  res.json({ admin: isAdminRequest(req), configured: adminConfigured() });
+});
+
+/* Everything else under /api/admin is behind the gate. Registered before any
+   admin route so nothing can be defined around it by accident. */
+app.use("/api/admin", (req, res, next) => {
+  if (isAdminRequest(req)) return next();
+  if (!adminConfigured()) {
+    return res.status(503).json({ error: "admin is locked — ADMIN_PASSWORD is not set" });
+  }
+  res.status(401).json({ error: "sign in to the admin panel first" });
+});
 
 /* Which month are we showing? Defaults to now, overridable for testing. */
 function askedPeriod(req) {
@@ -51,7 +105,7 @@ const wrap = fn => (req, res) => fn(req, res).catch(e => {
 /* ------------------------------------------------------------ the board ---- */
 
 app.get("/api/board/:token", wrap(async (req, res) => {
-  if (req.params.token !== TV_TOKEN) return res.status(404).json({ error: "not found" });
+  if (!tvTokenOk(req.params.token)) return res.status(404).json({ error: "not found" });
   const { year, month } = askedPeriod(req);
   res.set("cache-control", "no-store");
   res.json(boardView(await monthly(year, month)));
@@ -135,7 +189,7 @@ app.get("/api/me", wrap(async (req, res) => {
  */
 app.get("/api/me/:employeeId", wrap(async (req, res) => {
   const me = await currentEmployee(req);
-  const previewing = process.env.ALLOW_REPORT_PREVIEW !== "off";
+  const previewing = PREVIEWING;
   if (!me && !previewing) return res.status(401).json({ error: "not signed in" });
 
   const id = me ? me.id : req.params.employeeId;
@@ -378,7 +432,7 @@ app.post("/api/admin/points", wrap(async (req, res) => {
 app.use("/static", express.static(join(root, "public"), { maxAge: "1h" }));
 
 app.get("/tv/:token", (req, res) => {
-  if (req.params.token !== TV_TOKEN) return res.status(404).send("Not found");
+  if (!tvTokenOk(req.params.token)) return res.status(404).send("Not found");
   res.sendFile(join(root, "public", "tv.html"));
 });
 
@@ -393,9 +447,9 @@ app.get("/me", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 
 /* Lets the report page offer a person-picker while there is no sign-in.
-   Set ALLOW_REPORT_PREVIEW=off before this is reachable from outside. */
+   Off in public unless ALLOW_REPORT_PREVIEW is deliberately "on". */
 app.get("/api/me-preview", wrap(async (_req, res) => {
-  if (process.env.ALLOW_REPORT_PREVIEW === "off") return res.status(404).json({ error: "not found" });
+  if (!PREVIEWING) return res.status(404).json({ error: "not found" });
   const r = await query(
     `select id, code_name, full_name from employees where status <> 'left' and is_mover order by code_name`);
   res.json(r.rows);
@@ -495,7 +549,8 @@ const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     console.log(`revenue share listening on :${PORT}`);
-    console.log(`  board   http://localhost:${PORT}/tv/${TV_TOKEN}`);
+    console.log(TV_TOKEN ? `  board   http://localhost:${PORT}/tv/<TV_TOKEN>` : "  board   OFF — TV_TOKEN is not set");
+    console.log(`  admin gate ${adminConfigured() ? "on" : "LOCKED — ADMIN_PASSWORD not set"}   report preview ${PREVIEWING ? "on" : "off"}`);
     console.log(`  admin   http://localhost:${PORT}/admin`);
     console.log(`  health  http://localhost:${PORT}/healthz`);
 

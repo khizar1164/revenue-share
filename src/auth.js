@@ -11,7 +11,7 @@
  *     working the moment it has been used.
  */
 
-import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import { randomBytes, createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { query } from "./db.js";
 
 const LINK_MINUTES   = 20;
@@ -149,4 +149,75 @@ export function safeEqual(a, b) {
   const x = Buffer.from(String(a ?? ""));
   const y = Buffer.from(String(b ?? ""));
   return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/* ---------------------------------------------------------- admin gate ---- */
+/*
+ * The admin panel shows every mover's real name, pay and email, and it can
+ * change hours, bonuses and who has forfeited. It was deployed to a public URL
+ * with none of this in front of it. This is the fix.
+ *
+ * FAIL CLOSED. If ADMIN_PASSWORD is not set the admin API refuses everything —
+ * it never falls back to open. A missing environment variable must lock the
+ * door, not unlock it; that is exactly how the first deploy went wrong.
+ *
+ * The session is a signed cookie rather than a database row: admins are not
+ * employees, so they do not fit the sessions table, and a signature needs no
+ * storage. It is keyed on the password, so changing the password signs every
+ * admin out at once.
+ */
+
+export const ADMIN_COOKIE = "rs_admin";
+const ADMIN_HOURS = 12;
+
+export const adminConfigured = () => Boolean(process.env.ADMIN_PASSWORD);
+
+const adminKey = () =>
+  createHash("sha256").update("rs-admin:" + (process.env.ADMIN_PASSWORD ?? "")).digest();
+
+const signAdmin = exp =>
+  createHmac("sha256", adminKey()).update(String(exp)).digest("base64url");
+
+/* A strong password over HTTPS is not realistically brute-forced, but there
+   is no reason to let anyone try thousands of times. */
+const failures = new Map();                  // ip -> [timestamps]
+const WINDOW = 15 * 60e3, LIMIT = 8;
+
+export function adminLoginAllowed(ip) {
+  const now = Date.now();
+  const recent = (failures.get(ip) ?? []).filter(t => now - t < WINDOW);
+  failures.set(ip, recent);
+  return recent.length < LIMIT;
+}
+
+export function checkAdminPassword(given, ip) {
+  if (!adminConfigured()) return false;
+  const ok = safeEqual(given, process.env.ADMIN_PASSWORD);
+  if (!ok) failures.set(ip, [...(failures.get(ip) ?? []), Date.now()]);
+  else failures.delete(ip);
+  return ok;
+}
+
+export function setAdminCookie(res, { secure = true } = {}) {
+  const exp = Date.now() + ADMIN_HOURS * 3600e3;
+  const bits = [
+    `${ADMIN_COOKIE}=${exp}.${signAdmin(exp)}`,
+    "Path=/", "HttpOnly", "SameSite=Strict",   // admin never arrives from a link
+    `Max-Age=${ADMIN_HOURS * 3600}`
+  ];
+  if (secure) bits.push("Secure");
+  res.append("Set-Cookie", bits.join("; "));
+}
+
+export function clearAdminCookie(res) {
+  res.append("Set-Cookie", `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+}
+
+export function isAdminRequest(req) {
+  if (!adminConfigured()) return false;
+  const raw = readCookie(req, ADMIN_COOKIE);
+  if (!raw) return false;
+  const [exp, sig] = raw.split(".");
+  if (!exp || !sig || !(Number(exp) > Date.now())) return false;
+  return safeEqual(sig, signAdmin(exp));
 }
