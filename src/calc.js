@@ -256,6 +256,84 @@ export async function monthly(year, month) {
   return { period, ...computeSplit(raw) };
 }
 
+/* ------------------------------------------------------------------ YTD ---- */
+
+/*
+ * Year to date means since the programme started, not since 1 January.
+ *
+ * The share began in September 2026. January to August had revenue but no
+ * pool — nobody was owed anything — so counting those months would show the
+ * crew a "year to date pool" of money that never existed for them. From 2027
+ * onward the two definitions agree and YTD is simply January to now.
+ */
+export const PROGRAM_START = process.env.PROGRAM_START || "2026-09-01";
+
+export function ytdMonths(year, month) {
+  const [sy, sm] = PROGRAM_START.split("-").map(Number);
+  let from;
+  if (year > sy) from = 1;
+  else if (year === sy) from = sm;
+  else return [];                                  // before the programme existed
+  const out = [];
+  for (let m = from; m <= month; m++) out.push({ year, month: m });
+  return out;
+}
+
+/**
+ * Every month from the start of the programme year to the one asked for,
+ * worked out separately and then added up.
+ *
+ * It has to be month by month. Each month has its own pool, its own hours gate
+ * and its own crew — someone can qualify in September and not in October — so
+ * a year's take-home is the sum of twelve splits, never one split over a year.
+ */
+export async function ytd(year, month) {
+  const months = ytdMonths(year, month);
+  const results = await Promise.all(months.map(m => monthly(m.year, m.month)));
+
+  const totals = { revenue: 0, pool: 0, points_pool: 0, reviews_pool: 0, allocated: 0,
+                   unallocated: 0, forfeited: 0, claims_total: 0, completed_jobs: 0, take_home: 0 };
+  const people = new Map();
+
+  for (const r of results) {
+    for (const k of ["revenue", "pool", "points_pool", "reviews_pool", "allocated",
+                     "unallocated", "forfeited", "claims_total"]) totals[k] += Number(r[k]) || 0;
+    totals.completed_jobs += Number(r.completed_jobs) || 0;
+    totals.take_home += Number(r.totals.take_home) || 0;
+
+    for (const p of r.rows) {
+      const e = people.get(p.employee_id) ?? {
+        employee_id: p.employee_id, code_name: p.code_name, full_name: p.full_name,
+        points_amount: 0, reviews_amount: 0, share: 0, bonuses: 0, deductions: 0,
+        take_home: 0, forfeited: 0, review_points: 0, hours: 0,
+        months_paid: 0, months_on_roster: 0, months: []
+      };
+      for (const k of ["points_amount", "reviews_amount", "share", "bonuses", "deductions",
+                       "take_home", "forfeited", "review_points", "hours"]) e[k] += Number(p[k]) || 0;
+      e.months_on_roster++;
+      if (p.paid) e.months_paid++;
+      e.months.push({ period: r.period, take_home: p.take_home, share: p.share,
+                      paid: p.paid, forfeits: p.forfeits, hours: p.hours });
+      people.set(p.employee_id, e);
+    }
+  }
+
+  for (const k of Object.keys(totals)) totals[k] = round2(totals[k]);
+  const rows = [...people.values()].map(e => {
+    for (const k of ["points_amount", "reviews_amount", "share", "bonuses", "deductions",
+                     "take_home", "forfeited", "hours"]) e[k] = round2(e[k]);
+    return e;
+  }).sort((a, b) => b.take_home - a.take_home);
+
+  return {
+    year, through: months.length ? `${year}-${String(month).padStart(2, "0")}` : null,
+    program_start: PROGRAM_START,
+    months: results.map(r => ({ period: r.period, pool: r.pool, allocated: r.allocated,
+                                unallocated: r.unallocated, completed_jobs: r.completed_jobs })),
+    totals, rows
+  };
+}
+
 /** One person's detail, for their private report. */
 export async function forEmployee(year, month, employeeId) {
   const result = await monthly(year, month);

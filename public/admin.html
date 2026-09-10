@@ -103,6 +103,10 @@
     transition:opacity .18s,transform .18s;pointer-events:none;max-width:380px;z-index:50}
   #toast.on{opacity:1;transform:none}
   #toast.bad{border-left-color:var(--crit)}
+  .seg{display:inline-flex;border:1px solid var(--seam);border-radius:8px;overflow:hidden;margin-left:4px}
+  .seg button{border:0;border-radius:0;background:transparent;color:var(--ink-3);padding:8px 13px}
+  .seg button+button{border-left:1px solid var(--seam)}
+  .seg button[aria-pressed="true"]{background:var(--brand);color:#1a0e05}
   .switch{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink-2)}
   .switch input{width:auto}
 
@@ -137,6 +141,10 @@
     <label for="month" style="margin:0">Month</label>
     <input type="month" id="month" style="width:auto">
     <button id="reload">Refresh</button>
+    <div class="seg" role="tablist" aria-label="View">
+      <button type="button" id="viewMonth" aria-pressed="true">This month</button>
+      <button type="button" id="viewYtd" aria-pressed="false">Year to date</button>
+    </div>
   </div>
 </header>
 
@@ -257,6 +265,16 @@ Tyler Johnston  44.25"></textarea>
       <h2>The month</h2>
       <div class="tblwrap"><table id="poolTbl"></table></div>
       <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
+        <h2 style="font-size:14px">Completed revenue</h2>
+        <p class="hint" id="revNow" style="margin:0 0 4px"></p>
+        <div class="frow">
+          <div><label for="revAmt">Revenue so far</label><input type="number" id="revAmt" min="0" step="0.01" placeholder="50612.64"></div>
+          <div style="max-width:110px"><label for="revJobs">Jobs</label><input type="number" id="revJobs" min="0" step="1" placeholder="26"></div>
+          <button id="revSave">Update</button>
+        </div>
+        <p class="hint">From SmartMoving's Revenue Forecast report. Once the daily report email is connected this fills itself in, and its figure takes over.</p>
+      </div>
+      <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
         <label class="switch"><input type="checkbox" id="gateWaive">
           Waive the 75-hour minimum for this month</label>
         <p class="hint">Everyone on the roster shares regardless of hours. The roster only holds crew who actually worked jobs, so this never pays someone who wasn't there.</p>
@@ -267,8 +285,8 @@ Tyler Johnston  44.25"></textarea>
 </div>
 
 <div class="panel" style="margin-top:16px">
-  <h2>Roster</h2>
-  <p class="dek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.</p>
+  <h2 id="rosterTitle">Roster</h2>
+  <p class="dek" id="rosterDek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.</p>
   <div class="tblwrap"><table id="rosterTbl"></table></div>
 </div>
 
@@ -283,7 +301,7 @@ Tyler Johnston  44.25"></textarea>
   var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
     return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
 
-  var STATE = { month:"", summary:null, roster:[], reviews:[], revCrew:[], settings:null };
+  var STATE = { month:"", summary:null, roster:[], reviews:[], revCrew:[], settings:null, view:"month" };
 
   function toast(msg, bad){
     var t = $("toast");
@@ -418,11 +436,37 @@ Tyler Johnston  44.25"></textarea>
     $("revTbl").innerHTML = h + "</tbody>";
   }
 
+  /* Andrew asked for real names on the review chips so Nicole can find people
+     at a glance — she knows them as Aaron and Craig, not LYNX and TITAN.
+     First name and surname initial, lengthened only where two would read the
+     same: Josh Trim and Joshua Pama come out as "Josh T" and "Joshua P". */
+  function shortNames(list){
+    var parts = list.map(function(e){
+      var p = String(e.full_name || "").trim().split(/\s+/);
+      return { id: e.id, first: p[0] || e.code_name, last: p.length > 1 ? p[p.length-1] : "" };
+    });
+    var label = function(x, len){ return x.last ? x.first + " " + x.last.slice(0, len) : x.first; };
+    var out = {};
+    parts.forEach(function(x){
+      var len = 1, l = label(x, 1);
+      while (x.last && len < x.last.length &&
+             parts.some(function(y){ return y.id !== x.id && label(y, len) === l; })) {
+        len++; l = label(x, len);
+      }
+      out[x.id] = l;
+    });
+    return out;
+  }
+
   function renderCrewChips(){
-    $("rvCrew").innerHTML = STATE.roster.map(function(e){
-      var on = STATE.revCrew.indexOf(e.id) >= 0;
-      return '<button type="button" data-rc="'+e.id+'" aria-pressed="'+on+'">'+esc(e.code_name)+'</button>';
-    }).join("");
+    var names = shortNames(STATE.roster);
+    $("rvCrew").innerHTML = STATE.roster.slice()
+      .sort(function(a, b){ return String(names[a.id]).localeCompare(String(names[b.id])); })
+      .map(function(e){
+        var on = STATE.revCrew.indexOf(e.id) >= 0;
+        return '<button type="button" data-rc="'+e.id+'" aria-pressed="'+on+'" title="'
+             + esc(e.full_name + " · " + e.code_name) + '">' + esc(names[e.id]) + '</button>';
+      }).join("");
   }
 
   /* --------------------------------------------------------------- load --- */
@@ -458,20 +502,108 @@ Tyler Johnston  44.25"></textarea>
         }).join("") + "</tbody>";
   }
 
+  var MONTHS = ["January","February","March","April","May","June","July",
+                "August","September","October","November","December"];
+  var monthName = function(period){
+    var p = String(period).split("-"); return MONTHS[Number(p[1])-1] + " " + p[0];
+  };
+
+  function renderRevenue(rv){
+    var c = rv && rv.current;
+    $("revNow").innerHTML = c
+      ? "Now <b>" + esc(usd(c.revenue)) + "</b>" + (c.completed_jobs != null ? " from " + c.completed_jobs + " jobs" : "")
+        + " · " + (c.source === "manual" ? "entered by hand" : "from the report")
+        + " · " + esc(String(c.captured_at).slice(0, 10))
+      : "No revenue recorded for this month yet.";
+  }
+
+  /* Year to date, for the whole roster. Each month is its own split — someone
+     can qualify in one month and not the next — so these are sums of months,
+     never one calculation over the year. */
+  function renderYtd(y){
+    var t = y.totals;
+    var span = y.months.length
+      ? monthName(y.months[0].period) + (y.months.length > 1 ? " – " + monthName(y.months[y.months.length-1].period) : "")
+      : "—";
+    $("stats").innerHTML =
+      stat("Pool year to date", usd(t.pool), y.months.length + " month" + (y.months.length === 1 ? "" : "s") + " · " + span) +
+      stat("Paid out", usd(t.allocated), usd(t.take_home) + " take-home incl. extras") +
+      stat("Revenue year to date", usd(t.revenue), (t.completed_jobs || 0) + " jobs") +
+      stat("Kept by the company", usd(t.unallocated), "unallocated at month close") +
+      (t.forfeited > 0 ? stat("Redistributed", usd(t.forfeited), "from no-notice leavers") : "");
+    $("gateNote").innerHTML = "";
+
+    $("rosterTitle").textContent = "Year to date";
+    $("rosterDek").textContent = "Every mover's take-home since the programme started, added up month by month.";
+    var h = '<thead><tr><th>Code</th><th>Name</th><th class="n">Months paid</th><th class="n">Hours</th>'
+          + '<th class="n">Points $</th><th class="n">Reviews $</th><th class="n">Extras</th>'
+          + '<th class="n">Deductions</th><th class="n">Take home</th></tr></thead><tbody>';
+    y.rows.forEach(function(p){
+      h += '<tr><td class="code">'+esc(p.code_name)+'</td><td>'+esc(p.full_name)+'</td>'
+        + '<td class="n">'+p.months_paid+' of '+p.months_on_roster+'</td>'
+        + '<td class="n">'+p.hours+'</td>'
+        + '<td class="n">'+usd(p.points_amount)+'</td><td class="n">'+usd(p.reviews_amount)+'</td>'
+        + '<td class="n"'+(p.bonuses?' style="color:var(--good)"':'')+'>'+(p.bonuses?"+"+usd(p.bonuses):"—")+'</td>'
+        + '<td class="n"'+(p.deductions?' style="color:var(--crit)"':'')+'>'+(p.deductions?"−"+usd(p.deductions):"—")+'</td>'
+        + '<td class="n"><b>'+usd(p.take_home)+'</b></td></tr>';
+    });
+    h += '</tbody><tfoot><tr><td colspan="8" style="padding-top:10px"><b>Total</b></td>'
+      + '<td class="n" style="padding-top:10px"><b>'+usd(t.take_home)+'</b></td></tr></tfoot>';
+    $("rosterTbl").innerHTML = h;
+
+    var mt = y.months.map(function(m){
+      return ['<b>'+esc(monthName(m.period))+'</b>', usd(m.pool), ""];
+    });
+    $("poolTbl").innerHTML = "<tbody>" + mt.map(function(x){
+      return '<tr><td>'+x[0]+'</td><td class="n">'+x[1]+'</td></tr>';
+    }).join("") + '<tr><td><b>Pool year to date</b></td><td class="n"><b>'+usd(t.pool)+'</b></td></tr></tbody>';
+  }
+
   function load(){
+    var ytdView = STATE.view === "ytd";
     return Promise.all([
       api("/api/admin/summary" + q()),
       api("/api/admin/roster"),
       api("/api/admin/reviews" + q()),
       api("/api/admin/settings" + q()),
-      api("/api/admin/jobs").catch(function(){ return []; })
+      api("/api/admin/jobs").catch(function(){ return []; }),
+      api("/api/admin/revenue" + q()).catch(function(){ return null; }),
+      ytdView ? api("/api/admin/ytd" + q()) : Promise.resolve(null)
     ]).then(function(r){
       STATE.summary = r[0]; STATE.roster = r[1]; STATE.reviews = r[2]; STATE.settings = r[3];
       $("gateWaive").checked = !!r[3].hours_gate_waived;
-      renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
-      renderReviews(); renderCrewChips(); renderJobs(r[4]);
+      if (ytdView) {
+        renderYtd(r[6]);
+      } else {
+        $("rosterTitle").textContent = "Roster";
+        $("rosterDek").innerHTML = 'Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.';
+        renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
+      }
+      renderReviews(); renderCrewChips(); renderJobs(r[4]); renderRevenue(r[5]);
     }).catch(function(e){ toast(e.message, true); });
   }
+
+  function setView(v){
+    STATE.view = v;
+    $("viewMonth").setAttribute("aria-pressed", String(v === "month"));
+    $("viewYtd").setAttribute("aria-pressed", String(v === "ytd"));
+    load();
+  }
+  $("viewMonth").addEventListener("click", function(){ setView("month"); });
+  $("viewYtd").addEventListener("click", function(){ setView("ytd"); });
+
+  $("revSave").addEventListener("click", function(){
+    var amt = $("revAmt").value.trim();
+    if (!amt) return toast("Enter the revenue figure first.", true);
+    api("/api/admin/revenue", { method:"POST", body: JSON.stringify({
+      period: period(), completed_revenue: Number(amt),
+      completed_jobs: $("revJobs").value.trim() === "" ? null : Number($("revJobs").value)
+    })}).then(function(r){
+      toast("Revenue updated to " + usd(r.revenue) + ".");
+      $("revAmt").value = ""; $("revJobs").value = "";
+      load();
+    }).catch(function(e){ toast(e.message, true); });
+  });
 
   $("jobsTbl").addEventListener("click", function(e){
     var b = e.target.closest("button[data-runjob]"); if (!b) return;

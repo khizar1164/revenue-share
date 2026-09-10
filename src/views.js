@@ -13,11 +13,28 @@
 const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
+ * Year to date for the wall. The pool and how much of it went out — never the
+ * revenue it came from. Andrew asked for revenue off the TV, and a YTD revenue
+ * figure would put it straight back.
+ */
+function boardYtd(y) {
+  if (!y || !y.months.length) return null;
+  return {
+    pool:      y.totals.pool,
+    paid_out:  y.totals.allocated,
+    months:    y.months.length,
+    since:     y.program_start,
+    through:   y.through
+  };
+}
+
+/**
  * Break-room TV. Code names only, no revenue, no bonuses, no deductions.
  */
-export function boardView(result) {
+export function boardView(result, ytdResult = null) {
   return {
     period: result.period,
+    ytd: boardYtd(ytdResult),
 
     /* the pool and its split — but NOT the revenue it came from */
     pool:         result.pool,
@@ -56,10 +73,25 @@ export function boardView(result) {
  * One person's private report. Their own real name, their own money, their own
  * ledger — and nobody else's figures at all.
  */
-export function reportView(detail) {
+export function reportView(detail, ytdResult = null) {
   if (!detail) return null;
+  const mine = ytdResult?.rows.find(r => r.employee_id === detail.employee_id) ?? null;
   return {
     period: detail.period,
+    /* only this person's year, never anyone else's */
+    ytd: mine ? {
+      take_home:      mine.take_home,
+      share:          mine.share,
+      points_amount:  mine.points_amount,
+      reviews_amount: mine.reviews_amount,
+      bonuses:        mine.bonuses,
+      deductions:     mine.deductions,
+      forfeited:      mine.forfeited,
+      months_paid:    mine.months_paid,
+      months_on_roster: mine.months_on_roster,
+      since:          ytdResult.program_start,
+      months:         mine.months
+    } : null,
     code_name: detail.code_name,
     full_name: detail.full_name,
 

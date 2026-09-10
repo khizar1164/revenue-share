@@ -15,7 +15,7 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { monthly, forEmployee } from "./calc.js";
+import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
 import { query, loadEnv, safeTarget } from "./db.js";
 import { createScheduler } from "./scheduler.js";
@@ -108,7 +108,8 @@ app.get("/api/board/:token", wrap(async (req, res) => {
   if (!tvTokenOk(req.params.token)) return res.status(404).json({ error: "not found" });
   const { year, month } = askedPeriod(req);
   res.set("cache-control", "no-store");
-  res.json(boardView(await monthly(year, month)));
+  const [m, y] = await Promise.all([monthly(year, month), ytd(year, month)]);
+  res.json(boardView(m, y));
 }));
 
 /* ------------------------------------------------------------- sign in ---- */
@@ -177,9 +178,9 @@ app.get("/api/me", wrap(async (req, res) => {
   const me = await currentEmployee(req);
   if (!me) return res.status(401).json({ error: "not signed in" });
   const { year, month } = askedPeriod(req);
-  const detail = await forEmployee(year, month, me.id);
+  const [detail, y] = await Promise.all([forEmployee(year, month, me.id), ytd(year, month)]);
   if (!detail) return res.status(404).json({ error: "no report for you this month" });
-  res.json(reportView(detail));
+  res.json(reportView(detail, y));
 }));
 
 /**
@@ -194,9 +195,9 @@ app.get("/api/me/:employeeId", wrap(async (req, res) => {
 
   const id = me ? me.id : req.params.employeeId;
   const { year, month } = askedPeriod(req);
-  const detail = await forEmployee(year, month, id);
+  const [detail, y] = await Promise.all([forEmployee(year, month, id), ytd(year, month)]);
   if (!detail) return res.status(404).json({ error: "no report for that person this month" });
-  res.json(reportView(detail));
+  res.json(reportView(detail, y));
 }));
 
 /* --------------------------------------------------------------- admin ---- */
@@ -204,6 +205,49 @@ app.get("/api/me/:employeeId", wrap(async (req, res) => {
 app.get("/api/admin/summary", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   res.json(adminView(await monthly(year, month)));
+}));
+
+/* Year to date, for the admin panel's YTD view. Month by month, added up. */
+app.get("/api/admin/ytd", wrap(async (req, res) => {
+  const { year, month } = askedPeriod(req);
+  res.json(await ytd(year, month));
+}));
+
+/*
+ * Completed revenue, entered by hand.
+ *
+ * The daily Revenue Forecast email is the intended source, but until it is
+ * wired the figure would otherwise sit frozen at whatever was last loaded.
+ * A manual entry is recorded as such and never overwrites anything: the most
+ * recent reading wins, so the day the report feed starts, its figures simply
+ * take over.
+ */
+app.get("/api/admin/revenue", wrap(async (req, res) => {
+  const { year, month } = askedPeriod(req);
+  const period = `${year}-${String(month).padStart(2, "0")}-01`;
+  const r = await query(
+    `select completed_revenue::float8 as revenue, completed_jobs, source, captured_at
+       from revenue_snapshots where period = $1::date
+      order by captured_at desc limit 10`, [period]);
+  res.json({ period, current: r.rows[0] ?? null, history: r.rows });
+}));
+
+app.post("/api/admin/revenue", wrap(async (req, res) => {
+  const { period, completed_revenue, completed_jobs } = req.body ?? {};
+  if (!/^\d{4}-\d{2}-01$/.test(String(period))) {
+    return res.status(400).json({ error: "period must be the first of a month, e.g. 2026-09-01" });
+  }
+  const rev = Number(completed_revenue);
+  if (!Number.isFinite(rev) || rev < 0) {
+    return res.status(400).json({ error: "completed revenue must be a positive number" });
+  }
+  const jobs = completed_jobs === "" || completed_jobs == null ? null : Math.round(Number(completed_jobs));
+  const r = await query(
+    `insert into revenue_snapshots (period, completed_revenue, completed_jobs, source)
+     values ($1, $2, $3, 'manual')
+     returning period, completed_revenue::float8 as revenue, completed_jobs, source, captured_at`,
+    [period, rev, Number.isFinite(jobs) ? jobs : null]);
+  res.status(201).json(r.rows[0]);
 }));
 
 app.get("/api/admin/roster", wrap(async (_req, res) => {

@@ -83,6 +83,8 @@
   .meter{height:13px;border-radius:7px;background:var(--panel-2);overflow:hidden;margin:12px 0 7px}
   .meter i{display:block;height:100%;transition:width .3s}
   .ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3)}
+  .ytdbig{font-family:var(--cond);font-weight:700;font-size:44px;line-height:1;color:var(--ink);
+    font-variant-numeric:tabular-nums;margin:4px 0 16px}
   .standNum{font-family:var(--cond);font-weight:700;font-size:36px;line-height:1.1;color:var(--ink)}
 
   .hoursbar{height:11px;border-radius:6px;background:var(--panel-2);overflow:hidden;margin:10px 0 6px}
@@ -153,6 +155,13 @@
     <div class="breakdown" id="breakdown"></div>
   </div>
 
+  <section class="card" id="ytdCard" hidden>
+    <h2>Earned this year</h2>
+    <p class="dek" id="ytdDek"></p>
+    <div class="ytdbig" id="ytdTake">$0.00</div>
+    <table id="ytdTbl"></table>
+  </section>
+
   <section class="card">
     <h2>Your points this month</h2>
     <p class="dek">Everyone starts at 15. A second job in a day earns <b>+1</b> and is added automatically from the schedule &mdash; you don't have to log it.</p>
@@ -218,6 +227,32 @@
       " · you are shown as " + d.code_name + " on the break-room screen";
 
     $("take").textContent = usd(d.take_home);
+
+    /* the year so far — this person only */
+    var y = d.ytd;
+    if (y && y.months && y.months.length) {
+      $("ytdCard").hidden = false;
+      $("ytdTake").textContent = usd(y.take_home);
+      var since = String(y.since).split("-");
+      $("ytdDek").textContent = "Everything you have taken home since the revenue share started in " +
+        MONTHS[Number(since[1])-1] + " " + since[0] + ". " +
+        (y.months_paid === y.months_on_roster
+          ? "You have shared in every month."
+          : "You shared in " + y.months_paid + " of " + y.months_on_roster + " months.");
+      var rows = '<thead><tr><th>Month</th><th class="n">Hours</th><th class="n">Share</th><th class="n">Take home</th></tr></thead><tbody>';
+      y.months.forEach(function(m){
+        var p = String(m.period).split("-");
+        var note = m.paid ? "" : (m.forfeits ? " · forfeited" : " · under 75 h");
+        rows += '<tr><td>' + MONTHS[Number(p[1])-1] + " " + p[0] +
+          '<span style="color:var(--ink-3);font-size:12.5px">' + note + '</span></td>' +
+          '<td class="n">' + m.hours + '</td><td class="n">' + usd(m.share) + '</td>' +
+          '<td class="n"><b>' + usd(m.take_home) + '</b></td></tr>';
+      });
+      rows += '</tbody><tfoot><tr><td colspan="3">Year to date</td><td class="n">' + usd(y.take_home) + '</td></tr></tfoot>';
+      $("ytdTbl").innerHTML = rows;
+    } else {
+      $("ytdCard").hidden = true;
+    }
 
     var bits = [
       ["Points 60%", usd(d.points_amount),
