@@ -136,7 +136,7 @@
   <div id="app" hidden>
 
   <div class="picker" id="picker" hidden>
-    <div class="lbl">Preview — replaced by email sign-in</div>
+    <div class="lbl" id="pickLbl">Preview — replaced by email sign-in</div>
     <select id="whoPick"></select>
   </div>
 
@@ -423,6 +423,9 @@
           return;
         }
         $("picker").hidden = false;
+        fetch("/api/admin/whoami").then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(w){ if (w && w.admin) $("pickLbl").textContent = "Admin view — anyone's report, exactly as they see it"; })
+          .catch(function(){});
         $("whoPick").innerHTML = list.map(function(e){
           return '<option value="'+e.id+'"'+(e.id===who?" selected":"")+'>'
                + esc(e.code_name + " · " + e.full_name) + '</option>';

@@ -79,6 +79,19 @@ await withServer({ ...PUBLIC, ADMIN_PASSWORD: PW }, async b => {
   check("a tampered expiry is rejected", await status(b + "/api/admin/summary", { headers: { cookie: forged } }) === 401);
   check("a made-up cookie is rejected",
     await status(b + "/api/admin/summary", { headers: { cookie: "rs_admin=9999999999999.abc" } }) === 401);
+
+  /* Andrew opens any crew member's report from the admin panel. That must
+     need the admin cookie — preview stays off for everyone else. */
+  check("without admin, no report picker", await status(b + "/api/me-preview") === 404);
+  check("…nor with a forged cookie", await status(b + "/api/me-preview", { headers: { cookie: forged } }) === 404);
+  const picker = await fetch(b + "/api/me-preview", { headers: { cookie } });
+  const crew = picker.ok ? await picker.json() : [];
+  check("signed-in admin gets the crew list", picker.status === 200 && crew.length > 0, `${crew.length} people`);
+  if (crew[0]) {
+    const url = `${b}/api/me/${crew[0].id}?month=2026-08`;
+    check("…and can open anyone's report", await status(url, { headers: { cookie } }) === 200);
+    check("the same report without admin is refused", await status(url) === 401);
+  }
 });
 
 console.log("\n4. CHANGING THE PASSWORD SIGNS EVERYONE OUT");

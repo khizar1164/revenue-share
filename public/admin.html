@@ -392,7 +392,9 @@ Tyler Johnston  44.25"></textarea>
       var dim = p.paid ? "" : ' style="color:var(--ink-3)"';
       var adj = (p.bonuses||0) - (p.deductions||0);
       h += '<tr'+dim+'>'
-        + '<td class="code">'+esc(p.code_name)+'</td><td>'+esc(p.full_name)+'</td>'
+        + '<td class="code">'+esc(p.code_name)+'</td>'
+        + '<td><a href="/me/'+encodeURIComponent(p.employee_id)+'?month='+STATE.month+'" target="_blank" rel="noopener"'
+        +   ' title="Open '+esc(p.full_name)+'\'s report" style="color:inherit">'+esc(p.full_name)+' ↗</a></td>'
         + '<td class="n"><input type="number" min="0" step="0.25" value="'+p.hours+'" data-hrs="'+p.employee_id+'" style="width:78px;text-align:right;padding:4px 7px"></td>'
         + '<td><select data-st="'+p.employee_id+'" style="padding:4px 7px">'
         +   '<option value="active"'+(p.status==="active"?" selected":"")+'>Working</option>'

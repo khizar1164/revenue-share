@@ -226,9 +226,11 @@ app.get("/api/me", wrap(async (req, res) => {
  * overrides the id in the URL so a signed-in mover cannot read someone else's.
  */
 app.get("/api/me/:employeeId", wrap(async (req, res) => {
-  const me = await currentEmployee(req);
-  const previewing = PREVIEWING;
-  if (!me && !previewing) return res.status(401).json({ error: "not signed in" });
+  /* A signed-in admin may open anyone's report — Andrew needs to see what
+     each person sees. A mover's own session still pins them to their own. */
+  const admin = isAdminRequest(req);
+  const me = admin ? null : await currentEmployee(req);
+  if (!me && !admin && !PREVIEWING) return res.status(401).json({ error: "not signed in" });
 
   const id = me ? me.id : req.params.employeeId;
   const { year, month } = askedPeriod(req);
@@ -539,10 +541,11 @@ app.get("/admin", (_req, res) => res.sendFile(join(root, "public", "admin.html")
 app.get("/me", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 
-/* Lets the report page offer a person-picker while there is no sign-in.
-   Off in public unless ALLOW_REPORT_PREVIEW is deliberately "on". */
-app.get("/api/me-preview", wrap(async (_req, res) => {
-  if (!PREVIEWING) return res.status(404).json({ error: "not found" });
+/* Lets the report page offer a person-picker: to a signed-in admin, or to
+   anyone while previewing — which is off in public unless ALLOW_REPORT_PREVIEW
+   is deliberately "on". */
+app.get("/api/me-preview", wrap(async (req, res) => {
+  if (!PREVIEWING && !isAdminRequest(req)) return res.status(404).json({ error: "not found" });
   const r = await query(
     `select id, code_name, full_name from employees where status <> 'left' and is_mover order by code_name`);
   res.json(r.rows);
