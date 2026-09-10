@@ -73,8 +73,12 @@ async function gather(period) {
                          and date_trunc('month', a.occurred_on) = $1::date), 0)::float8
               as deductions,
 
+            /* demo rows set a points figure for a comparison; they are not
+               anything the person did, so they never count as discipline —
+               and the 60-day window would otherwise carry them into a live month */
             coalesce((select -sum(pe.delta) from point_events pe
                        where pe.employee_id = e.id and pe.delta < 0
+                         and pe.recorded_by is distinct from 'demo'
                          and pe.occurred_on > ($1::date + interval '1 month' - ($2 || ' days')::interval)
                          and pe.occurred_on < ($1::date + interval '1 month')), 0)::int
               as discipline_lost

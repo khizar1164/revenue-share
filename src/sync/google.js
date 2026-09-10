@@ -175,8 +175,9 @@ export function createGoogleClient(creds = loadCredentials()) {
      * caller wants the number — otherwise the formatting silently becomes part
      * of the value.
      */
-    async read(spreadsheetId, range, { raw = false } = {}) {
-      const q = raw ? "?valueRenderOption=UNFORMATTED_VALUE" : "";
+    async read(spreadsheetId, range, { raw = false, formulas = false } = {}) {
+      const q = formulas ? "?valueRenderOption=FORMULA"
+              : raw ? "?valueRenderOption=UNFORMATTED_VALUE" : "";
       const r = await call(`/${spreadsheetId}/values/${encodeURIComponent(range)}${q}`);
       return r.values || [];
     },
