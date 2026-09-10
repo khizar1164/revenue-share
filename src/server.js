@@ -449,11 +449,31 @@ app.get("/healthz", async (_req, res) => {
     out.database.error = e.message;
   }
 
+  /* Only the four jobs that actually run in production. A test suite writes
+     its own rows to sync_runs, and a health page listing a job called
+     "explodes" is alarming to whoever finds it at 2am. */
   try {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
-         from sync_runs order by kind, started_at desc`);
+         from sync_runs
+        where kind in ('smartmoving', 'hours', 'revenue', 'writeback')
+        order by kind, started_at desc`);
     out.last_runs = recent.rows;
+
+    /* A job that has not run in far longer than its schedule is the failure
+       nobody notices — it does not error, it just stops. */
+    const stale = recent.rows.filter(r => {
+      const age = Date.now() - new Date(r.started_at).getTime();
+      const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
+                  : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
+                  : 36 * 3600e3;                              // daily
+      return age > limit;
+    }).map(r => r.kind);
+    if (stale.length) out.stale_jobs = stale;
+
+    const missing = ["smartmoving", "hours", "revenue", "writeback"]
+      .filter(k => !recent.rows.some(r => r.kind === k));
+    if (missing.length) out.never_run = missing;
   } catch (e) {
     out.last_runs = { error: e.message };
   }
