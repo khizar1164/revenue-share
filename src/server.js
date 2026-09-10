@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { monthly, forEmployee } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
-import { query, loadEnv } from "./db.js";
+import { query, loadEnv, safeTarget } from "./db.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
@@ -417,18 +417,50 @@ app.post("/api/admin/jobs/:name/run", wrap(async (req, res) => {
   }
 }));
 
-app.get("/healthz", wrap(async (_req, res) => {
-  const r = await query("select 1 as ok");
-  const recent = await query(
-    `select distinct on (kind) kind, ok, started_at, ended_at, detail
-       from sync_runs order by kind, started_at desc`);
-  res.json({
-    ok: r.rows[0].ok === 1,
+/* Deliberately not behind wrap(): a health check that answers "something went
+   wrong" is no use to whoever is trying to work out what broke. Each part is
+   probed separately and reports its own failure, so a deploy problem names
+   itself instead of needing the logs. Nothing here echoes a credential —
+   safeTarget() gives the host and database name only. */
+app.get("/healthz", async (_req, res) => {
+  const out = {
+    ok: false,
     at: new Date().toISOString(),
     scheduler: !!scheduler,
-    last_runs: recent.rows
-  });
-}));
+    database: { configured: Boolean(process.env.DATABASE_URL), target: safeTarget() }
+  };
+
+  try {
+    const r = await query("select 1 as ok");
+    out.database.reachable = r.rows[0].ok === 1;
+  } catch (e) {
+    out.database.reachable = false;
+    out.database.error = e.message;
+    return res.status(503).json(out);
+  }
+
+  try {
+    const t = await query(
+      `select count(*)::int n from information_schema.tables
+        where table_schema = 'revenue_share'`);
+    out.database.tables = t.rows[0].n;
+    if (!t.rows[0].n) out.database.note = "no tables yet — migrations have not run";
+  } catch (e) {
+    out.database.error = e.message;
+  }
+
+  try {
+    const recent = await query(
+      `select distinct on (kind) kind, ok, started_at, ended_at, detail
+         from sync_runs order by kind, started_at desc`);
+    out.last_runs = recent.rows;
+  } catch (e) {
+    out.last_runs = { error: e.message };
+  }
+
+  out.ok = out.database.reachable === true && (out.database.tables ?? 0) > 0;
+  res.status(out.ok ? 200 : 503).json(out);
+});
 
 app.get("/", (_req, res) => res.redirect("/healthz"));
 
