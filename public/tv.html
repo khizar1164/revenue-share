@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
+  /* The hidden attribute loses to any display: rule, so an element styled
+     display:flex stays on screen when told to hide. That is exactly how the
+     admin sign-in overlay stayed up after a successful sign-in. */
+  [hidden]{display:none !important}
   /* Designed for one 1920x1080 screen on a break-room wall, read from across
      the room. The whole board is laid out at that size and then scaled to
      whatever it is actually shown on, so nothing reflows between the office

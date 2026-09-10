@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
+  /* The hidden attribute loses to any display: rule, so an element styled
+     display:flex stays on screen when told to hide. That is exactly how the
+     admin sign-in overlay stayed up after a successful sign-in. */
+  [hidden]{display:none !important}
   /* Read on a phone in a truck cab as often as on a desk, so it is one column
      and the type stays large. The job of this page is to answer "why is my
      number what it is" without anyone having to ask. */
