@@ -27,6 +27,7 @@ import { importWeeklyHours } from "./sync/hours-weekly.js";
 import { writeBack, reformatAll } from "./sync/writeback.js";
 import { createGoogleClient, loadCredentials } from "./sync/google.js";
 import { parseReportFile } from "./sync/revenue-report.js";
+import { reportFreshness } from "./sync/report-hook.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -224,7 +225,12 @@ export function registerJobs(scheduler) {
     everyMs: 4 * 60 * MIN, runAtStartAfterMs: 20_000 });
   scheduler.add("hours", () => syncHours(), {
     everyMs: 10 * MIN, runAtStartAfterMs: 45_000 });
-  scheduler.add("revenue", () => syncRevenue(), { dailyAt: "06:00" });
+  /* The report is ingested whenever its email arrives (via the Zap), so this
+     is a watch, not a fetch. It runs under its own name: were it logged as
+     "revenue" it would count as a report arriving and declare the feed healthy
+     for ever. Fails loudly if nothing has come in for over a day. */
+  scheduler.add("revenue-watch", () => reportFreshness({ maxHours: 26 }), {
+    everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60_000 });
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }

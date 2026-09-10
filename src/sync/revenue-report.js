@@ -150,26 +150,94 @@ export const currentPeriod = (d = new Date()) =>
 
 /* --------------------------------------------------------------- email ---- */
 
-/** Pull the "Download Report" link out of the SmartMoving notification mail. */
-export function extractReportLink(html) {
-  const candidates = [...html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)].map(m => m[1]);
-  const clean = candidates.map(u => u.replace(/&amp;/g, "&"));
-  return (
-    clean.find(u => /download|report|export|blob|s3|storage/i.test(u) && !/smartmoving\.com\/?$/i.test(u))
-    ?? clean.find(u => /^https?:/i.test(u))
-    ?? null
-  );
+/**
+ * Pull the "Download Report" link out of the SmartMoving notification mail.
+ *
+ * The mail has other links — the company address, the homepage — so the one
+ * whose text says "Download" wins, then anything that looks like a report or
+ * file link. Works on the HTML body or the plain-text one, since Zapier can
+ * forward either.
+ */
+export function extractReportLink(body) {
+  const text = String(body ?? "");
+  const unescape = u => u.replace(/&amp;/g, "&").trim();
+  const noise = /^(mailto:|tel:)|google\.[a-z.]+\/maps|unsubscribe|\/privacy|\/terms/i;
+  const bareHome = /^https?:\/\/(www\.)?smartmoving\.com\/?$/i;
+
+  /* <a href="…">Download Report →</a> — the anchor text is the strongest signal */
+  const anchors = [...text.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(m => ({ url: unescape(m[1]), label: m[2].replace(/<[^>]+>/g, " ").trim() }))
+    .filter(a => /^https?:/i.test(a.url) && !noise.test(a.url) && !bareHome.test(a.url));
+
+  const byLabel = anchors.find(a => /download/i.test(a.label));
+  if (byLabel) return byLabel.url;
+
+  const byShape = anchors.find(a => /download|report|export|blob|s3|storage|file/i.test(a.url));
+  if (byShape) return byShape.url;
+
+  /* plain text: "Download Report ( https://… )" */
+  const bare = [...text.matchAll(/https?:\/\/[^\s"'<>)\]]+/gi)].map(m => unescape(m[0]))
+    .filter(u => !noise.test(u) && !bareHome.test(u));
+  return bare.find(u => /download|report|export|blob|s3|storage|file/i.test(u)) ?? bare[0] ?? null;
 }
 
-/** Follow the link and parse. The link is signed — no credentials needed. */
+/*
+ * Where a report may legitimately come from.
+ *
+ * Anyone who learns the webhook address could post a fake email pointing at a
+ * spreadsheet of their own and move the pool. So the file has to come from
+ * SmartMoving or the cloud storage it serves downloads from — checked against
+ * the host the download finally lands on, after any click-tracking redirects,
+ * not the host written in the email. REPORT_LINK_HOSTS adds to the list.
+ */
+const DEFAULT_HOSTS = [
+  "smartmoving.com", "amazonaws.com", "blob.core.windows.net",
+  "storage.googleapis.com", "cloudfront.net"
+];
+
+export function allowedReportHost(hostname) {
+  const extra = (process.env.REPORT_LINK_HOSTS ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  const h = String(hostname ?? "").toLowerCase();
+  return [...DEFAULT_HOSTS, ...extra].some(d => h === d || h.endsWith("." + d));
+}
+
+const MAX_REPORT_BYTES = 5 * 1024 * 1024;   // the real one is about 6 KB
+
+/**
+ * Follow the link and parse. The link is signed — no credentials needed.
+ * Returns the parsed months and the host it actually came from.
+ */
 export async function fetchReport(url) {
-  const res = await fetch(url, { redirect: "follow" });
-  if (!res.ok) throw new Error(`report download failed: ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.readUInt32LE(0) !== 0x04034b50) {
-    throw new Error("downloaded file is not an xlsx — the link may have expired");
+  let res;
+  try {
+    res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+      headers: { "user-agent": "ImmediateMovers-RevenueShare/1.0" }
+    });
+  } catch (e) {
+    throw new Error(`could not reach the report link: ${e.cause?.code || e.message}`);
   }
-  return parseRevenueForecast(buf);
+
+  const finalHost = new URL(res.url || url).hostname;
+  if (!allowedReportHost(finalHost)) {
+    throw new Error(`report came from ${finalHost}, which is not SmartMoving — refused`);
+  }
+  if (!res.ok) {
+    throw new Error(res.status === 403 || res.status === 404
+      ? `the report link has expired or been removed (${res.status})`
+      : `report download failed: ${res.status}`);
+  }
+
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_REPORT_BYTES) throw new Error("the downloaded file is far too large to be the report");
+  if (buf.length < 4 || buf.readUInt32LE(0) !== 0x04034b50) {
+    throw new Error("the download is not a spreadsheet — the link may have expired");
+  }
+
+  /* parseRevenueForecast throws unless the sheet has the Revenue Forecast's
+     own columns, so a spreadsheet of the wrong shape cannot slip through */
+  return { months: parseRevenueForecast(buf), host: finalHost, bytes: buf.length };
 }
 
 export function parseReportFile(path) {

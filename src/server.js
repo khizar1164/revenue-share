@@ -23,7 +23,8 @@ import { registerJobs } from "./jobs.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
-         setAdminCookie, clearAdminCookie, isAdminRequest } from "./auth.js";
+         setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
+import { handleReportEmail } from "./sync/report-hook.js";
 import { sendSignInLink, mailConfigured } from "./mail.js";
 
 loadEnv();
@@ -87,6 +88,42 @@ app.use("/api/admin", (req, res, next) => {
   }
   res.status(401).json({ error: "sign in to the admin panel first" });
 });
+
+/* ------------------------------------------------ report email webhook ---- */
+/*
+ * Zapier posts the SmartMoving report email here. It cannot carry the admin
+ * cookie, so it has its own secret — and like every other door here it FAILS
+ * CLOSED: with REPORT_HOOK_SECRET unset, nothing is accepted.
+ *
+ * The secret is only the first check. Even a caller who has it can only point
+ * us at a spreadsheet that downloads from SmartMoving's own hosts and has the
+ * Revenue Forecast's columns — see fetchReport().
+ */
+app.post("/api/hooks/revenue-report",
+  express.urlencoded({ extended: false, limit: "2mb" }),
+  express.json({ limit: "2mb" }),
+  async (req, res) => {
+    const secret = process.env.REPORT_HOOK_SECRET;
+    if (!secret) return res.status(503).json({ error: "report webhook is not set up — REPORT_HOOK_SECRET is missing" });
+
+    const given = req.get("x-hook-secret") || req.query.key || req.body?.secret;
+    if (!given || !safeEqual(given, secret)) return res.status(401).json({ error: "bad or missing secret" });
+
+    /* Zapier's Gmail step names these fields a few different ways */
+    const b = req.body ?? {};
+    const body = b.body_html || b.html || b.body || b.body_plain || b.text || b.plain || "";
+    const url = b.url || b.link || null;
+
+    try {
+      const r = await handleReportEmail({ body, url, subject: b.subject });
+      res.json(r);
+    } catch (e) {
+      console.error("revenue report webhook:", e.message);
+      /* 422 rather than 500: the request was understood, the report was not
+         usable. Zapier shows this message in its task history. */
+      res.status(422).json({ error: e.message });
+    }
+  });
 
 /* Which month are we showing? Defaults to now, overridable for testing. */
 function askedPeriod(req) {
@@ -230,6 +267,18 @@ app.get("/api/admin/revenue", wrap(async (req, res) => {
        from revenue_snapshots where period = $1::date
       order by captured_at desc limit 10`, [period]);
   res.json({ period, current: r.rows[0] ?? null, history: r.rows });
+}));
+
+/* The fallback when the Zap is down: paste the Download Report link from the
+   email and it goes through exactly the same checks as the webhook. */
+app.post("/api/admin/revenue/from-link", wrap(async (req, res) => {
+  const url = String(req.body?.url ?? "").trim();
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: "paste the full Download Report link" });
+  try {
+    res.json(await handleReportEmail({ url }));
+  } catch (e) {
+    res.status(422).json({ error: e.message });
+  }
 }));
 
 app.post("/api/admin/revenue", wrap(async (req, res) => {
