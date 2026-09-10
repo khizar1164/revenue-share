@@ -536,7 +536,9 @@ app.get("/healthz", async (_req, res) => {
   res.status(out.ok ? 200 : 503).json(out);
 });
 
-app.get("/", (_req, res) => res.redirect("/healthz"));
+/* The front door. Links only to /me and /admin — never to the board, whose
+   address is the only thing protecting it. */
+app.get("/", (_req, res) => res.sendFile(join(root, "public", "index.html")));
 
 /* The scheduler lives in this process because the service is always on anyway.
    Off by default outside production so a local run does not start hitting
