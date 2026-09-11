@@ -88,8 +88,8 @@ function oldWay(people, pool) {
   const pts = people.reduce((a, p) => a + p.points, 0);
   const rvw = people.reduce((a, p) => a + p.reviews, 0);
   return new Map(people.map(p => [p.id,
-    (pts ? p.points / pts : 0) * pool * RULES.pointsShare +
-    (rvw ? p.reviews / rvw : 0) * pool * (1 - RULES.pointsShare)]));
+    (pts ? p.points / pts : 0) * pool * 0.60 +     // the old sheet's weights, fixed:
+    (rvw ? p.reviews / rvw : 0) * pool * 0.40]));  // this function IS the old way
 }
 
 function newWay(people, rev, claims) {

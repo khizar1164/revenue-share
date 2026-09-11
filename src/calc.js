@@ -18,7 +18,11 @@ import { query } from "./db.js";
 
 export const RULES = {
   commissionRate: 0.02,      // 2% of completed revenue
-  pointsShare:    0.60,      // 60 / 40 split, points / reviews
+  /* How the pool splits. Andrew, 11 September: points 50, reviews 35, and
+     hours worked become a weighted factor at 15 — was 60 / 40 / none. */
+  pointsShare:    0.50,
+  reviewsShare:   0.35,
+  hoursShare:     0.15,
   startPoints:    15,        // everyone begins each month here
   minHours:       75,        // eligibility gate
   disciplineDays: 60,        // rolling window
@@ -109,7 +113,8 @@ export function computeSplit(raw, rules = RULES) {
   const commission = revenue * rules.commissionRate;
   const pool       = Math.max(0, commission - claimTotal);
   const pointsPool = pool * rules.pointsShare;
-  const reviewPool = pool * (1 - rules.pointsShare);
+  const reviewPool = pool * rules.reviewsShare;
+  const hoursPool  = pool * rules.hoursShare;
 
   /* A waived month lets everyone on the roster share regardless of hours. The
      roster is built from people who actually worked jobs, so this never pays
@@ -138,15 +143,17 @@ export function computeSplit(raw, rules = RULES) {
   });
 
   /* two denominators — see the note at the top of the file */
-  const denomA = { points: 0, reviews: 0 };   // everyone who cleared the hours gate
-  const denomB = { points: 0, reviews: 0 };   // only those actually being paid
+  const denomA = { points: 0, reviews: 0, hours: 0 };   // everyone who cleared the hours gate
+  const denomB = { points: 0, reviews: 0, hours: 0 };   // only those actually being paid
   for (const r of rows) {
     if (!r.hours_ok) continue;
     denomA.points  += r.points;
     denomA.reviews += r.review_points;
+    denomA.hours   += r.hours;
     if (r.paid) {
       denomB.points  += r.points;
       denomB.reviews += r.review_points;
+      denomB.hours   += r.hours;
     }
   }
 
@@ -154,23 +161,28 @@ export function computeSplit(raw, rules = RULES) {
   for (const r of rows) {
     r.points_amount  = 0;
     r.reviews_amount = 0;
+    r.hours_amount   = 0;
     r.forfeited      = 0;
 
     if (r.paid) {
       r.points_amount  = denomB.points  ? (r.points / denomB.points) * pointsPool : 0;
       r.reviews_amount = denomB.reviews ? (r.review_points / denomB.reviews) * reviewPool : 0;
+      /* hours past the gate still count: 200 hours earns twice what 100 does */
+      r.hours_amount   = denomB.hours   ? (r.hours / denomB.hours) * hoursPool : 0;
     } else if (r.forfeits) {
       const wouldPoints  = denomA.points  ? (r.points / denomA.points) * pointsPool : 0;
       const wouldReviews = denomA.reviews ? (r.review_points / denomA.reviews) * reviewPool : 0;
-      r.forfeited = wouldPoints + wouldReviews;
+      const wouldHours   = denomA.hours   ? (r.hours / denomA.hours) * hoursPool : 0;
+      r.forfeited = wouldPoints + wouldReviews + wouldHours;
       forfeited  += r.forfeited;
     }
 
-    r.share     = r.points_amount + r.reviews_amount;
+    r.share     = r.points_amount + r.reviews_amount + r.hours_amount;
     r.take_home = r.share + r.bonuses - r.deductions;
 
     r.points_pct  = denomB.points  ? r.points / denomB.points : 0;
     r.reviews_pct = denomB.reviews ? r.review_points / denomB.reviews : 0;
+    r.hours_pct   = denomB.hours   ? r.hours / denomB.hours : 0;
 
     r.standing =
       r.discipline_lost >= rules.terminateAt ? "termination"
@@ -184,7 +196,7 @@ export function computeSplit(raw, rules = RULES) {
       : waived ? "not sharing this month"
       : `${round2(rules.minHours - r.hours)} hours short of the ${rules.minHours}-hour minimum`;
 
-    for (const k of ["points_amount", "reviews_amount", "forfeited", "share", "take_home", "bonuses", "deductions"]) {
+    for (const k of ["points_amount", "reviews_amount", "hours_amount", "forfeited", "share", "take_home", "bonuses", "deductions"]) {
       r[k] = round2(r[k]);
     }
   }
@@ -192,9 +204,9 @@ export function computeSplit(raw, rules = RULES) {
   const paid = rows.filter(r => r.paid);
   const allocated = paid.reduce((a, r) => a + r.share, 0);
 
-  /* Half the pool can have nobody to go to. If no reviews have been logged yet
-     the 40% side has a denominator of zero, so it pays nothing and the pool
-     does not fully clear. Same on the points side if everyone is on zero.
+  /* Part of the pool can have nobody to go to. If no reviews have been logged
+     yet the reviews share has a denominator of zero, so it pays nothing and the
+     pool does not fully clear. Same on the points side if everyone is on zero.
 
      Andrew's rule (10 September): it stays unallocated through the month —
      people are still qualifying, and most months it will find someone before
@@ -207,6 +219,7 @@ export function computeSplit(raw, rules = RULES) {
   if (unallocated > 0.01) {
     if (!denomB.points)  unallocatedWhy.push("no points to share against");
     if (!denomB.reviews) unallocatedWhy.push("no review points recorded this month");
+    if (paid.length && !denomB.hours) unallocatedWhy.push("no hours recorded for anyone sharing");
     if (!paid.length)    unallocatedWhy.push("nobody has cleared the hours gate");
   }
 
@@ -220,6 +233,11 @@ export function computeSplit(raw, rules = RULES) {
     pool:         round2(pool),
     points_pool:  round2(pointsPool),
     reviews_pool: round2(reviewPool),
+    /* three parts rounded separately can add up to a cent more than the pool
+       ($2,013.90 + $1,409.73 + $604.17 = $4,027.80 on a $4,027.79 pool), so
+       the last part is the remainder and the figures on screen always add up */
+    hours_pool:   round2(round2(pool) - round2(pointsPool) - round2(reviewPool)),
+    weights: { points: rules.pointsShare, reviews: rules.reviewsShare, hours: rules.hoursShare },
     forfeited:    round2(forfeited),
     allocated:       round2(allocated),
     unallocated:     round2(unallocated),
@@ -227,6 +245,7 @@ export function computeSplit(raw, rules = RULES) {
     totals: {
       points:  denomB.points,
       reviews: denomB.reviews,
+      hours:   round2(denomB.hours),
       paid_out: round2(allocated),
       take_home: round2(rows.reduce((a, r) => a + r.take_home, 0))
     },
@@ -295,12 +314,12 @@ export async function ytd(year, month) {
   const months = ytdMonths(year, month);
   const results = await Promise.all(months.map(m => monthly(m.year, m.month)));
 
-  const totals = { revenue: 0, pool: 0, points_pool: 0, reviews_pool: 0, allocated: 0,
+  const totals = { revenue: 0, pool: 0, points_pool: 0, reviews_pool: 0, hours_pool: 0, allocated: 0,
                    unallocated: 0, forfeited: 0, claims_total: 0, completed_jobs: 0, take_home: 0 };
   const people = new Map();
 
   for (const r of results) {
-    for (const k of ["revenue", "pool", "points_pool", "reviews_pool", "allocated",
+    for (const k of ["revenue", "pool", "points_pool", "reviews_pool", "hours_pool", "allocated",
                      "unallocated", "forfeited", "claims_total"]) totals[k] += Number(r[k]) || 0;
     totals.completed_jobs += Number(r.completed_jobs) || 0;
     totals.take_home += Number(r.totals.take_home) || 0;
@@ -308,11 +327,11 @@ export async function ytd(year, month) {
     for (const p of r.rows) {
       const e = people.get(p.employee_id) ?? {
         employee_id: p.employee_id, code_name: p.code_name, full_name: p.full_name,
-        points_amount: 0, reviews_amount: 0, share: 0, bonuses: 0, deductions: 0,
+        points_amount: 0, reviews_amount: 0, hours_amount: 0, share: 0, bonuses: 0, deductions: 0,
         take_home: 0, forfeited: 0, review_points: 0, hours: 0,
         months_paid: 0, months_on_roster: 0, months: []
       };
-      for (const k of ["points_amount", "reviews_amount", "share", "bonuses", "deductions",
+      for (const k of ["points_amount", "reviews_amount", "hours_amount", "share", "bonuses", "deductions",
                        "take_home", "forfeited", "review_points", "hours"]) e[k] += Number(p[k]) || 0;
       e.months_on_roster++;
       if (p.paid) e.months_paid++;
@@ -324,7 +343,7 @@ export async function ytd(year, month) {
 
   for (const k of Object.keys(totals)) totals[k] = round2(totals[k]);
   const rows = [...people.values()].map(e => {
-    for (const k of ["points_amount", "reviews_amount", "share", "bonuses", "deductions",
+    for (const k of ["points_amount", "reviews_amount", "hours_amount", "share", "bonuses", "deductions",
                      "take_home", "forfeited", "hours"]) e[k] = round2(e[k]);
     return e;
   }).sort((a, b) => b.take_home - a.take_home);
@@ -369,6 +388,8 @@ export async function forEmployee(year, month, employeeId) {
     pool: result.pool,
     points_pool: result.points_pool,
     reviews_pool: result.reviews_pool,
+    hours_pool: result.hours_pool,
+    weights: result.weights,
     ...me,
     ledger: ledger.rows,
     reviews: reviews.rows,

@@ -8,7 +8,7 @@ Three screens over one calculation:
 
 ## The rules it enforces
 
-Monthly revenue × 2%, less claims, is the pool. It splits **60% on performance points, 40% on 5-star reviews**.
+Monthly revenue × 2%, less claims, is the pool. It splits **50% on performance points, 35% on 5-star reviews and 15% on hours worked** (since 11 September 2026; it was 60/40 with no hours share).
 
 - Everyone starts each month on **15 points**. A second job in a day earns **+1**, added automatically from the schedule.
 - A review is worth **1**, or **3** with a photo. Every mover on the job gets the full value.

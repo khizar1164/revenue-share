@@ -40,6 +40,8 @@ export function boardView(result, ytdResult = null) {
     pool:         result.pool,
     points_pool:  result.points_pool,
     reviews_pool: result.reviews_pool,
+    hours_pool:   result.hours_pool,
+    weights:      result.weights,
     forfeited:    result.forfeited,
 
     /* a job count is safe and gives the crew something concrete */
@@ -48,7 +50,7 @@ export function boardView(result, ytdResult = null) {
     claims_count:   result.claims_count,
 
     counts: result.counts,
-    totals: { points: result.totals.points, reviews: result.totals.reviews },
+    totals: { points: result.totals.points, reviews: result.totals.reviews, hours: result.totals.hours },
 
     crew: result.rows.map(r => ({
       code_name:     r.code_name,
@@ -58,6 +60,7 @@ export function boardView(result, ytdResult = null) {
       share:         r.share,
       points_amount: r.points_amount,
       reviews_amount: r.reviews_amount,
+      hours_amount:  r.hours_amount,
       forfeited:     r.forfeited,
       paid:          r.paid,
       forfeits:      r.forfeits,
@@ -84,6 +87,7 @@ export function reportView(detail, ytdResult = null) {
       share:          mine.share,
       points_amount:  mine.points_amount,
       reviews_amount: mine.reviews_amount,
+      hours_amount:   mine.hours_amount,
       bonuses:        mine.bonuses,
       deductions:     mine.deductions,
       forfeited:      mine.forfeited,
@@ -102,6 +106,7 @@ export function reportView(detail, ytdResult = null) {
 
     points_amount:  detail.points_amount,
     reviews_amount: detail.reviews_amount,
+    hours_amount:   detail.hours_amount,
     share:          detail.share,
     bonuses:        detail.bonuses,
     deductions:     detail.deductions,
@@ -117,8 +122,11 @@ export function reportView(detail, ytdResult = null) {
     pool:         detail.pool,
     points_pool:  detail.points_pool,
     reviews_pool: detail.reviews_pool,
+    hours_pool:   detail.hours_pool,
+    weights:      detail.weights,
     points_pct:   detail.points_pct,
     reviews_pct:  detail.reviews_pct,
+    hours_pct:    detail.hours_pct,
 
     standing:        detail.standing,
     discipline_lost: detail.discipline_lost,

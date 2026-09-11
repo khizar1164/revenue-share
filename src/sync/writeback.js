@@ -39,6 +39,8 @@ const rangeFor = (tab, rows, cols) => `${tab}!A1:${String.fromCharCode(64 + cols
 
 /* ------------------------------------------------------------- summary ---- */
 
+const pct = x => `${Math.round(x * 100)}%`;
+
 export async function buildSummary(year, month) {
   const r = await monthly(year, month);
   const when = new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -51,8 +53,9 @@ export async function buildSummary(year, month) {
     ["Commission × 2%", money(r.commission)],
     [`Claims (${r.claims_count})`, -money(r.claims_total)],
     ["POOL", money(r.pool)],
-    ["  Points 60%", money(r.points_pool), "", `${r.totals.points} points`],
-    ["  Reviews 40%", money(r.reviews_pool), "", `${r.totals.reviews} review points`],
+    [`  Points ${pct(r.weights.points)}`, money(r.points_pool), "", `${r.totals.points} points`],
+    [`  Reviews ${pct(r.weights.reviews)}`, money(r.reviews_pool), "", `${r.totals.reviews} review points`],
+    [`  Hours ${pct(r.weights.hours)}`, money(r.hours_pool), "", `${r.totals.hours} hours`],
     ["Sharing", `${r.counts.qualified} of ${r.counts.roster}`, "",
       r.hours_gate_waived ? "75-hour minimum waived this month" : `${r.counts.short} short on hours`]
   ];
@@ -65,7 +68,7 @@ export async function buildSummary(year, month) {
   head.push([]);
 
   const cols = ["Code", "Name", "Hours", "Points", "Reviews",
-                "Points $", "Reviews $", "Extras", "Deductions", "Take home", "Note"];
+                "Points $", "Reviews $", "Hours $", "Extras", "Deductions", "Take home", "Note"];
 
   const tier = p => (p.paid ? 0 : p.forfeits ? 1 : 2);
   const body = r.rows.slice()
@@ -74,6 +77,7 @@ export async function buildSummary(year, month) {
       p.code_name, p.full_name, money(p.hours), p.points, p.review_points,
       p.paid ? money(p.points_amount) : "",
       p.paid ? money(p.reviews_amount) : "",
+      p.paid ? money(p.hours_amount) : "",
       p.bonuses ? money(p.bonuses) : "",
       p.deductions ? money(p.deductions) : "",
       money(p.take_home),
@@ -81,7 +85,7 @@ export async function buildSummary(year, month) {
     ]);
 
   const totals = ["", "TOTAL", "", r.totals.points, r.totals.reviews,
-    money(r.points_pool), money(r.reviews_pool), "", "", money(r.totals.take_home), ""];
+    money(r.points_pool), money(r.reviews_pool), money(r.hours_pool), "", "", money(r.totals.take_home), ""];
 
   const rows = [...head, cols, ...body, [], totals];
 

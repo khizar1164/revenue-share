@@ -59,9 +59,10 @@ try {
     check("revenue matches", Math.abs(find("Completed revenue") - truth.revenue) < 0.01,
       `$${find("Completed revenue")}`);
     check("pool matches", Math.abs(find("POOL") - truth.pool) < 0.01, `$${find("POOL")}`);
-    check("60/40 split matches",
-      Math.abs(find("  Points 60%") - truth.points_pool) < 0.01 &&
-      Math.abs(find("  Reviews 40%") - truth.reviews_pool) < 0.01);
+    check("50/35/15 split matches",
+      Math.abs(find("  Points 50%") - truth.points_pool) < 0.01 &&
+      Math.abs(find("  Reviews 35%") - truth.reviews_pool) < 0.01 &&
+      Math.abs(find("  Hours 15%") - truth.hours_pool) < 0.01);
     check("take-home matches", Math.abs(find("Total take-home") - truth.totals.take_home) < 0.01);
 
     const header = rows.find(r => r[0] === "Code");

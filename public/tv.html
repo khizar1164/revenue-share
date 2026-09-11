@@ -19,7 +19,7 @@
   :root{
     --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
     --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
-    --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926;
+    --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926; --s-hours:#a979e0;
     --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
     --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
     --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
@@ -50,6 +50,10 @@
     font-variant-numeric:tabular-nums}
 
   .qrow{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0}
+  /* points, reviews and hours side by side — one panel per share of the pool */
+  .qrow.three{grid-template-columns:1fr 1fr 1fr}
+  .qrow.three .q{padding:20px 22px}
+  .qrow.three .qhead h2{font-size:25px;letter-spacing:.1em}
   .q{background:var(--panel);border:1px solid var(--seam);border-radius:14px;
     padding:22px 26px;display:flex;flex-direction:column;min-height:0}
   .qhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
@@ -77,7 +81,7 @@
   .splitbar{display:flex;height:16px;border-radius:8px;overflow:hidden;margin:14px 0 10px;
     background:var(--panel-2)}
   .splitbar i{display:block;height:100%}
-  .splitlegend{display:flex;gap:34px;font-size:20px;color:var(--ink-2)}
+  .splitlegend{display:flex;gap:26px;font-size:20px;color:var(--ink-2)}
   .splitlegend b{color:var(--ink);font-variant-numeric:tabular-nums}
   .sw{width:14px;height:14px;border-radius:4px;display:inline-block;margin-right:9px}
 
@@ -99,7 +103,7 @@
   /* mini lists */
   .mini{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
     min-height:0;overflow:hidden}
-  .mrow{display:grid;grid-template-columns:126px 1fr 44px 100px;align-items:center;gap:11px;
+  .mrow{display:grid;grid-template-columns:118px 1fr 44px 96px;align-items:center;gap:10px;
     flex:1 1 0;min-height:0;max-height:38px}
   .mrow .nm{font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.05em;
     text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -109,6 +113,8 @@
     font-variant-numeric:tabular-nums;color:var(--ink-2)}
   .mrow .am{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
     font-variant-numeric:tabular-nums;color:var(--ink)}
+  /* hours are the widest figure in a list (218.7) */
+  #hrsList .mrow{grid-template-columns:118px 1fr 62px 96px}
 
   /* someone short on hours is dimmed; someone who walked is red */
   .nq{opacity:.42}
@@ -116,8 +122,8 @@
   .ff .nm,.ff .am{color:var(--crit)}
   .ff{opacity:.9}
 
-  .qfoot{font-size:17px;color:var(--ink-3);margin-top:14px;border-top:1px solid var(--seam);
-    padding-top:12px}
+  .qfoot{font-size:16px;line-height:1.4;color:var(--ink-3);margin-top:12px;border-top:1px solid var(--seam);
+    padding-top:11px}
   .qfoot b{color:var(--ink-2)}
 
   /* a state the board will genuinely be in until hours arrive each month */
@@ -159,10 +165,11 @@
         <div class="cell"><div class="k" id="thirdK">Sharing</div><div class="v" id="third">0</div></div>
         <div class="cell ytd"><div class="k">Year to date</div><div class="v" id="ytd">$0.00</div><div class="sub" id="ytdSub"></div></div>
       </div>
-      <div class="splitbar"><i id="sbP" style="background:var(--s-points)"></i><i id="sbR" style="background:var(--s-reviews)"></i></div>
+      <div class="splitbar"><i id="sbP" style="background:var(--s-points)"></i><i id="sbR" style="background:var(--s-reviews)"></i><i id="sbH" style="background:var(--s-hours)"></i></div>
       <div class="splitlegend">
-        <div><span class="sw" style="background:var(--s-points)"></span>Points 60% &mdash; <b id="lgP">$0.00</b></div>
-        <div><span class="sw" style="background:var(--s-reviews)"></span>5-star reviews 40% &mdash; <b id="lgR">$0.00</b></div>
+        <div><span class="sw" style="background:var(--s-points)"></span>Points <span class="wP">50%</span> &mdash; <b id="lgP">$0.00</b></div>
+        <div><span class="sw" style="background:var(--s-reviews)"></span>Reviews <span class="wR">35%</span> &mdash; <b id="lgR">$0.00</b></div>
+        <div><span class="sw" style="background:var(--s-hours)"></span>Hours <span class="wH">15%</span> &mdash; <b id="lgH">$0.00</b></div>
       </div>
       <div id="pending"></div>
     </div>
@@ -173,16 +180,21 @@
     </div>
   </div>
 
-  <div class="qrow">
+  <div class="qrow three">
     <div class="q">
-      <div class="qhead"><h2>Performance points</h2><div class="tag">60% &mdash; <b id="q3">$0.00</b></div></div>
+      <div class="qhead"><h2>Points</h2><div class="tag"><span class="wP">50%</span> &mdash; <b id="q3">$0.00</b></div></div>
       <div class="mini" id="ptsList"></div>
-      <div class="qfoot">Everyone starts the month at <b>15 points</b>. A second job in a day is <b>+1</b>. Hit <b>0</b> and this half pays nothing &mdash; your reviews still do.</div>
+      <div class="qfoot">Everyone starts at <b>15</b>. A second job in a day is <b>+1</b>. Hit <b>0</b> and this share pays nothing.</div>
     </div>
     <div class="q">
-      <div class="qhead"><h2>5-star reviews</h2><div class="tag">40% &mdash; <b id="q4">$0.00</b></div></div>
+      <div class="qhead"><h2>5-star reviews</h2><div class="tag"><span class="wR">35%</span> &mdash; <b id="q4">$0.00</b></div></div>
       <div class="mini" id="revList"></div>
-      <div class="qfoot">Review without a photo = <b>1</b> &middot; with a photo = <b>3</b> &middot; every mover on the job gets credit. Faded = <b>under 75 hours</b> &middot; red = <b>left without notice</b>.</div>
+      <div class="qfoot">No photo = <b>1</b> &middot; with a photo = <b>3</b>. Every mover on the job gets the credit.</div>
+    </div>
+    <div class="q">
+      <div class="qhead"><h2>Hours worked</h2><div class="tag"><span class="wH">15%</span> &mdash; <b id="q5">$0.00</b></div></div>
+      <div class="mini" id="hrsList"></div>
+      <div class="qfoot">More hours, bigger share. Faded = <b>under 75 hours</b> &middot; red = <b>left without notice</b>.</div>
     </div>
   </div>
 
@@ -243,7 +255,8 @@
       var bars, amt;
       if (c.paid){
         bars = '<i style="width:'+((c.points_amount/max)*100).toFixed(2)+'%;background:var(--s-points)"></i>'
-             + '<i style="width:'+((c.reviews_amount/max)*100).toFixed(2)+'%;background:var(--s-reviews)"></i>';
+             + '<i style="width:'+((c.reviews_amount/max)*100).toFixed(2)+'%;background:var(--s-reviews)"></i>'
+             + '<i style="width:'+(((c.hours_amount||0)/max)*100).toFixed(2)+'%;background:var(--s-hours)"></i>';
         amt = usd(c.share);
       } else if (c.forfeits){
         bars = '<i style="width:'+((c.forfeited/max)*100).toFixed(2)+'%;background:var(--crit);opacity:.55"></i>';
@@ -315,12 +328,23 @@
 
     $("lgP").textContent = usd(d.points_pool);
     $("lgR").textContent = usd(d.reviews_pool);
+    $("lgH").textContent = usd(d.hours_pool);
     $("q3").textContent  = usd(d.points_pool);
     $("q4").textContent  = usd(d.reviews_pool);
+    $("q5").textContent  = usd(d.hours_pool);
     $("qualN").textContent = d.counts.qualified;
     $("crewN").textContent = d.counts.roster;
-    $("sbP").style.width = "60%";
-    $("sbR").style.width = "40%";
+
+    /* the weights come from the server, so the labels can never disagree
+       with the money */
+    var w = d.weights || { points: .5, reviews: .35, hours: .15 };
+    var pct = function(x){ return Math.round(x * 100) + "%"; };
+    [["wP", w.points], ["wR", w.reviews], ["wH", w.hours]].forEach(function(p){
+      document.querySelectorAll("." + p[0]).forEach(function(el){ el.textContent = pct(p[1]); });
+    });
+    $("sbP").style.width = pct(w.points);
+    $("sbR").style.width = pct(w.reviews);
+    $("sbH").style.width = pct(w.hours);
 
     /* Until hours are entered nobody clears the 75-hour gate, so every dollar
        column is empty. Say why, rather than showing a wall of dashes. */
@@ -332,6 +356,7 @@
     renderStandings(d);
     renderMini("ptsList", d, "points", "points_amount", "var(--s-points)");
     renderMini("revList", d, "review_points", "reviews_amount", "var(--s-reviews)");
+    renderMini("hrsList", d, "hours", "hours_amount", "var(--s-hours)");
   }
 
   var failures = 0;

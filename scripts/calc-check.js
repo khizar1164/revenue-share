@@ -19,8 +19,9 @@ console.log(`  completed revenue   ${usd(r.revenue).padStart(14)}   ${r.complete
 console.log(`  commission @ 2%     ${usd(r.commission).padStart(14)}`);
 console.log(`  claims (${r.claims_count})          ${("-" + usd(r.claims_total)).padStart(14)}`);
 console.log(`  ${"POOL".padEnd(19)} ${usd(r.pool).padStart(14)}`);
-console.log(`    points 60%        ${usd(r.points_pool).padStart(14)}   over ${r.totals.points} points`);
-console.log(`    reviews 40%       ${usd(r.reviews_pool).padStart(14)}   over ${r.totals.reviews} review points`);
+console.log(`    points 50%        ${usd(r.points_pool).padStart(14)}   over ${r.totals.points} points`);
+console.log(`    reviews 35%       ${usd(r.reviews_pool).padStart(14)}   over ${r.totals.reviews} review points`);
+console.log(`    hours 15%         ${usd(r.hours_pool).padStart(14)}   over ${r.totals.hours} hours`);
 if (r.forfeited > 0) console.log(`  forfeited & redistributed ${usd(r.forfeited).padStart(8)}`);
 console.log(`\n  roster ${r.counts.roster} | qualified ${r.counts.qualified} | forfeited ${r.counts.forfeited} | short on hours ${r.counts.short}`);
 
@@ -55,8 +56,8 @@ const line = (label, ok, detail) => console.log(`  ${ok ? "PASS" : "FAIL"}  ${la
 line("pool = revenue x 2% - claims",
   Math.abs(r.pool - (r.revenue * RULES.commissionRate - r.claims_total)) < 0.01,
   `${usd(r.pool)}`);
-line("60/40 split sums to the pool",
-  Math.abs((r.points_pool + r.reviews_pool) - r.pool) < 0.01);
+line("50/35/15 split sums to the pool",
+  Math.abs((r.points_pool + r.reviews_pool + r.hours_pool) - r.pool) < 0.01);
 line("everything paid out equals the pool",
   r.counts.qualified === 0 || Math.abs(sumShare - r.pool) < 0.05,
   r.counts.qualified === 0 ? "nobody qualified yet — no hours entered" : `${usd(sumShare)} vs ${usd(r.pool)}`);

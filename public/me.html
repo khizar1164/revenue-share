@@ -254,11 +254,15 @@
       $("ytdCard").hidden = true;
     }
 
+    var w = d.weights || { points: .5, reviews: .35, hours: .15 };
+    var pc = function(x){ return Math.round(x * 100) + "%"; };
     var bits = [
-      ["Points 60%", usd(d.points_amount),
+      ["Points " + pc(w.points), usd(d.points_amount),
         d.points + " points" + (d.paid ? " · " + (d.points_pct*100).toFixed(1) + "% of " + usd(d.points_pool) : "")],
-      ["Reviews 40%", usd(d.reviews_amount),
-        d.review_points + " review points" + (d.paid ? " · " + (d.reviews_pct*100).toFixed(1) + "% of " + usd(d.reviews_pool) : "")]
+      ["Reviews " + pc(w.reviews), usd(d.reviews_amount),
+        d.review_points + " review points" + (d.paid ? " · " + (d.reviews_pct*100).toFixed(1) + "% of " + usd(d.reviews_pool) : "")],
+      ["Hours " + pc(w.hours), usd(d.hours_amount),
+        d.hours + " hours" + (d.paid ? " · " + ((d.hours_pct||0)*100).toFixed(1) + "% of " + usd(d.hours_pool) : "")]
     ];
     if (d.bonuses)    bits.push(["Extras", "+" + usd(d.bonuses), "paid on top"]);
     if (d.deductions) bits.push(["Deductions", "−" + usd(d.deductions), "charged to you"]);
@@ -275,10 +279,10 @@
     } else if (!d.paid && !d.hours_ok){
       b = '<div class="banner"><b>Not eligible this month.</b> ' + d.hours + ' hours worked, '
         + (75 - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the 75-hour minimum. '
-        + 'Your points and reviews still count — they just don’t pay this month.</div>';
+        + 'Your points, reviews and hours still count — they just don’t pay this month.</div>';
     } else if (d.paid && d.points === 0){
-      b = '<div class="banner"><b>No points left.</b> The points half pays nothing this month. '
-        + 'Your reviews still pay ' + usd(d.reviews_amount) + '.</div>';
+      b = '<div class="banner"><b>No points left.</b> The points share pays nothing this month. '
+        + 'Your reviews and hours still pay ' + usd(d.reviews_amount + (d.hours_amount||0)) + '.</div>';
     } else if (d.paid){
       b = '<div class="banner ok"><b>You’re sharing this month.</b> '
         + d.hours + ' hours worked, over the 75-hour minimum.</div>';

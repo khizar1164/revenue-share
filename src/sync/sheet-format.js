@@ -126,7 +126,10 @@ export function summaryRequests(sheetId, marks, width_) {
     range: { sheetId, dimension: "ROWS", startIndex: headerRow, endIndex: headerRow + 1 },
     properties: { pixelSize: 26 }, fields: "pixelSize" } });
 
-  /* body: numbers right-aligned and formatted */
+  /* body: numbers right-aligned and formatted. Columns are counted from the
+     right — take-home is second to last, the note is last — so adding a money
+     column in the middle cannot shift the formatting onto the wrong one. */
+  const TAKE = W - 2, NOTE = W - 1;
   if (bodyEnd > bodyStart) {
     R.push(cell(sheetId, bodyStart, bodyEnd, 0, 1,
       { textFormat: { bold: true, fontSize: 10 }, padding: { left: 6 } },
@@ -137,14 +140,14 @@ export function summaryRequests(sheetId, marks, width_) {
     R.push(cell(sheetId, bodyStart, bodyEnd, 3, 5,
       { numberFormat: { type: "NUMBER", pattern: NUM }, horizontalAlignment: "RIGHT" },
       "userEnteredFormat(numberFormat,horizontalAlignment)"));
-    R.push(cell(sheetId, bodyStart, bodyEnd, 5, 10,
+    R.push(cell(sheetId, bodyStart, bodyEnd, 5, TAKE + 1,
       { numberFormat: { type: "NUMBER", pattern: MONEY }, horizontalAlignment: "RIGHT" },
       "userEnteredFormat(numberFormat,horizontalAlignment)"));
     /* take-home is the column that gets read */
-    R.push(cell(sheetId, bodyStart, bodyEnd, 9, 10,
+    R.push(cell(sheetId, bodyStart, bodyEnd, TAKE, TAKE + 1,
       { textFormat: { bold: true, fontSize: 10 }, backgroundColor: rgb("#f4f9f4") },
       "userEnteredFormat(textFormat,backgroundColor)"));
-    R.push(cell(sheetId, bodyStart, bodyEnd, 10, 11,
+    R.push(cell(sheetId, bodyStart, bodyEnd, NOTE, NOTE + 1,
       { textFormat: { fontSize: 9, italic: true, foregroundColor: MUTED },
         wrapStrategy: "CLIP" },
       "userEnteredFormat(textFormat,wrapStrategy)"));
@@ -152,7 +155,7 @@ export function summaryRequests(sheetId, marks, width_) {
     /* striping */
     for (let r = bodyStart; r < bodyEnd; r++) {
       if ((r - bodyStart) % 2 === 1) {
-        R.push(cell(sheetId, r, r + 1, 0, 9,
+        R.push(cell(sheetId, r, r + 1, 0, TAKE,
           { backgroundColor: BAND }, "userEnteredFormat(backgroundColor)"));
       }
     }
@@ -169,7 +172,7 @@ export function summaryRequests(sheetId, marks, width_) {
         "userEnteredFormat(textFormat)"));
     }
     for (const r of states.paid) {
-      R.push(cell(sheetId, r, r + 1, 9, 10,
+      R.push(cell(sheetId, r, r + 1, TAKE, TAKE + 1,
         { textFormat: { bold: true, fontSize: 10, foregroundColor: GOOD } },
         "userEnteredFormat(textFormat)"));
     }
@@ -180,7 +183,7 @@ export function summaryRequests(sheetId, marks, width_) {
     R.push(cell(sheetId, totalRow, totalRow + 1, 0, W,
       { backgroundColor: rgb("#efece7"), textFormat: { bold: true, fontSize: 10 } },
       "userEnteredFormat(backgroundColor,textFormat)"));
-    R.push(cell(sheetId, totalRow, totalRow + 1, 5, 10,
+    R.push(cell(sheetId, totalRow, totalRow + 1, 5, TAKE + 1,
       { numberFormat: { type: "NUMBER", pattern: MONEY }, horizontalAlignment: "RIGHT" },
       "userEnteredFormat(numberFormat,horizontalAlignment)"));
     R.push(cell(sheetId, totalRow, totalRow + 1, 3, 5,

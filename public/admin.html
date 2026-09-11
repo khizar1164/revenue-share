@@ -361,12 +361,17 @@ Tyler Johnston  44.25"></textarea>
 
   /* ------------------------------------------------------------- render --- */
 
+  /* the weights come from the server, so a label can never disagree with the money */
+  var pct = function(x){ return Math.round(x * 100) + "%"; };
+  var weights = function(d){ return d.weights || { points: .5, reviews: .35, hours: .15 }; };
+
   function renderStats(d){
-    var waived = d.hours_gate_waived;
+    var waived = d.hours_gate_waived, w = weights(d);
     $("stats").innerHTML =
       stat("Pool", usd(d.pool), usd(d.revenue) + " revenue, " + (d.completed_jobs==null?"—":d.completed_jobs) + " jobs") +
-      stat("Points 60%", usd(d.points_pool), d.totals.points + " points across " + d.counts.qualified) +
-      stat("Reviews 40%", usd(d.reviews_pool), d.totals.reviews + " review points") +
+      stat("Points " + pct(w.points), usd(d.points_pool), d.totals.points + " points across " + d.counts.qualified) +
+      stat("Reviews " + pct(w.reviews), usd(d.reviews_pool), d.totals.reviews + " review points") +
+      stat("Hours " + pct(w.hours), usd(d.hours_pool), (d.totals.hours || 0) + " hours across " + d.counts.qualified) +
       stat("Sharing", d.counts.qualified + " of " + d.counts.roster,
            waived ? "75-hour minimum waived" : d.counts.short + " short on hours") +
       (d.forfeited > 0 ? stat("Redistributed", usd(d.forfeited), d.counts.forfeited + " forfeited") : "");
@@ -399,13 +404,15 @@ Tyler Johnston  44.25"></textarea>
   }
 
   function renderPool(d){
+    var w = weights(d);
     var r = [
       ["Completed revenue", usd(d.revenue), ""],
       ["Commission &times; 2%", usd(d.commission), ""],
       ["Claims (" + d.claims_count + ")", "−" + usd(d.claims_total), "var(--crit)"],
       ["<b>Pool</b>", "<b>" + usd(d.pool) + "</b>", ""],
-      ["Points 60%", usd(d.points_pool), ""],
-      ["Reviews 40%", usd(d.reviews_pool), ""]
+      ["Points " + pct(w.points), usd(d.points_pool), ""],
+      ["Reviews " + pct(w.reviews), usd(d.reviews_pool), ""],
+      ["Hours " + pct(w.hours), usd(d.hours_pool), ""]
     ];
     if (d.forfeited > 0) r.push(["Forfeited &amp; redistributed", usd(d.forfeited), "var(--warn)"]);
     r.push(["Paying out", usd(d.allocated), ""]);
@@ -609,18 +616,18 @@ Tyler Johnston  44.25"></textarea>
     $("rosterTitle").textContent = "Year to date";
     $("rosterDek").textContent = "Every mover's take-home since the programme started, added up month by month.";
     var h = '<thead><tr><th>Code</th><th>Name</th><th class="n">Months paid</th><th class="n">Hours</th>'
-          + '<th class="n">Points $</th><th class="n">Reviews $</th><th class="n">Extras</th>'
+          + '<th class="n">Points $</th><th class="n">Reviews $</th><th class="n">Hours $</th><th class="n">Extras</th>'
           + '<th class="n">Deductions</th><th class="n">Take home</th></tr></thead><tbody>';
     y.rows.forEach(function(p){
       h += '<tr><td class="code">'+esc(p.code_name)+'</td><td>'+esc(p.full_name)+'</td>'
         + '<td class="n">'+p.months_paid+' of '+p.months_on_roster+'</td>'
         + '<td class="n">'+p.hours+'</td>'
-        + '<td class="n">'+usd(p.points_amount)+'</td><td class="n">'+usd(p.reviews_amount)+'</td>'
+        + '<td class="n">'+usd(p.points_amount)+'</td><td class="n">'+usd(p.reviews_amount)+'</td><td class="n">'+usd(p.hours_amount)+'</td>'
         + '<td class="n"'+(p.bonuses?' style="color:var(--good)"':'')+'>'+(p.bonuses?"+"+usd(p.bonuses):"—")+'</td>'
         + '<td class="n"'+(p.deductions?' style="color:var(--crit)"':'')+'>'+(p.deductions?"−"+usd(p.deductions):"—")+'</td>'
         + '<td class="n"><b>'+usd(p.take_home)+'</b></td></tr>';
     });
-    h += '</tbody><tfoot><tr><td colspan="8" style="padding-top:10px"><b>Total</b></td>'
+    h += '</tbody><tfoot><tr><td colspan="9" style="padding-top:10px"><b>Total</b></td>'
       + '<td class="n" style="padding-top:10px"><b>'+usd(t.take_home)+'</b></td></tr></tfoot>';
     $("rosterTbl").innerHTML = h;
 
