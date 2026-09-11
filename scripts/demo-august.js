@@ -53,10 +53,18 @@ async function roster() {
   const rows = (await query(
     `select id, code_name, full_name from employees where is_mover and status <> 'left'`)).rows;
   const byName = new Map(rows.map(r => [r.full_name.toLowerCase(), r]));
+  /* anything entered by hand in the admin panel applies on top of Andrew's
+     figure, so a -3 he logs for Josh takes Josh from 11 to 8, as it would live */
+  const manual = new Map((await query(
+    `select employee_id, sum(delta)::int as d from point_events
+      where date_trunc('month', occurred_on) = $1::date
+        and recorded_by is distinct from 'system' and recorded_by is distinct from $2
+      group by employee_id`, [PERIOD, TAG])).rows.map(r => [r.employee_id, r.d]));
   const people = SHEET.map(([name, attendance, reviews, hours]) => {
     const e = byName.get(name.toLowerCase());
     if (!e) throw new Error(`${name} is not on the roster — check the spelling`);
-    return { ...e, attendance, reviews, hours };
+    const extra = manual.get(e.id) ?? 0;
+    return { ...e, attendance, extra, points: Math.max(0, attendance + extra), reviews, hours };
   });
   return people;
 }
@@ -68,7 +76,8 @@ async function revenueAndClaims() {
   if (!rev) throw new Error("no August revenue on record");
   const claims = (await query(
     `select coalesce(sum(amount),0)::float8 as total, count(*)::int as n
-       from claims where date_trunc('month', occurred_on) = $1::date`, [PERIOD])).rows[0];
+       from claims where date_trunc('month', occurred_on) = $1::date
+`, [PERIOD])).rows[0];
   return { rev, claims };
 }
 
@@ -76,10 +85,10 @@ async function revenueAndClaims() {
    Calculations" tab: pool = revenue x 2% - claims; 60% by share of points,
    40% by share of reviews; everyone listed shares; hours are not considered. */
 function oldWay(people, pool) {
-  const pts = people.reduce((a, p) => a + p.attendance, 0);
+  const pts = people.reduce((a, p) => a + p.points, 0);
   const rvw = people.reduce((a, p) => a + p.reviews, 0);
   return new Map(people.map(p => [p.id,
-    (pts ? p.attendance / pts : 0) * pool * RULES.pointsShare +
+    (pts ? p.points / pts : 0) * pool * RULES.pointsShare +
     (rvw ? p.reviews / rvw : 0) * pool * (1 - RULES.pointsShare)]));
 }
 
@@ -89,7 +98,7 @@ function newWay(people, rev, claims) {
     settings: { hours_gate_waived: false },
     people: people.map(p => ({
       id: p.id, code_name: p.code_name, full_name: p.full_name, status: "active",
-      hours: p.hours, point_delta: p.attendance - RULES.startPoints,
+      hours: p.hours, point_delta: p.attendance + p.extra - RULES.startPoints,
       review_points: p.reviews, bonuses: 0, deductions: 0, discipline_lost: 0
     }))
   });
@@ -117,7 +126,7 @@ async function compare() {
               lpad("old way", 11) + lpad("new way", 11) + lpad("change", 10) + lpad("new $/hr", 10));
   for (const r of rows) {
     const d = r.now - r.old;
-    console.log(pad(r.full_name, 18) + lpad(r.attendance, 4) + lpad(r.reviews, 5) +
+    console.log(pad(r.full_name, 18) + lpad(r.points, 4) + lpad(r.reviews, 5) +
       lpad(r.hours.toFixed(2), 8) + lpad(money(r.old), 11) + lpad(money(r.now), 11) +
       lpad((d >= 0 ? "+" : "-") + money(Math.abs(d)).slice(1), 10) +
       lpad(r.paid ? money(r.now / r.hours) : "—", 10) +
@@ -133,7 +142,8 @@ async function removeDemo(c) {
   const r1 = await c.query(`delete from point_events where recorded_by = $1 and date_trunc('month', occurred_on) = $2::date`, [TAG, PERIOD]);
   const r2 = await c.query(`delete from reviews where recorded_by = $1 and date_trunc('month', occurred_on) = $2::date`, [TAG, PERIOD]);
   const r3 = await c.query(`delete from hours where recorded_by = $1 and period = $2::date`, [TAG, PERIOD]);
-  return { points: r1.rowCount, reviews: r2.rowCount, hours: r3.rowCount };
+  const r4 = await c.query(`delete from claims where recorded_by = $1 and date_trunc('month', occurred_on) = $2::date`, [TAG, PERIOD]);
+  return { points: r1.rowCount, reviews: r2.rowCount, hours: r3.rowCount, claims: r4.rowCount };
 }
 
 async function load() {
@@ -142,11 +152,13 @@ async function load() {
     await removeDemo(c);   // re-running replaces rather than stacking
     for (const p of people) {
       /* points are 15 plus the month's events, so one event brings each person
-         to exactly Andrew's attendance figure, net of the same-day points the
-         system already logged */
+         to Andrew's attendance figure, net of the same-day points the system
+         logged. Hand entries are left out of the sum on purpose: they stay on
+         top of the baseline, and removing one moves the figure as expected. */
       const have = (await c.query(
         `select coalesce(sum(delta),0)::int as d from point_events
-          where employee_id = $1 and date_trunc('month', occurred_on) = $2::date`,
+          where employee_id = $1 and date_trunc('month', occurred_on) = $2::date
+            and recorded_by = 'system'`,
         [p.id, PERIOD])).rows[0].d;
       const delta = p.attendance - (RULES.startPoints + have);
       if (delta !== 0) {
@@ -176,7 +188,7 @@ async function load() {
   let bad = 0;
   for (const r of rows) {
     const l = live.rows.find(x => x.employee_id === r.id);
-    const ok = l && l.points === r.attendance && l.review_points === r.reviews &&
+    const ok = l && l.points === r.points && l.review_points === r.reviews &&
                Math.abs(l.hours - r.hours) < 0.005 && Math.abs(l.take_home - r.now) < 0.01 &&
                l.standing === "clear";
     if (!ok) { bad++; console.log(`  MISMATCH ${r.full_name}`, l && { pts: l.points, rev: l.review_points, hrs: l.hours, $: l.take_home, standing: l.standing }); }
@@ -190,7 +202,7 @@ try {
   else if (mode === "load") process.exitCode = (await load()) ? 1 : 0;
   else if (mode === "remove") {
     const n = await withTransaction(c => removeDemo(c));
-    console.log(`removed demo rows — points ${n.points}, reviews ${n.reviews}, hours ${n.hours}`);
+    console.log(`removed demo rows — points ${n.points}, reviews ${n.reviews}, hours ${n.hours}, claims ${n.claims}`);
   } else throw new Error(`unknown mode "${mode}" — compare, load or remove`);
 } finally {
   await close();

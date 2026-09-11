@@ -31,7 +31,7 @@
   h1{font-family:var(--cond);font-weight:700;font-size:30px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--ink);margin:0}
   h1 em{color:var(--brand);font-style:normal}
-  .mo{display:flex;align-items:center;gap:10px}
+  .mo{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
   h2{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--ink-2);margin:0 0 4px}
@@ -121,6 +121,29 @@
   #gate input{font-size:16px;text-align:center;padding:12px}
   #gate button{width:100%;margin-top:11px;padding:12px;font-size:15px}
   #gate .err{color:var(--crit);font-size:13.5px;margin-top:13px;min-height:1em}
+
+  /* Without this the browser draws its calendar icon dark-on-dark — there but
+     invisible, which reads as "no calendar". It also darkens the pop-up. */
+  input[type="date"]{color-scheme:dark;cursor:pointer}
+  input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.85}
+
+  /* Month picker. Built by hand because Safari and Firefox have no month
+     input — there it is a bare text box with no calendar at all. */
+  .mp{position:relative}
+  #monthBtn{min-width:168px;text-align:left;display:flex;justify-content:space-between;gap:12px;align-items:center}
+  #monthBtn::after{content:"";width:0;height:0;border:5px solid transparent;border-top-color:var(--ink-3);margin-top:5px}
+  .mp-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;background:var(--panel-2);
+    border:1px solid var(--seam);border-radius:11px;padding:12px;width:262px;
+    box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .mp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .mp-head b{font-family:var(--cond);font-size:19px;letter-spacing:.06em;color:var(--ink)}
+  .mp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mp-grid button{padding:9px 0;font-size:13.5px;background:transparent}
+  .mp-grid button[aria-current="true"]{background:var(--brand);border-color:var(--brand);color:#1a0e05}
+  .mp-grid button.now{border-color:var(--ink-3)}
+  .mp-grid button:disabled{opacity:.3;cursor:default}
+  .mp-grid button:disabled:hover{border-color:var(--seam)}
+  .auto{font-size:12px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -138,8 +161,18 @@
 <header>
   <h1>Revenue Share <em>&middot;</em> Admin</h1>
   <div class="mo">
-    <label for="month" style="margin:0">Month</label>
-    <input type="month" id="month" style="width:auto">
+    <label for="monthBtn" style="margin:0">Month</label>
+    <div class="mp">
+      <button type="button" id="monthBtn" aria-haspopup="dialog" aria-expanded="false">&mdash;</button>
+      <div class="mp-pop" id="monthPop" role="dialog" aria-label="Choose a month" hidden>
+        <div class="mp-head">
+          <button type="button" class="sm" id="mpPrev" aria-label="Previous year">&lsaquo;</button>
+          <b id="mpYear"></b>
+          <button type="button" class="sm" id="mpNext" aria-label="Next year">&rsaquo;</button>
+        </div>
+        <div class="mp-grid" id="mpGrid"></div>
+      </div>
+    </div>
     <button id="reload">Refresh</button>
     <div class="seg" role="tablist" aria-label="View">
       <button type="button" id="viewMonth" aria-pressed="true">This month</button>
@@ -207,9 +240,10 @@ Tyler Johnston  44.25"></textarea>
         <div style="max-width:130px"><label for="clDate">Date</label><input type="date" id="clDate"></div>
         <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
         <div><label for="clNote">Reason</label><input type="text" id="clNote" placeholder="What happened"></div>
-        <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="500"></div>
+        <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="1000"></div>
         <button id="clSave">Add</button>
       </div>
+      <div class="tblwrap scrolly" style="margin-top:16px"><table id="clTbl"></table></div>
     </div>
 
     <div class="panel">
@@ -253,6 +287,7 @@ Tyler Johnston  44.25"></textarea>
         </div>
         <button id="ptSave">Add</button>
       </div>
+      <div class="tblwrap scrolly" style="margin-top:16px"><table id="ptTbl"></table></div>
     </div>
 
     <div class="panel">
@@ -301,7 +336,7 @@ Tyler Johnston  44.25"></textarea>
   var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
     return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
 
-  var STATE = { month:"", summary:null, roster:[], reviews:[], revCrew:[], settings:null, view:"month" };
+  var STATE = { month:"", summary:null, roster:[], reviews:[], points:[], claims:[], revCrew:[], settings:null, view:"month" };
 
   function toast(msg, bad){
     var t = $("toast");
@@ -347,10 +382,10 @@ Tyler Johnston  44.25"></textarea>
     }
     if (d.unallocated > 0.01) {
       var closed = new Date(STATE.month + "-01");
-      var thisMonth = STATE.month === new Date().toISOString().slice(0, 7);
+      var running = STATE.month === thisMonth;
       notes += '<div class="note"><b>' + esc(usd(d.unallocated)) + ' not allocated yet</b> — '
              + esc(d.unallocated_why.join("; ")) + '. '
-             + (thisMonth
+             + (running
                  ? 'It stays here while the month runs, so there is still time for someone to earn it. '
                  + 'Anything still unallocated when the month closes stays with the company.'
                  : 'This month has closed, so this stayed with the company.')
@@ -433,9 +468,45 @@ Tyler Johnston  44.25"></textarea>
         + '<td>'+esc(r.customer_name||"—")+'</td><td>'+esc(r.source||"—")+'</td>'
         + '<td class="n"><b>'+r.points+'</b></td>'
         + '<td style="font-size:12.5px">'+(r.crew||[]).map(function(c){return esc(c.full_name);}).join(", ")+'</td>'
-        + '<td class="n"><button class="sm danger" data-delrev="'+r.id+'">Remove</button></td></tr>';
+        + '<td class="n"><button class="sm danger" data-delrev="'+r.id+'" data-what="'+esc((r.customer_name||"Review")+" · "+(r.source||""))+'">Remove</button></td></tr>';
     });
     $("revTbl").innerHTML = h + "</tbody>";
+  }
+
+  var shortDate = function(d){
+    var m = String(d||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m[2]-1] + " " + (+m[3]) : "—";
+  };
+
+  /* Every point entry this month. Anything a person typed can be taken back
+     out; same-day points are rebuilt from the schedule, so they are labelled
+     rather than offered for removal. */
+  function renderPoints(){
+    var h = '<thead><tr><th>Date</th><th>Who</th><th>What happened</th><th class="n">Pts</th><th></th></tr></thead><tbody>';
+    if (!STATE.points.length) h += '<tr><td colspan="5" style="color:var(--ink-3)">No point entries this month yet.</td></tr>';
+    STATE.points.forEach(function(p){
+      var d = Number(p.delta);
+      h += '<tr><td>'+shortDate(p.occurred_on)+'</td><td>'+esc(p.full_name)+'</td>'
+        + '<td style="font-size:13px">'+esc(p.reason)+'</td>'
+        + '<td class="n" style="color:'+(d<0?"var(--crit)":"var(--good)")+'"><b>'+(d>0?"+":"−")+Math.abs(d)+'</b></td>'
+        + '<td class="n">'+(p.recorded_by === "system"
+            ? '<span class="auto" title="Added from the SmartMoving schedule">Automatic</span>'
+            : '<button class="sm danger" data-delpt="'+p.id+'" data-what="'+esc(p.full_name+" · "+p.reason)+'">Remove</button>')
+        + '</td></tr>';
+    });
+    $("ptTbl").innerHTML = h + "</tbody>";
+  }
+
+  function renderClaims(){
+    var h = '<thead><tr><th>Date</th><th>Job #</th><th>Reason</th><th class="n">Amount</th><th></th></tr></thead><tbody>';
+    if (!STATE.claims.length) h += '<tr><td colspan="5" style="color:var(--ink-3)">No claims this month.</td></tr>';
+    STATE.claims.forEach(function(c){
+      h += '<tr><td>'+shortDate(c.occurred_on)+'</td><td class="code">'+esc(c.job_number||"—")+'</td>'
+        + '<td style="font-size:13px">'+esc(c.reason)+'</td>'
+        + '<td class="n" style="color:var(--crit)">−'+usd(c.amount)+'</td>'
+        + '<td class="n"><button class="sm danger" data-delcl="'+c.id+'" data-what="'+esc(c.reason+" · "+usd(c.amount))+'">Remove</button></td></tr>';
+    });
+    $("clTbl").innerHTML = h + "</tbody>";
   }
 
   /* Andrew asked for real names on the review chips so Nicole can find people
@@ -570,9 +641,13 @@ Tyler Johnston  44.25"></textarea>
       api("/api/admin/settings" + q()),
       api("/api/admin/jobs").catch(function(){ return []; }),
       api("/api/admin/revenue" + q()).catch(function(){ return null; }),
-      ytdView ? api("/api/admin/ytd" + q()) : Promise.resolve(null)
+      ytdView ? api("/api/admin/ytd" + q()) : Promise.resolve(null),
+      api("/api/admin/points" + q()),
+      api("/api/admin/claims" + q())
     ]).then(function(r){
       STATE.summary = r[0]; STATE.roster = r[1]; STATE.reviews = r[2]; STATE.settings = r[3];
+      STATE.points = r[7]; STATE.claims = r[8];
+      renderPoints(); renderClaims();
       $("gateWaive").checked = !!r[3].hours_gate_waived;
       if (ytdView) {
         renderYtd(r[6]);
@@ -618,12 +693,65 @@ Tyler Johnston  44.25"></textarea>
 
   /* -------------------------------------------------------------- wire --- */
 
-  var today = new Date().toISOString().slice(0,10);
-  ["rvDate","clDate","ajDate","ptDate"].forEach(function(id){ $(id).value = today; });
-  STATE.month = today.slice(0,7);
-  $("month").value = STATE.month;
+  /* Today on this computer's calendar. toISOString() is UTC, which in Indiana
+     turns into tomorrow every evening from 7pm. */
+  var pad2 = function(n){ return (n < 10 ? "0" : "") + n; };
+  var now = new Date();
+  var today = now.getFullYear() + "-" + pad2(now.getMonth()+1) + "-" + pad2(now.getDate());
+  var thisMonth = today.slice(0,7);
+  ["rvDate","clDate","ajDate","ptDate"].forEach(function(id){
+    $(id).value = today;
+    /* open the calendar on a click anywhere in the box, not just on the
+       small icon — which is where people actually click */
+    $(id).addEventListener("click", function(){
+      try { if (this.showPicker) this.showPicker(); } catch (e) {}
+    });
+  });
 
-  $("month").addEventListener("change", function(){ STATE.month = this.value; load(); });
+  /* ------------------------------------------------------ month picker --- */
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var FULL = ["January","February","March","April","May","June","July","August",
+              "September","October","November","December"];
+  var mpYear = now.getFullYear();
+
+  function setMonth(m){
+    STATE.month = m;
+    $("monthBtn").textContent = FULL[+m.slice(5,7)-1] + " " + m.slice(0,4);
+  }
+  function drawMonths(){
+    $("mpYear").textContent = mpYear;
+    $("mpNext").disabled = mpYear >= now.getFullYear();
+    $("mpGrid").innerHTML = MONTHS.map(function(name, i){
+      var v = mpYear + "-" + pad2(i+1);
+      return '<button type="button" data-m="'+v+'"'
+        + (v === STATE.month ? ' aria-current="true"' : '')
+        + (v === thisMonth ? ' class="now"' : '')
+        + (v > thisMonth ? ' disabled' : '') + '>' + name + '</button>';
+    }).join("");
+  }
+  function openMonths(open){
+    $("monthPop").hidden = !open;
+    $("monthBtn").setAttribute("aria-expanded", String(open));
+    if (open){
+      mpYear = +STATE.month.slice(0,4); drawMonths();
+      var cur = $("mpGrid").querySelector('[aria-current="true"]'); if (cur) cur.focus();
+    }
+  }
+  $("monthBtn").addEventListener("click", function(){ openMonths($("monthPop").hidden); });
+  $("mpPrev").addEventListener("click", function(){ mpYear--; drawMonths(); });
+  $("mpNext").addEventListener("click", function(){ mpYear++; drawMonths(); });
+  $("mpGrid").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-m]"); if (!b || b.disabled) return;
+    setMonth(b.getAttribute("data-m")); openMonths(false); $("monthBtn").focus(); load();
+  });
+  document.addEventListener("click", function(e){
+    if (!$("monthPop").hidden && !e.target.closest(".mp")) openMonths(false);
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && !$("monthPop").hidden){ openMonths(false); $("monthBtn").focus(); }
+  });
+
+  setMonth(thisMonth);
   $("reload").addEventListener("click", load);
 
   /* review — job number pulls the crew */
@@ -664,6 +792,7 @@ Tyler Johnston  44.25"></textarea>
   });
   $("revTbl").addEventListener("click", function(e){
     var b = e.target.closest("button[data-delrev]"); if (!b) return;
+    if (!confirm("Remove this review?\n\n" + b.getAttribute("data-what"))) return;
     api("/api/admin/reviews/" + b.getAttribute("data-delrev"), { method:"DELETE" })
       .then(function(){ toast("Review removed."); load(); })
       .catch(function(e){ toast(e.message, true); });
@@ -737,6 +866,24 @@ Tyler Johnston  44.25"></textarea>
       delta: Number(sel.value), reason: text
     })}).then(function(){ toast("Point event recorded."); load(); })
       .catch(function(e){ toast(e.message, true); });
+  });
+
+  /* taking an entry back out — asked once, because it cannot be undone */
+  $("ptTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-delpt]"); if (!b) return;
+    if (!confirm("Remove this point entry?\n\n" + b.getAttribute("data-what"))) return;
+    b.disabled = true;
+    api("/api/admin/points/" + b.getAttribute("data-delpt"), { method:"DELETE" })
+      .then(function(){ toast("Point entry removed."); load(); })
+      .catch(function(e){ b.disabled = false; toast(e.message, true); });
+  });
+  $("clTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-delcl]"); if (!b) return;
+    if (!confirm("Remove this claim?\n\n" + b.getAttribute("data-what"))) return;
+    b.disabled = true;
+    api("/api/admin/claims/" + b.getAttribute("data-delcl"), { method:"DELETE" })
+      .then(function(){ toast("Claim removed — the pool goes back up."); load(); })
+      .catch(function(e){ b.disabled = false; toast(e.message, true); });
   });
 
   $("gateWaive").addEventListener("change", function(){

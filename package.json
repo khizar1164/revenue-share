@@ -9,7 +9,7 @@
     "seed": "node scripts/seed.js",
     "verify": "node scripts/verify.js",
     "calc": "node scripts/calc-check.js",
-    "test": "node scripts/calc-test.js && node scripts/gate-check.js && node scripts/ytd-check.js",
+    "test": "node scripts/calc-test.js && node scripts/gate-check.js && node scripts/ytd-check.js && node scripts/log-check.js",
     "test:live": "node scripts/admin-check.js && node scripts/report-check.js",
     "sync": "node scripts/sync.js"
   },

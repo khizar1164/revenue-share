@@ -337,7 +337,7 @@ app.get("/api/admin/reviews", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   const period = `${year}-${String(month).padStart(2, "0")}-01`;
   const r = await query(
-    `select r.id, r.occurred_on, r.job_number, r.customer_name, r.source,
+    `select r.id, to_char(r.occurred_on, 'YYYY-MM-DD') as occurred_on, r.job_number, r.customer_name, r.source,
             r.has_photo, r.points,
             coalesce(json_agg(json_build_object('id', e.id, 'code_name', e.code_name,
                      'full_name', e.full_name) order by e.full_name)
@@ -385,6 +385,27 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
      values ($1,$2,$3,$4,$5) returning id`,
     [occurred_on || new Date(), job_number || null, reason || "Claim", amount, req.body.recorded_by || "admin"]);
   res.status(201).json(r.rows[0]);
+}));
+
+app.get("/api/admin/claims", wrap(async (req, res) => {
+  const { year, month } = askedPeriod(req);
+  const period = `${year}-${String(month).padStart(2, "0")}-01`;
+  const r = await query(
+    `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on, job_number, reason, amount::float8 as amount, recorded_by
+       from claims where date_trunc('month', occurred_on) = $1::date
+      order by occurred_on desc, id desc`, [period]);
+  res.json(r.rows);
+}));
+
+/* ids are bigserial; anything else is refused before it reaches the query */
+const rowId = v => /^\d{1,18}$/.test(String(v)) ? String(v) : null;
+
+app.delete("/api/admin/claims/:id", wrap(async (req, res) => {
+  const id = rowId(req.params.id);
+  if (!id) return res.status(400).json({ error: "not a claim id" });
+  const r = await query(`delete from claims where id = $1`, [id]);
+  if (!r.rowCount) return res.status(404).json({ error: "that claim is already gone" });
+  res.status(204).end();
 }));
 
 app.post("/api/admin/adjustments", wrap(async (req, res) => {
@@ -520,6 +541,35 @@ app.post("/api/admin/points", wrap(async (req, res) => {
     [employee_id, occurred_on || new Date(), delta, reason || "Adjustment",
      job_number || null, req.body.recorded_by || "admin"]);
   res.status(201).json(r.rows[0]);
+}));
+
+/* The month's point log, so a mistaken entry can be found and taken back out. */
+app.get("/api/admin/points", wrap(async (req, res) => {
+  const { year, month } = askedPeriod(req);
+  const period = `${year}-${String(month).padStart(2, "0")}-01`;
+  const r = await query(
+    `select pe.id, to_char(pe.occurred_on, 'YYYY-MM-DD') as occurred_on, pe.delta, pe.reason, pe.job_number, pe.recorded_by,
+            e.id as employee_id, e.code_name, e.full_name
+       from point_events pe join employees e on e.id = pe.employee_id
+      where date_trunc('month', pe.occurred_on) = $1::date
+      order by pe.occurred_on desc, pe.id desc`, [period]);
+  res.json(r.rows);
+}));
+
+/* Same-day points are rebuilt from the SmartMoving schedule on every sync, so
+   deleting one here would only bring it back hours later. If one is wrong,
+   the schedule is what needs fixing — say so rather than pretend it worked. */
+app.delete("/api/admin/points/:id", wrap(async (req, res) => {
+  const id = rowId(req.params.id);
+  if (!id) return res.status(400).json({ error: "not a point entry id" });
+  const row = (await query(`select recorded_by from point_events where id = $1`, [id])).rows[0];
+  if (!row) return res.status(404).json({ error: "that entry is already gone" });
+  if (row.recorded_by === "system") {
+    return res.status(409).json({ error: "same-day points come from the SmartMoving schedule — " +
+      "fix the crew on that job in SmartMoving and it corrects itself on the next sync" });
+  }
+  await query(`delete from point_events where id = $1`, [id]);
+  res.status(204).end();
 }));
 
 /* ---------------------------------------------------------------- pages ---- */
