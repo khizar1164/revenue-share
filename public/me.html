@@ -220,6 +220,8 @@
   }
 
   function render(d){
+    /* the hours minimum comes from the server, so the page can't disagree with the rule */
+    var MIN = d.min_hours || 100;
     $("name").textContent = d.full_name;
     $("code").textContent = d.code_name;
     var p = String(d.period).split("-");
@@ -242,7 +244,7 @@
       var rows = '<thead><tr><th>Month</th><th class="n">Hours</th><th class="n">Share</th><th class="n">Take home</th></tr></thead><tbody>';
       y.months.forEach(function(m){
         var p = String(m.period).split("-");
-        var note = m.paid ? "" : (m.forfeits ? " · forfeited" : " · under 75 h");
+        var note = m.paid ? "" : (m.forfeits ? " · forfeited" : " · under the hours minimum");
         rows += '<tr><td>' + MONTHS[Number(p[1])-1] + " " + p[0] +
           '<span style="color:var(--ink-3);font-size:12.5px">' + note + '</span></td>' +
           '<td class="n">' + m.hours + '</td><td class="n">' + usd(m.share) + '</td>' +
@@ -278,14 +280,14 @@
         + usd(d.forfeited) + ' — has been forfeited and shared out among the crew still working.</div>';
     } else if (!d.paid && !d.hours_ok){
       b = '<div class="banner"><b>Not eligible this month.</b> ' + d.hours + ' hours worked, '
-        + (75 - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the 75-hour minimum. '
+        + (MIN - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the ' + MIN + '-hour minimum. '
         + 'Your points, reviews and hours still count — they just don’t pay this month.</div>';
     } else if (d.paid && d.points === 0){
       b = '<div class="banner"><b>No points left.</b> The points share pays nothing this month. '
         + 'Your reviews and hours still pay ' + usd(d.reviews_amount + (d.hours_amount||0)) + '.</div>';
     } else if (d.paid){
       b = '<div class="banner ok"><b>You’re sharing this month.</b> '
-        + d.hours + ' hours worked, over the 75-hour minimum.</div>';
+        + d.hours + ' hours worked, over the ' + MIN + '-hour minimum.</div>';
     }
     $("banner").innerHTML = b;
 
@@ -350,11 +352,11 @@
     : "Clear. " + (15-lost) + " more points lost in a rolling 60 days reaches a written warning.";
 
     /* eligibility */
-    var pctH = Math.min(100, (d.hours/75)*100);
+    var pctH = Math.min(100, (d.hours/MIN)*100);
     $("elig").innerHTML = '<tbody>'
-      + '<tr><td>Hours worked</td><td class="n"><b>'+d.hours+'</b> / 75 &nbsp;'
+      + '<tr><td>Hours worked</td><td class="n"><b>'+d.hours+'</b> / '+MIN+' &nbsp;'
       +   '<span class="pill '+(d.hours_ok?"plus":"minus")+'">'
-      +   (d.hours_ok?"Qualified":"Short "+(75-d.hours).toFixed(2).replace(/\.00$/,"")+" h")+'</span>'
+      +   (d.hours_ok?"Qualified":"Short "+(MIN-d.hours).toFixed(2).replace(/\.00$/,"")+" h")+'</span>'
       +   '<div class="hoursbar"><i style="width:'+pctH.toFixed(1)+'%;background:'
       +   (d.hours_ok?"var(--good)":"var(--warn)")+'"></i></div></td></tr>'
       + '<tr><td>Points left</td><td class="n"><b>'+d.points+'</b> &nbsp;<span class="pill '

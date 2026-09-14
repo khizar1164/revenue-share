@@ -80,6 +80,11 @@ await withServer({ ...PUBLIC, ADMIN_PASSWORD: PW }, async b => {
   check("a made-up cookie is rejected",
     await status(b + "/api/admin/summary", { headers: { cookie: "rs_admin=9999999999999.abc" } }) === 401);
 
+  /* the "View board" button's address carries the TV token — admin only */
+  check("the board link is refused without admin", await status(b + "/api/admin/tv-link") === 401);
+  const tv = await (await fetch(b + "/api/admin/tv-link", { headers: { cookie } })).json();
+  check("a signed-in admin gets the board link", tv.path === "/tv/tv-test-token", tv.path);
+
   /* Andrew opens any crew member's report from the admin panel. That must
      need the admin cookie — preview stays off for everyone else. */
   check("without admin, no report picker", await status(b + "/api/me-preview") === 404);

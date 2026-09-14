@@ -57,7 +57,7 @@ export async function buildSummary(year, month) {
     [`  Reviews ${pct(r.weights.reviews)}`, money(r.reviews_pool), "", `${r.totals.reviews} review points`],
     [`  Hours ${pct(r.weights.hours)}`, money(r.hours_pool), "", `${r.totals.hours} hours`],
     ["Sharing", `${r.counts.qualified} of ${r.counts.roster}`, "",
-      r.hours_gate_waived ? "75-hour minimum waived this month" : `${r.counts.short} short on hours`]
+      r.hours_gate_waived ? `${r.min_hours}-hour minimum waived this month` : `${r.counts.short} short of ${r.min_hours} hours`]
   ];
   if (r.forfeited > 0) head.push(["Forfeited & redistributed", money(r.forfeited), "",
     `${r.counts.forfeited} left without notice`]);

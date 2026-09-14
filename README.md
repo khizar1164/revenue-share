@@ -12,7 +12,7 @@ Monthly revenue × 2%, less claims, is the pool. It splits **50% on performance 
 
 - Everyone starts each month on **15 points**. A second job in a day earns **+1**, added automatically from the schedule.
 - A review is worth **1**, or **3** with a photo. Every mover on the job gets the full value.
-- Under **75 hours** in the month and you do not share, though your points and reviews still count.
+- Under **100 hours** in the month (75 until 14 September 2026) and you do not share, though your points and reviews still count.
 - Leaving without **two weeks notice** forfeits the share, which is redistributed across everyone still working and shown in red on the TV.
 - Bonuses and individual deductions are **private** — the person's own report only.
 - Anything the split cannot allocate stays unallocated during the month and, if still unallocated when the month closes, stays with the company.

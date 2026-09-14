@@ -144,6 +144,9 @@
   .mp-grid button:disabled{opacity:.3;cursor:default}
   .mp-grid button:disabled:hover{border-color:var(--seam)}
   .auto{font-size:12px;color:var(--ink-3)}
+  a.btn{font-weight:600;font-size:13.5px;color:#1a0e05;background:var(--brand);border:1px solid var(--brand);
+    border-radius:7px;padding:8px 14px;text-decoration:none;white-space:nowrap;display:inline-block}
+  a.btn:hover{filter:brightness(1.08)}
 </style>
 </head>
 <body>
@@ -174,6 +177,7 @@
       </div>
     </div>
     <button id="reload">Refresh</button>
+    <a class="btn" id="tvLink" href="#" target="_blank" rel="noopener" title="The break-room board, for the month picked here" hidden>View board &#8599;</a>
     <div class="seg" role="tablist" aria-label="View">
       <button type="button" id="viewMonth" aria-pressed="true">This month</button>
       <button type="button" id="viewYtd" aria-pressed="false">Year to date</button>
@@ -311,7 +315,7 @@ Tyler Johnston  44.25"></textarea>
       </div>
       <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
         <label class="switch"><input type="checkbox" id="gateWaive">
-          Waive the 75-hour minimum for this month</label>
+          Waive the <span class="minH">100</span>-hour minimum for this month</label>
         <p class="hint">Everyone on the roster shares regardless of hours. The roster only holds crew who actually worked jobs, so this never pays someone who wasn't there.</p>
       </div>
     </div>
@@ -336,7 +340,7 @@ Tyler Johnston  44.25"></textarea>
   var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
     return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
 
-  var STATE = { month:"", summary:null, roster:[], reviews:[], points:[], claims:[], revCrew:[], settings:null, view:"month" };
+  var STATE = { tv:"", month:"", summary:null, roster:[], reviews:[], points:[], claims:[], revCrew:[], settings:null, view:"month" };
 
   function toast(msg, bad){
     var t = $("toast");
@@ -364,6 +368,7 @@ Tyler Johnston  44.25"></textarea>
   /* the weights come from the server, so a label can never disagree with the money */
   var pct = function(x){ return Math.round(x * 100) + "%"; };
   var weights = function(d){ return d.weights || { points: .5, reviews: .35, hours: .15 }; };
+  var minH = function(d){ return (d && d.min_hours) || 100; };
 
   function renderStats(d){
     var waived = d.hours_gate_waived, w = weights(d);
@@ -373,12 +378,12 @@ Tyler Johnston  44.25"></textarea>
       stat("Reviews " + pct(w.reviews), usd(d.reviews_pool), d.totals.reviews + " review points") +
       stat("Hours " + pct(w.hours), usd(d.hours_pool), (d.totals.hours || 0) + " hours across " + d.counts.qualified) +
       stat("Sharing", d.counts.qualified + " of " + d.counts.roster,
-           waived ? "75-hour minimum waived" : d.counts.short + " short on hours") +
+           waived ? minH(d) + "-hour minimum waived" : d.counts.short + " short of " + minH(d) + " hours") +
       (d.forfeited > 0 ? stat("Redistributed", usd(d.forfeited), d.counts.forfeited + " forfeited") : "");
 
     var notes = "";
     if (waived) {
-      notes += '<div class="note ok"><b>The 75-hour minimum is waived for this month.</b> '
+      notes += '<div class="note ok"><b>The ' + minH(d) + '-hour minimum is waived for this month.</b> '
              + 'Everyone on the roster is sharing. Untick it in <em>The month</em> once hours are in.</div>';
     } else if (d.hours_entered === 0) {
       notes += '<div class="note"><b>No hours entered yet, so nobody is being paid.</b> '
@@ -654,6 +659,8 @@ Tyler Johnston  44.25"></textarea>
     ]).then(function(r){
       STATE.summary = r[0]; STATE.roster = r[1]; STATE.reviews = r[2]; STATE.settings = r[3];
       STATE.points = r[7]; STATE.claims = r[8];
+      document.querySelectorAll(".minH").forEach(function(el){ el.textContent = minH(r[0]); });
+      boardLink();
       renderPoints(); renderClaims();
       $("gateWaive").checked = !!r[3].hours_gate_waived;
       if (ytdView) {
@@ -898,7 +905,7 @@ Tyler Johnston  44.25"></textarea>
     api("/api/admin/settings", { method:"PUT", body: JSON.stringify({
       period: period(), hours_gate_waived: on,
       note: on ? "Waived from the admin panel" : null
-    })}).then(function(){ toast(on ? "75-hour minimum waived for this month." : "75-hour minimum back on."); load(); })
+    })}).then(function(){ toast(on ? minH(STATE.summary) + "-hour minimum waived for this month." : minH(STATE.summary) + "-hour minimum back on."); load(); })
       .catch(function(e){ toast(e.message, true); });
   });
 
@@ -909,6 +916,15 @@ Tyler Johnston  44.25"></textarea>
     $("gate").hidden = true;
     $("adminPage").hidden = false;
     load();
+    api("/api/admin/tv-link").then(function(t){ STATE.tv = t.path; boardLink(); })
+      .catch(function(){ /* no TV token set: the button stays hidden */ });
+  }
+
+  /* the board for the month on screen; the current month needs no pin */
+  function boardLink(){
+    if (!STATE.tv) return;
+    $("tvLink").href = STATE.tv + (STATE.month && STATE.month !== thisMonth ? "?month=" + STATE.month : "");
+    $("tvLink").hidden = false;
   }
 
   fetch("/api/admin/whoami").then(function(r){ return r.json(); }).then(function(w){

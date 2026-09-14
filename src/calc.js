@@ -24,7 +24,7 @@ export const RULES = {
   reviewsShare:   0.35,
   hoursShare:     0.15,
   startPoints:    15,        // everyone begins each month here
-  minHours:       75,        // eligibility gate
+  minHours:       100,       // eligibility gate — Andrew, 14 September (was 75)
   disciplineDays: 60,        // rolling window
   warnAt:         15,
   suspendAt:      30,
@@ -238,6 +238,7 @@ export function computeSplit(raw, rules = RULES) {
        the last part is the remainder and the figures on screen always add up */
     hours_pool:   round2(round2(pool) - round2(pointsPool) - round2(reviewPool)),
     weights: { points: rules.pointsShare, reviews: rules.reviewsShare, hours: rules.hoursShare },
+    min_hours: rules.minHours,
     forfeited:    round2(forfeited),
     allocated:       round2(allocated),
     unallocated:     round2(unallocated),
@@ -390,6 +391,7 @@ export async function forEmployee(year, month, employeeId) {
     reviews_pool: result.reviews_pool,
     hours_pool: result.hours_pool,
     weights: result.weights,
+    min_hours: result.min_hours,
     ...me,
     ledger: ledger.rows,
     reviews: reviews.rows,

@@ -71,19 +71,27 @@ console.log("\n2. EVERYONE QUALIFIED");
 }
 
 /* ------------------------------------------------------------------ 3 ---- */
-console.log("\n3. THE 75-HOUR GATE");
+console.log("\n3. THE HOURS MINIMUM  (100 from 14 September; was 75)");
 {
-  const r = computeSplit(build({ hours: { BADGER: 60, HAWK: 74 } }));
+  const r = computeSplit(build({ hours: { BADGER: 60, HAWK: 99 } }));
   const badger = r.rows.find(p => p.code_name === "BADGER");
   const hawk   = r.rows.find(p => p.code_name === "HAWK");
   const sum    = r.rows.reduce((a, p) => a + p.share, 0);
 
-  check("under 75 hours is not paid", badger.share === 0 && hawk.share === 0);
-  check("74 hours still fails the gate", !hawk.hours_ok);
+  check("under the minimum is not paid", badger.share === 0 && hawk.share === 0);
+  check("99 hours still fails the gate", !hawk.hours_ok);
   check("their points still count and show", badger.points === 15);
   check("the pool is still fully paid out", near(sum, r.pool, 0.05), usd(sum));
   check("reason is written out", /hours short/.test(badger.reason ?? ""), badger.reason);
   check("qualified count drops to 10", r.counts.qualified === 10);
+
+  const edge = computeSplit(build({ hours: { LYNX: 99.99, JAGUAR: 100, RANGER: 75 } }));
+  const at = c => edge.rows.find(p => p.code_name === c);
+  check("the minimum is 100, and travels with the result",
+    RULES.minHours === 100 && edge.min_hours === 100);
+  check("exactly 100 hours qualifies", at("JAGUAR").paid);
+  check("99.99 hours does not", !at("LYNX").paid, at("LYNX").reason);
+  check("75 hours, enough under the old rule, no longer does", !at("RANGER").paid);
 }
 
 /* ------------------------------------------------------------------ 4 ---- */
@@ -207,7 +215,7 @@ console.log("\n9. HOURS AS A WEIGHTED FACTOR  (Andrew, 11 September)");
   /* someone under the gate: no hours share, and their hours don't dilute anyone */
   const g = computeSplit(build({ hours: { BADGER: 60 } }));
   const badger = g.rows.find(p => p.code_name === "BADGER");
-  check("under 75 hours earns no hours share either", badger.hours_amount === 0);
+  check("under the minimum earns no hours share either", badger.hours_amount === 0);
   check("their hours are left out of everyone else's denominator",
     near(g.totals.hours, 180 * 11), `${g.totals.hours} hours counted`);
   check("the pool still pays out in full",

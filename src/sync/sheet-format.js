@@ -68,7 +68,7 @@ export function summaryRequests(sheetId, marks, width_) {
     "userEnteredFormat(backgroundColor,textFormat,numberFormat,horizontalAlignment)"));
 
   /* column widths — the old sheet truncated every label */
-  const widths = [155, 175, 72, 72, 82, 105, 105, 92, 100, 115, 300];
+  const widths = [155, 175, 72, 72, 82, 105, 105, 95, 92, 100, 115, 300];
   widths.slice(0, W).forEach((px, i) => R.push(width(sheetId, i, px)));
 
   /* title band */

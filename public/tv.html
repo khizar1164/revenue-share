@@ -194,7 +194,7 @@
     <div class="q">
       <div class="qhead"><h2>Hours worked</h2><div class="tag"><span class="wH">15%</span> &mdash; <b id="q5">$0.00</b></div></div>
       <div class="mini" id="hrsList"></div>
-      <div class="qfoot">More hours, bigger share. Faded = <b>under 75 hours</b> &middot; red = <b>left without notice</b>.</div>
+      <div class="qfoot">More hours, bigger share. Faded = <b>under <span class="wMin">100</span> hours</b> &middot; red = <b>left without notice</b>.</div>
     </div>
   </div>
 
@@ -342,15 +342,16 @@
     [["wP", w.points], ["wR", w.reviews], ["wH", w.hours]].forEach(function(p){
       document.querySelectorAll("." + p[0]).forEach(function(el){ el.textContent = pct(p[1]); });
     });
+    document.querySelectorAll(".wMin").forEach(function(el){ el.textContent = d.min_hours || 100; });
     $("sbP").style.width = pct(w.points);
     $("sbR").style.width = pct(w.reviews);
     $("sbH").style.width = pct(w.hours);
 
-    /* Until hours are entered nobody clears the 75-hour gate, so every dollar
+    /* Until hours are entered nobody clears the hours minimum, so every dollar
        column is empty. Say why, rather than showing a wall of dashes. */
     $("pending").innerHTML = (d.counts.qualified === 0 && d.counts.roster > 0)
       ? '<div class="pending"><b>Hours not in yet.</b> Points and reviews are counting. '
-        + 'Nothing pays out until the month’s hours are entered and the 75-hour minimum can be checked.</div>'
+        + 'Nothing pays out until the month’s hours are entered and the ' + (d.min_hours || 100) + '-hour minimum can be checked.</div>'
       : "";
 
     renderStandings(d);

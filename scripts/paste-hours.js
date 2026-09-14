@@ -44,7 +44,7 @@ console.log(`\nimported: ${imported.written} people from ${imported.rowsRead} ro
 
 const state = await query(`
   select e.code_name, e.full_name, coalesce(h.hours,0)::float8 as hours,
-         coalesce(h.hours,0) >= 75 as over
+         coalesce(h.hours,0) >= 100 as over
     from employees e
     left join hours h on h.employee_id = e.id and h.period = '2026-09-01'
    where e.status <> 'left'
@@ -53,9 +53,9 @@ const state = await query(`
 console.log("\nSEPTEMBER SO FAR");
 for (const r of state.rows) {
   console.log(`  ${r.code_name.padEnd(9)}${r.full_name.padEnd(20)}` +
-    `${String(r.hours).padStart(7)}h  ${r.over ? "over 75" : (75 - r.hours).toFixed(2) + "h short"}`);
+    `${String(r.hours).padStart(7)}h  ${r.over ? "over 100" : (100 - r.hours).toFixed(2) + "h short"}`);
 }
 const qualified = state.rows.filter(r => r.over).length;
-console.log(`\n${qualified} of ${state.rows.length} over the 75-hour minimum`);
+console.log(`\n${qualified} of ${state.rows.length} over the 100-hour minimum`);
 
 await close();

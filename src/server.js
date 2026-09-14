@@ -601,6 +601,14 @@ app.get("/api/me-preview", wrap(async (req, res) => {
   res.json(r.rows);
 }));
 
+/* The break-room board's address, for the admin panel's "View board" button.
+   It sits behind the admin gate: the token is the board's only protection, so
+   it is handed to a signed-in admin and nobody else. */
+app.get("/api/admin/tv-link", (_req, res) => {
+  if (!TV_TOKEN) return res.status(404).json({ error: "the board has no address yet — TV_TOKEN is not set" });
+  res.json({ path: `/tv/${encodeURIComponent(TV_TOKEN)}` });
+});
+
 /* What the background jobs are doing. The admin panel shows this so that
    "is it actually running" has an answer without reading a log. */
 app.get("/api/admin/jobs", (_req, res) => {

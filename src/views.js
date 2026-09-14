@@ -42,6 +42,7 @@ export function boardView(result, ytdResult = null) {
     reviews_pool: result.reviews_pool,
     hours_pool:   result.hours_pool,
     weights:      result.weights,
+    min_hours:    result.min_hours,
     forfeited:    result.forfeited,
 
     /* a job count is safe and gives the crew something concrete */
@@ -65,7 +66,7 @@ export function boardView(result, ytdResult = null) {
       paid:          r.paid,
       forfeits:      r.forfeits,
       hours_ok:      r.hours_ok,
-      hours_needed:  r.hours_ok ? 0 : round2(75 - r.hours)
+      hours_needed:  r.hours_ok ? 0 : round2(result.min_hours - r.hours)
     })),
 
     generated_at: new Date().toISOString()
@@ -124,6 +125,7 @@ export function reportView(detail, ytdResult = null) {
     reviews_pool: detail.reviews_pool,
     hours_pool:   detail.hours_pool,
     weights:      detail.weights,
+    min_hours:    detail.min_hours,
     points_pct:   detail.points_pct,
     reviews_pct:  detail.reviews_pct,
     hours_pct:    detail.hours_pct,

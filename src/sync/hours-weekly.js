@@ -40,7 +40,7 @@ const lastDayOfMonth = d =>
  * Is this range exactly one calendar month?
  *
  * Andrew confirmed Connecteam can pull by date, so month-end brings a file
- * covering the 1st to the last — and that is the number the 75-hour gate should
+ * covering the 1st to the last — and that is the number the hours minimum should
  * be judged on, not a sum of weeks that spill over the edges. A full-month file
  * therefore replaces the weeklies for its month rather than adding to them.
  */

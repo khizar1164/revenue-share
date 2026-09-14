@@ -23,7 +23,7 @@ export const HOURS_HEADER = ["Employee", "Week ending", "Hours", "Notes"];
    kind of row he is adding — the tab he is in decides it.
 
    A month here overrides the weeks for that month, the same rule the Drive
-   version uses. It is the number the 75-hour gate is judged on. */
+   version uses. It is the number the hours minimum is judged on. */
 export const MONTH_TAB = "Hours Month End";
 export const MONTH_HEADER = ["Employee", "Month", "Hours", "Notes"];
 
