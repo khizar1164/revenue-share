@@ -211,6 +211,7 @@
      you may want it still showing the one being closed out. */
   var MONTH = (location.search.match(/[?&]month=(\d{4}-\d{2})/) || [])[1] || "";
   var REFRESH_MS = 60000;
+  var VERSION = "";
   var $ = function(id){ return document.getElementById(id); };
   var usd = function(n){
     return "$" + Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -374,6 +375,11 @@
         return r.json();
       })
       .then(function(d){
+        /* a new deploy means new page code — reload to pick it up */
+        if (d.version) {
+          if (!VERSION) VERSION = d.version;
+          else if (d.version !== VERSION) { location.reload(); return; }
+        }
         failures = 0;
         render(d);
         setLive("", "live");

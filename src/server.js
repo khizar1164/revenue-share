@@ -45,6 +45,13 @@ const PUBLIC = /^https:/.test(process.env.PUBLIC_URL ?? "") || process.env.NODE_
 const TV_TOKEN = process.env.TV_TOKEN || (PUBLIC ? null : "dev-only-token");
 const tvTokenOk = t => Boolean(TV_TOKEN) && t === TV_TOKEN;
 
+/* Which deploy is running. The TV only ever re-fetches its numbers, never the
+   page, so a change to the board's layout or wording would sit unseen on the
+   wall until someone reloaded it by hand. The board checks this each minute
+   and reloads itself when it changes. Render sets RENDER_GIT_COMMIT; anywhere
+   else the start time does the same job. */
+const BUILD = process.env.RENDER_GIT_COMMIT || `start-${Date.now()}`;
+
 /* Reports by id exist only for local previewing. Public by default means OFF
    unless someone deliberately says "on" — the first deploy had this backwards. */
 const PREVIEWING = PUBLIC
@@ -146,7 +153,7 @@ app.get("/api/board/:token", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   res.set("cache-control", "no-store");
   const [m, y] = await Promise.all([monthly(year, month), ytd(year, month)]);
-  res.json(boardView(m, y));
+  res.json({ ...boardView(m, y), version: BUILD });
 }));
 
 /* ------------------------------------------------------------- sign in ---- */
