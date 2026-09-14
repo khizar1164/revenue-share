@@ -568,6 +568,12 @@ app.delete("/api/admin/points/:id", wrap(async (req, res) => {
     return res.status(409).json({ error: "same-day points come from the SmartMoving schedule — " +
       "fix the crew on that job in SmartMoving and it corrects itself on the next sync" });
   }
+  /* once the log is read automatically, a removed entry would come back within
+     half an hour — the correction belongs in Matthew's sheet */
+  if (row.recorded_by === "tardy-log" && process.env.TARDY_SHEET_ID) {
+    return res.status(409).json({ error: "this came from Matthew's tardy log — " +
+      "correct it in his sheet and the points update within half an hour" });
+  }
   await query(`delete from point_events where id = $1`, [id]);
   res.status(204).end();
 }));
@@ -664,7 +670,7 @@ app.get("/healthz", async (_req, res) => {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
          from sync_runs
-        where kind in ('smartmoving', 'hours', 'revenue', 'writeback')
+        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies')
         order by kind, started_at desc`);
     out.last_runs = recent.rows;
 
@@ -673,13 +679,15 @@ app.get("/healthz", async (_req, res) => {
     const stale = recent.rows.filter(r => {
       const age = Date.now() - new Date(r.started_at).getTime();
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
+                  : r.kind === "tardies" ? 2 * 3600e3         // every 30 min
                   : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;
     }).map(r => r.kind);
     if (stale.length) out.stale_jobs = stale;
 
-    const missing = ["smartmoving", "hours", "revenue", "writeback"]
+    const missing = ["smartmoving", "hours", "revenue", "writeback",
+                     ...(process.env.TARDY_SHEET_ID ? ["tardies"] : [])]
       .filter(k => !recent.rows.some(r => r.kind === k));
     if (missing.length) out.never_run = missing;
   } catch (e) {

@@ -28,6 +28,7 @@ import { writeBack, reformatAll } from "./sync/writeback.js";
 import { createGoogleClient, loadCredentials } from "./sync/google.js";
 import { parseReportFile } from "./sync/revenue-report.js";
 import { reportFreshness } from "./sync/report-hook.js";
+import { importTardies } from "./sync/tardy.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -195,6 +196,21 @@ export async function syncRevenue({ file } = {}) {
   return `${period}: $${row.completed_revenue.toLocaleString("en-US")} from ${row.completed_jobs} jobs`;
 }
 
+/* ------------------------------------------------------------ tardy log --- */
+
+/**
+ * Matthew's tardy log — late, trucks not out on time, call offs — rebuilt into
+ * point deductions for the month. Runs only once TARDY_SHEET_ID is set, because
+ * the log has to be a Google Sheet shared with the service account.
+ */
+export async function syncTardies({ period } = {}) {
+  if (!process.env.TARDY_SHEET_ID) throw new Error("TARDY_SHEET_ID is not set");
+  if (!loadCredentials()) throw new Error("no Google credentials configured");
+  const r = await importTardies(createGoogleClient(), process.env.TARDY_SHEET_ID,
+    { period: period ?? thisMonth().period });
+  return r.summary;
+}
+
 /* -------------------------------------------------------------- writeback --- */
 
 export async function syncWriteBack({ all = false } = {}) {
@@ -231,6 +247,12 @@ export function registerJobs(scheduler) {
      for ever. Fails loudly if nothing has come in for over a day. */
   scheduler.add("revenue-watch", () => reportFreshness({ maxHours: 26 }), {
     everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60_000 });
+  /* Matthew updates his log through the day; half-hourly keeps the board
+     current without reading the sheet for no reason */
+  if (process.env.TARDY_SHEET_ID) {
+    scheduler.add("tardies", () => syncTardies(), {
+      everyMs: 30 * MIN, runAtStartAfterMs: 75_000 });
+  }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }
