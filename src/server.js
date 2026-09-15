@@ -379,6 +379,13 @@ app.post("/api/admin/reviews", wrap(async (req, res) => {
 }));
 
 app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
+  const row = (await query(`select recorded_by from reviews where id = $1`, [req.params.id])).rows[0];
+  if (!row) return res.status(404).json({ error: "that review is already gone" });
+  /* the log is read back every half hour, so a removal here would not stick */
+  if (row.recorded_by === "review-log" && process.env.REVIEW_SHEET_ID) {
+    return res.status(409).json({ error: "this came from the Review Log sheet — " +
+      "remove the row there and the board updates within half an hour" });
+  }
   await query(`delete from reviews where id = $1`, [req.params.id]);
   res.status(204).end();
 }));
@@ -677,7 +684,7 @@ app.get("/healthz", async (_req, res) => {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
          from sync_runs
-        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies')
+        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews')
         order by kind, started_at desc`);
     out.last_runs = recent.rows;
 
@@ -686,7 +693,7 @@ app.get("/healthz", async (_req, res) => {
     const stale = recent.rows.filter(r => {
       const age = Date.now() - new Date(r.started_at).getTime();
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
-                  : r.kind === "tardies" ? 2 * 3600e3         // every 30 min
+                  : r.kind === "tardies" || r.kind === "reviews" ? 2 * 3600e3   // every 30 min
                   : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;
@@ -694,7 +701,8 @@ app.get("/healthz", async (_req, res) => {
     if (stale.length) out.stale_jobs = stale;
 
     const missing = ["smartmoving", "hours", "revenue", "writeback",
-                     ...(process.env.TARDY_SHEET_ID ? ["tardies"] : [])]
+                     ...(process.env.TARDY_SHEET_ID ? ["tardies"] : []),
+                     ...(process.env.REVIEW_SHEET_ID ? ["reviews"] : [])]
       .filter(k => !recent.rows.some(r => r.kind === k));
     if (missing.length) out.never_run = missing;
   } catch (e) {

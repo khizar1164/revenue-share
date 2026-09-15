@@ -217,10 +217,15 @@ export function computeSplit(raw, rules = RULES) {
   const unallocated = Math.max(0, pool - allocated);
   const unallocatedWhy = [];
   if (unallocated > 0.01) {
-    if (!denomB.points)  unallocatedWhy.push("no points to share against");
-    if (!denomB.reviews) unallocatedWhy.push("no review points recorded this month");
-    if (paid.length && !denomB.hours) unallocatedWhy.push("no hours recorded for anyone sharing");
-    if (!paid.length)    unallocatedWhy.push("nobody has cleared the hours gate");
+    if (!paid.length) {
+      /* one reason, the true one: points and reviews may well be piling up,
+         they just have nobody to pay yet */
+      unallocatedWhy.push(`nobody has reached the ${rules.minHours}-hour minimum yet`);
+    } else {
+      if (!denomB.points)  unallocatedWhy.push("no points to share against");
+      if (!denomB.reviews) unallocatedWhy.push("no review points recorded this month");
+      if (!denomB.hours)   unallocatedWhy.push("no hours recorded for anyone sharing");
+    }
   }
 
   return {

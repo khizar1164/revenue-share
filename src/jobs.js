@@ -29,6 +29,7 @@ import { createGoogleClient, loadCredentials } from "./sync/google.js";
 import { parseReportFile } from "./sync/revenue-report.js";
 import { reportFreshness } from "./sync/report-hook.js";
 import { importTardies } from "./sync/tardy.js";
+import { importReviews } from "./sync/reviews-sheet.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -211,6 +212,21 @@ export async function syncTardies({ period } = {}) {
   return r.summary;
 }
 
+/* ------------------------------------------------------------- reviews --- */
+
+/**
+ * The Review Log spreadsheet — Nicole's, one tab per year. Rebuilt into logged
+ * reviews for the month, so what the board pays on is what the log says.
+ * Reviews typed into the admin panel are left alone.
+ */
+export async function syncReviews({ period } = {}) {
+  if (!process.env.REVIEW_SHEET_ID) throw new Error("REVIEW_SHEET_ID is not set");
+  if (!loadCredentials()) throw new Error("no Google credentials configured");
+  const r = await importReviews(createGoogleClient(), process.env.REVIEW_SHEET_ID,
+    { period: period ?? thisMonth().period });
+  return r.summary;
+}
+
 /* -------------------------------------------------------------- writeback --- */
 
 export async function syncWriteBack({ all = false } = {}) {
@@ -252,6 +268,10 @@ export function registerJobs(scheduler) {
   if (process.env.TARDY_SHEET_ID) {
     scheduler.add("tardies", () => syncTardies(), {
       everyMs: 30 * MIN, runAtStartAfterMs: 75_000 });
+  }
+  if (process.env.REVIEW_SHEET_ID) {
+    scheduler.add("reviews", () => syncReviews(), {
+      everyMs: 30 * MIN, runAtStartAfterMs: 90_000 });
   }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
