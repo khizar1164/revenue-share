@@ -103,12 +103,10 @@
   /* mini lists */
   .mini{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
     min-height:0;overflow:hidden}
-  /* the name column is wider here than in the standings: these rows carry a
-     real name, "Jeffrey M.", not a six-letter code name */
-  .mrow{display:grid;grid-template-columns:158px 1fr 44px 96px;align-items:center;gap:10px;
+  .mrow{display:grid;grid-template-columns:118px 1fr 44px 96px;align-items:center;gap:10px;
     flex:1 1 0;min-height:0;max-height:38px}
-  .mrow .nm{font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.02em;
-    color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mrow .nm{font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mrow .tk{height:15px;background:var(--panel-2);border-radius:4px;overflow:hidden}
   .mrow .tk i{display:block;height:100%;border-radius:0 4px 4px 0}
   .mrow .n{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
@@ -116,7 +114,7 @@
   .mrow .am{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
     font-variant-numeric:tabular-nums;color:var(--ink)}
   /* hours are the widest figure in a list (218.7) */
-  #hrsList .mrow{grid-template-columns:158px 1fr 62px 96px}
+  #hrsList .mrow{grid-template-columns:118px 1fr 62px 96px}
 
   /* someone short on hours is dimmed; someone who walked is red */
   .nq{opacity:.42}
@@ -293,13 +291,12 @@
     var max = 1;
     rows.forEach(function(c){ max = Math.max(max, c[key]); });
 
-    /* The three graphs along the bottom use real names — "Andrew B." — so the
-       crew can find themselves at a glance. Where Everyone Stands, above, stays
-       on code names. Andrew, 24 September. */
+    /* Code names here too. These rows carry money, so a real name beside one
+       publishes that person's pay and decodes the table above. */
     $(id).innerHTML = rows.map(function(c){
       var amt = c.paid ? usd(c[amtKey]) : "—";
       return '<div class="mrow'+cls(c)+'">'
-        + '<div class="nm">'+esc(c.name || c.code_name)+'</div>'
+        + '<div class="nm">'+esc(c.code_name)+'</div>'
         + '<div class="tk"><i style="width:'+((c[key]/max)*100).toFixed(2)+'%;background:'
         + (c.forfeits ? "var(--crit)" : colour) + '"></i></div>'
         + '<div class="n">'+c[key]+'</div>'

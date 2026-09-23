@@ -9,21 +9,13 @@
  * So the board serialiser is written as an allow-list. It names every field it
  * emits. Adding a column to the calculation does not silently add it to the TV.
  *
- * One deliberate exception, Andrew on 24 September: the three graphs along the
- * bottom name people as "Andrew B." so the crew can find themselves. A first
- * name and an initial is as far as that goes — never the full name, and the
- * main Where Everyone Stands table stays on code names.
+ * Real names were briefly on the bottom graphs, at Andrew's request, so the
+ * crew could find themselves. They came straight back off on 23 September: the
+ * graphs carry each person's money, so a name beside it published everyone's
+ * pay and let anyone decode the code names in the table above. Code names only.
  */
 
 const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
-
-/** "Andrew Brown" -> "Andrew B." — the most the TV is allowed to say. */
-function shortName(full) {
-  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "";
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
-}
 
 /**
  * Year to date for the wall. The pool and how much of it went out — never the
@@ -68,9 +60,6 @@ export function boardView(result, ytdResult = null) {
 
     crew: result.rows.map(r => ({
       code_name:     r.code_name,
-      /* Andrew, 24 September: the three graphs along the bottom show real
-         names, "Andrew B." style. Where Everyone Stands stays on code names. */
-      name:          shortName(r.full_name),
       points:        r.points,
       review_points: r.review_points,
       hours:         r.hours,
