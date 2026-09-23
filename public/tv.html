@@ -175,7 +175,7 @@
     </div>
 
     <div class="q">
-      <div class="qhead"><h2>Where everyone stands</h2><div class="tag">Share of pool</div></div>
+      <div class="qhead"><h2>Where everyone stands</h2><div class="tag">Total share</div></div>
       <div class="stand" id="stand"></div>
     </div>
   </div>
@@ -247,17 +247,11 @@
   }
   function cls(c){ return c.paid ? "" : (c.forfeits ? " ff" : " nq"); }
 
-  /* Andrew, 23 September: this column used to show dollars, and for anyone
-     under the hours gate it showed their HOURS. The graphs below name people,
-     so "BADGER — 64 h" and "Josh T. — 64" were the same person in two places
-     and the code names stopped meaning anything. A share of the pool says the
-     same thing about standing without handing anyone the key. */
-  function pct(part, pool){
-    if (!pool) return "0%";
-    var p = (part / pool) * 100;
-    return (p >= 10 ? p.toFixed(0) : p.toFixed(1)) + "%";
-  }
-
+  /* This column shows money. What it must never show is HOURS, which is what
+     it used to put against anyone under the gate: "BADGER — 64 h" beside a
+     graph reading "Josh T. — 64" was the same person written twice, and the
+     code names stopped meaning anything. Andrew, 23 September. Someone short
+     on hours gets a dash; how far short they are is nobody else's business. */
   function renderStandings(d){
     var rows = rank(d.crew, "share");
     var max = 1;
@@ -269,12 +263,12 @@
         bars = '<i style="width:'+((c.points_amount/max)*100).toFixed(2)+'%;background:var(--s-points)"></i>'
              + '<i style="width:'+((c.reviews_amount/max)*100).toFixed(2)+'%;background:var(--s-reviews)"></i>'
              + '<i style="width:'+(((c.hours_amount||0)/max)*100).toFixed(2)+'%;background:var(--s-hours)"></i>';
-        amt = pct(c.share, d.pool);
+        amt = usd(c.share);
       } else if (c.forfeits){
         bars = '<i style="width:'+((c.forfeited/max)*100).toFixed(2)+'%;background:var(--crit);opacity:.55"></i>';
-        amt = "−" + pct(c.forfeited, d.pool);
+        amt = "−" + usd(c.forfeited);
       } else {
-        /* never their hours — see the note above pct() */
+        /* never their hours — see the note above renderStandings */
         bars = "";
         amt = "—";
       }
