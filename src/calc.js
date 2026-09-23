@@ -89,7 +89,12 @@ async function gather(period) {
 
        from employees e
        left join hours h on h.employee_id = e.id and h.period = $1::date
-      where e.status <> 'left' and e.is_mover
+      /* Someone who gave notice still worked part of the month they left, so
+         they stay on this month's roster and drop off the next one. They are
+         not paid and they count towards nothing. */
+      where e.is_mover
+        and (e.status <> 'left'
+             or (e.ended_on >= $1::date and e.ended_on < $1::date + interval '1 month'))
       order by e.code_name`,
     [period, RULES.disciplineDays]);
 
@@ -125,11 +130,17 @@ export function computeSplit(raw, rules = RULES) {
   const rows = raw.people.map(p => {
     const points  = Math.max(0, rules.startPoints + Number(p.point_delta));
     const hoursOK = waived || Number(p.hours) >= rules.minHours;
+    /* Gave notice and left during this month. Andrew, 23 September: "leaves
+       with notice given = bonus earned still". So they are paid for the month
+       they worked exactly like anyone else, and only drop off the roster from
+       the following month. Walking out without notice still forfeits. */
+    const gone = p.status === "left";
     return {
       employee_id: p.id,
       code_name:   p.code_name,
       full_name:   p.full_name,
       status:      p.status,
+      gone,
       hours:       Number(p.hours),
       points,
       review_points: Number(p.review_points),
@@ -137,7 +148,7 @@ export function computeSplit(raw, rules = RULES) {
       deductions:    Number(p.deductions),
       discipline_lost: Number(p.discipline_lost),
       hours_ok: hoursOK,
-      paid:     hoursOK && p.status === "active",
+      paid:     hoursOK && (p.status === "active" || p.status === "left"),
       forfeits: hoursOK && p.status === "no_notice"
     };
   });
@@ -259,7 +270,9 @@ export function computeSplit(raw, rules = RULES) {
       roster:    rows.length,
       qualified: paid.length,
       forfeited: rows.filter(r => r.forfeits).length,
-      short:     rows.filter(r => !r.hours_ok).length
+      short:     rows.filter(r => !r.hours_ok).length,
+      /* on the roster this month only because they left during it */
+      left:      rows.filter(r => r.gone).length
     },
     hours_gate_waived: waived,
     settings_note:     raw.settings?.note ?? null,

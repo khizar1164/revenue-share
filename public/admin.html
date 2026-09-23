@@ -325,7 +325,7 @@ Tyler Johnston  44.25"></textarea>
 
 <div class="panel" style="margin-top:16px">
   <h2 id="rosterTitle">Roster</h2>
-  <p class="dek" id="rosterDek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.</p>
+  <p class="dek" id="rosterDek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working. Someone marked <b>Left, gave notice</b> still earns their share for the month they worked &mdash; they stay on this list until the month is over, then drop off on the 1st.</p>
   <div class="tblwrap"><table id="rosterTbl"></table></div>
 </div>
 
@@ -441,7 +441,8 @@ Tyler Johnston  44.25"></textarea>
       h += '<tr'+dim+'>'
         + '<td class="code">'+esc(p.code_name)+'</td>'
         + '<td><a href="/me/'+encodeURIComponent(p.employee_id)+'?month='+STATE.month+'" target="_blank" rel="noopener"'
-        +   ' title="Open '+esc(p.full_name)+'\'s report" style="color:inherit">'+esc(p.full_name)+' ↗</a></td>'
+        +   ' title="Open '+esc(p.full_name)+'\'s report" style="color:inherit">'+esc(p.full_name)+' ↗</a>'
+        +   (p.gone ? ' <span style="font-size:11px;color:var(--ink-3)">· left</span>' : '')+'</td>'
         + '<td class="n"><input type="number" min="0" step="0.25" value="'+p.hours+'" data-hrs="'+p.employee_id+'" style="width:78px;text-align:right;padding:4px 7px"></td>'
         + '<td><select data-st="'+p.employee_id+'" style="padding:4px 7px">'
         +   '<option value="active"'+(p.status==="active"?" selected":"")+'>Working</option>'

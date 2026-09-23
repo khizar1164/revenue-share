@@ -1,16 +1,29 @@
 /* What each screen is allowed to see.
  *
  * The break-room TV is the one that matters here. It has no login — OptiSigns
- * just loads a URL — so its protection is that the page carries nothing worth
- * leaking. That is a property of THIS FILE, not of the template: if a real name
+ * just loads a URL — so its protection is that the page carries little worth
+ * leaking. That is a property of THIS FILE, not of the template: if a full name
  * or a revenue figure is ever visible on the TV, the mistake will have been
  * made in boardView() below.
  *
  * So the board serialiser is written as an allow-list. It names every field it
  * emits. Adding a column to the calculation does not silently add it to the TV.
+ *
+ * One deliberate exception, Andrew on 24 September: the three graphs along the
+ * bottom name people as "Andrew B." so the crew can find themselves. A first
+ * name and an initial is as far as that goes — never the full name, and the
+ * main Where Everyone Stands table stays on code names.
  */
 
 const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** "Andrew Brown" -> "Andrew B." — the most the TV is allowed to say. */
+function shortName(full) {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+}
 
 /**
  * Year to date for the wall. The pool and how much of it went out — never the
@@ -55,6 +68,9 @@ export function boardView(result, ytdResult = null) {
 
     crew: result.rows.map(r => ({
       code_name:     r.code_name,
+      /* Andrew, 24 September: the three graphs along the bottom show real
+         names, "Andrew B." style. Where Everyone Stands stays on code names. */
+      name:          shortName(r.full_name),
       points:        r.points,
       review_points: r.review_points,
       hours:         r.hours,

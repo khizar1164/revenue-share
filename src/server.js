@@ -308,10 +308,17 @@ app.post("/api/admin/revenue", wrap(async (req, res) => {
   res.status(201).json(r.rows[0]);
 }));
 
+/* Everyone still working, plus anyone who gave notice and left this month —
+   they stay until the month is over so their hours and reviews can still be
+   recorded against the month they worked. */
 app.get("/api/admin/roster", wrap(async (_req, res) => {
   const r = await query(
-    `select id, code_name, full_name, status, sm_crew_id, email, is_mover
-       from employees where status <> 'left' and is_mover order by code_name`);
+    `select id, code_name, full_name, status, sm_crew_id, email, is_mover, ended_on
+       from employees
+      where is_mover
+        and (status <> 'left'
+             or ended_on >= date_trunc('month', current_date)::date)
+      order by code_name`);
   res.json(r.rows);
 }));
 
@@ -468,8 +475,13 @@ app.put("/api/admin/hours/bulk", wrap(async (req, res) => {
     return res.status(400).json({ error: "nothing to save" });
   }
 
+  /* Include anyone who left during the month being imported, or their last
+     weeks of hours would come back unmatched and could never be entered. */
   const roster = (await query(
-    `select id, full_name, code_name from employees where status <> 'left'`)).rows;
+    `select id, full_name, code_name from employees
+      where status <> 'left'
+         or (ended_on >= $1::date and ended_on < $1::date + interval '1 month')`,
+    [period])).rows;
 
   /* Connecteam spells names its own way, so match generously: exact, then
      case-insensitive, then first-name-plus-last-initial. Anything still
@@ -532,15 +544,23 @@ app.patch("/api/admin/employee/:id", wrap(async (req, res) => {
   if (status && !["active", "no_notice", "left"].includes(status)) {
     return res.status(400).json({ error: "status must be active, no_notice or left" });
   }
+  /* When someone leaves we remember the day, so the roster can keep them for
+     the rest of the month they worked and drop them after it. Putting someone
+     back to working clears it again. */
   const r = await query(
     `update employees set
        status    = coalesce($2, status),
        code_name = coalesce($3, code_name),
        full_name = coalesce($4, full_name),
        email     = coalesce($5, email),
+       ended_on  = case
+                     when $2 in ('left', 'no_notice') then coalesce(ended_on, current_date)
+                     when $2 = 'active'               then null
+                     else ended_on
+                   end,
        updated_at = now()
      where id = $1
-     returning id, code_name, full_name, status, email`,
+     returning id, code_name, full_name, status, email, ended_on`,
     [req.params.id, status ?? null, code_name ?? null, full_name ?? null, email ?? null]);
   if (!r.rowCount) return res.status(404).json({ error: "no such person on the roster" });
   res.json(r.rows[0]);

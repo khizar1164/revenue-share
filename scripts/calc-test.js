@@ -118,6 +118,49 @@ console.log("\n4. FORFEIT AND REDISTRIBUTE");
   check("total redistributed is reported", near(r.forfeited, rhino.forfeited));
 }
 
+/* ------------------------------------------------------------------ 4b --- */
+/* Andrew, 23 September: someone who gives notice stays on the month they
+   worked instead of vanishing the moment they are marked. They share in
+   nothing, so no one else's money may move because of them. */
+console.log("\n4b. GAVE NOTICE — STILL EARNS THE MONTH THEY WORKED");
+{
+  /* Andrew, 23 September: "leave no notice given = no bonus, leaves with
+     notice given = bonus earned still". So for the month they left, someone
+     who gave notice must be paid exactly as if they were still working. */
+  const working = computeSplit(build());
+  const r       = computeSplit(build({ status: { RHINO: "left" } }));
+
+  const rhino    = r.rows.find(p => p.code_name === "RHINO");
+  const stillHere = working.rows.find(p => p.code_name === "RHINO");
+  const paidSum  = r.rows.reduce((a, p) => a + p.share, 0);
+
+  check("they are still on the list", !!rhino);
+  check("they are marked as having left", rhino.gone === true);
+  check("THEY ARE STILL PAID", rhino.paid === true && rhino.share > 0, usd(rhino.share));
+  check("paid the same as if they had not left",
+    near(rhino.share, stillHere.share, 0.001),
+    `${usd(stillHere.share)} vs ${usd(rhino.share)}`);
+  check("nothing is forfeited — they gave notice", rhino.forfeited === 0);
+  check("no reason is shown against them", rhino.reason === null);
+
+  const moved = working.rows.filter(b => {
+    const now = r.rows.find(p => p.code_name === b.code_name);
+    return !now || !near(now.share, b.share, 0.001);
+  });
+  check("NOBODY ELSE'S SHARE MOVES", moved.length === 0,
+    moved.length ? moved.map(m => m.code_name).join(", ") : "all 12 unchanged");
+
+  check("the pool still pays out in full", near(paidSum, r.pool, 0.05),
+    `${usd(paidSum)} vs ${usd(r.pool)}`);
+  check("they are counted as having left", r.counts.left === 1);
+
+  /* and the difference from walking out is the whole point */
+  const walked = computeSplit(build({ status: { RHINO: "no_notice" } }));
+  const walker = walked.rows.find(p => p.code_name === "RHINO");
+  check("someone who walked out still gets nothing",
+    walker.share === 0 && walker.forfeited > 0, usd(walker.forfeited));
+}
+
 /* ------------------------------------------------------------------ 5 ---- */
 console.log("\n5. FORFEIT PLUS SHORT HOURS TOGETHER");
 {
