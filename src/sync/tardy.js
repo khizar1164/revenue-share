@@ -18,7 +18,7 @@
  */
 
 import { withTransaction } from "../db.js";
-import { matchableRoster } from "../roster.js";
+import { matchableRoster, ignoredNames } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "tardy-log";
@@ -126,7 +126,7 @@ export async function applyEvents(events, period) {
   });
 }
 
-export function summarise({ period, events, unmatched, warnings }) {
+export function summarise({ period, events, unmatched, pastCrew = [], warnings }) {
   const [, m] = period.split("-").map(Number);
   const n = t => events.filter(e => e.type === t).length;
   const people = new Set(events.map(e => e.employee_id)).size;
@@ -135,6 +135,7 @@ export function summarise({ period, events, unmatched, warnings }) {
           `${n("late")} late, ${n("truck")} trucks late, ${n("calloff")} call off${n("calloff") === 1 ? "" : "s"}` +
           ` → ${total} points across ${people} ${people === 1 ? "person" : "people"}`;
   if (unmatched.length) s += `; NOT MATCHED: ${unmatched.join(", ")}`;
+  if (pastCrew.length) s += `; past crew, no points: ${pastCrew.join(", ")}`;
   if (warnings.length) s += `; couldn't read: ${warnings.slice(0, 5).join("; ")}`;
   return s;
 }
@@ -142,9 +143,16 @@ export function summarise({ period, events, unmatched, warnings }) {
 /** Parsed entries → the database, for one month. Shared by the sync and the loader. */
 export async function loadEntries(entries, { period, warnings = [], dryRun = false }) {
   const roster = await matchableRoster(period);
-  const { events, unmatched } = toEvents(entries, roster);
+  const { events, unmatched: allUnmatched } = toEvents(entries, roster);
   if (!dryRun) await applyEvents(events, period);
-  return { period, events, unmatched, warnings, summary: summarise({ period, events, unmatched, warnings }) };
+
+  /* names known to belong to nobody on the programme — see db/007 */
+  const isIgnored = await ignoredNames();
+  const unmatched = allUnmatched.filter(n => !isIgnored(n));
+  const pastCrew  = allUnmatched.filter(isIgnored);
+
+  return { period, events, unmatched, pastCrew, warnings,
+           summary: summarise({ period, events, unmatched, pastCrew, warnings }) };
 }
 
 /** The scheduled run: read this month's tabs from the Google Sheet and apply them. */

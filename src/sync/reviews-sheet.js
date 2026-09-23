@@ -15,7 +15,7 @@
  */
 
 import { withTransaction } from "../db.js";
-import { matchableRoster } from "../roster.js";
+import { matchableRoster, ignoredNames } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "review-log";
@@ -146,13 +146,14 @@ export async function applyRecords(records, period) {
   });
 }
 
-export function summarise({ period, records, unmatched, warnings }) {
+export function summarise({ period, records, unmatched, pastCrew = [], warnings }) {
   const [, m] = period.split("-").map(Number);
   const points = records.reduce((a, r) => a + r.points * r.credits.length, 0);
   const photos = records.filter(r => r.has_photo).length;
   let s = `${MONTHS[m - 1][0] + MONTHS[m - 1].slice(1).toLowerCase()}: ${records.length} reviews` +
           (photos ? ` (${photos} with a photo)` : "") + ` → ${points} review points`;
   if (unmatched.length) s += `; NOT MATCHED: ${unmatched.join(", ")}`;
+  if (pastCrew.length) s += `; past crew, no credit: ${pastCrew.join(", ")}`;
   if (warnings.length) s += `; ${warnings.length} row(s) skipped: ${warnings.slice(0, 3).join("; ")}`;
   return s;
 }
@@ -172,9 +173,15 @@ export async function importReviews(google, sheetId, { period, dryRun = false })
   if (parsed.problem) throw new Error(`review log: ${parsed.problem} — nothing changed`);
 
   const roster = await matchableRoster(period);
-  const { records, unmatched } = toRecords(parsed.reviews, roster);
+  const { records, unmatched: allUnmatched } = toRecords(parsed.reviews, roster);
   if (!dryRun) await applyRecords(records, period);
 
-  return { period, tab: tab.title, records, unmatched, warnings: parsed.warnings,
-           summary: summarise({ period, records, unmatched, warnings: parsed.warnings }) };
+  /* People who earned a review before they left are expected here and are not
+     a problem to report — see db/007. */
+  const isIgnored = await ignoredNames();
+  const unmatched = allUnmatched.filter(n => !isIgnored(n));
+  const pastCrew  = allUnmatched.filter(isIgnored);
+
+  return { period, tab: tab.title, records, unmatched, pastCrew, warnings: parsed.warnings,
+           summary: summarise({ period, records, unmatched, pastCrew, warnings: parsed.warnings }) };
 }

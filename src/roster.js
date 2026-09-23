@@ -33,3 +33,28 @@ export async function matchableRoster(period = null) {
     [period ?? null]);
   return r.rows;
 }
+
+/** Same normalising the name matcher uses, so the two agree on what a name is. */
+export const normaliseName = s =>
+  String(s ?? "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Names known to belong to nobody on the programme — usually people who left
+ * before it started. They are credited nothing either way; this only keeps them
+ * out of the NOT MATCHED warning, so a genuine mismatch still stands out.
+ *
+ * Returns a function: isIgnored("Tyler H") -> true
+ */
+export async function ignoredNames() {
+  let rows = [];
+  try {
+    rows = (await query(`select name from ignored_names`)).rows;
+  } catch {
+    /* Deployed ahead of its migration. An empty list only means every unmatched
+       name is reported, which is the old behaviour — never a reason to fail a
+       sync and leave a month unbuilt. */
+    return () => false;
+  }
+  const set = new Set(rows.map(x => x.name));
+  return name => set.has(normaliseName(name));
+}
