@@ -12,7 +12,8 @@
  * unmatched is reported loudly rather than skipped.
  */
 
-import { query, withTransaction } from "../db.js";
+import { withTransaction } from "../db.js";
+import { matchableRoster } from "../roster.js";
 
 export const HOURS_TAB = "Hours";
 export const HOURS_HEADER = ["Employee", "Week ending", "Hours", "Notes"];
@@ -163,8 +164,7 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
     if (monthRows.length) log(`read ${monthRows.length} month-end rows from ${MONTH_TAB}`);
   } catch { /* tab not there yet */ }
 
-  const roster = (await query(
-    `select id, full_name, code_name from employees where status <> 'left' and is_mover`)).rows;
+  const roster = await matchableRoster();
   const match = nameMatcher(roster);
 
   /* period -> employee -> summed hours */

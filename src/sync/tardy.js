@@ -17,7 +17,8 @@
  * corrects the points, and nothing is counted twice.
  */
 
-import { query, withTransaction } from "../db.js";
+import { withTransaction } from "../db.js";
+import { matchableRoster } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "tardy-log";
@@ -140,8 +141,7 @@ export function summarise({ period, events, unmatched, warnings }) {
 
 /** Parsed entries → the database, for one month. Shared by the sync and the loader. */
 export async function loadEntries(entries, { period, warnings = [], dryRun = false }) {
-  const roster = (await query(
-    `select id, code_name, full_name from employees where is_mover and status <> 'left'`)).rows;
+  const roster = await matchableRoster(period);
   const { events, unmatched } = toEvents(entries, roster);
   if (!dryRun) await applyEvents(events, period);
   return { period, events, unmatched, warnings, summary: summarise({ period, events, unmatched, warnings }) };

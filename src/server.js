@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
 import { query, loadEnv, safeTarget } from "./db.js";
+import { matchableRoster } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
@@ -636,9 +637,9 @@ app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.
    is deliberately "on". */
 app.get("/api/me-preview", wrap(async (req, res) => {
   if (!PREVIEWING && !isAdminRequest(req)) return res.status(404).json({ error: "not found" });
-  const r = await query(
-    `select id, code_name, full_name from employees where status <> 'left' and is_mover order by code_name`);
-  res.json(r.rows);
+  /* recent leavers included, so a report can still be opened for the month
+     someone left */
+  res.json(await matchableRoster());
 }));
 
 /* The break-room board's address, for the admin panel's "View board" button.

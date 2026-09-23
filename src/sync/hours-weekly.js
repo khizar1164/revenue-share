@@ -15,7 +15,8 @@
  * apply toward that after I correct their time sheets."
  */
 
-import { query, withTransaction } from "../db.js";
+import { withTransaction } from "../db.js";
+import { matchableRoster } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const FILE_PREFIX = "Movers_Hours_";
@@ -120,8 +121,7 @@ export async function importWeeklyHours(google, {
     return { files: 0, written: 0, rowsRead: 0, unmatched: [], weeks: [], skipped: [] };
   }
 
-  const roster = (await query(
-    `select id, full_name, code_name from employees where status <> 'left' and is_mover`)).rows;
+  const roster = await matchableRoster();
   const match = nameMatcher(roster);
 
   /* Work out which months have an authoritative full-month export before

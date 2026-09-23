@@ -14,7 +14,8 @@
  * only rows this importer wrote are replaced.
  */
 
-import { query, withTransaction } from "../db.js";
+import { withTransaction } from "../db.js";
+import { matchableRoster } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "review-log";
@@ -170,8 +171,7 @@ export async function importReviews(google, sheetId, { period, dryRun = false })
   const parsed = parseMonthBlock(grid, { year, month });
   if (parsed.problem) throw new Error(`review log: ${parsed.problem} — nothing changed`);
 
-  const roster = (await query(
-    `select id, code_name, full_name from employees where is_mover and status <> 'left'`)).rows;
+  const roster = await matchableRoster(period);
   const { records, unmatched } = toRecords(parsed.reviews, roster);
   if (!dryRun) await applyRecords(records, period);
 
