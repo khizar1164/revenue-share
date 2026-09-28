@@ -28,16 +28,16 @@
   html,body{margin:0;padding:0;background:var(--plane);color:var(--ink-2);
     font-family:var(--sans);overflow:hidden}
   #wrap{width:100vw;height:100vh;overflow:hidden}
-  #board{width:1920px;height:1080px;transform-origin:top left;padding:34px 40px;
-    display:flex;flex-direction:column;gap:20px;background:var(--plane)}
+  #board{width:1920px;height:1080px;transform-origin:top left;padding:26px 40px;
+    display:flex;flex-direction:column;gap:16px;background:var(--plane)}
 
   /* masthead */
   .top{display:flex;align-items:baseline;justify-content:space-between;
-    border-bottom:2px solid var(--seam);padding-bottom:16px}
-  .brand{font-family:var(--cond);font-weight:700;font-size:40px;letter-spacing:.05em;
+    border-bottom:2px solid var(--seam);padding-bottom:12px}
+  .brand{font-family:var(--cond);font-weight:700;font-size:36px;letter-spacing:.05em;
     text-transform:uppercase;color:var(--ink)}
   .brand em{color:var(--brand);font-style:normal}
-  .month{font-family:var(--cond);font-weight:600;font-size:26px;letter-spacing:.18em;
+  .month{font-family:var(--cond);font-weight:600;font-size:23px;letter-spacing:.18em;
     text-transform:uppercase;color:var(--ink-3);margin-left:20px}
   .right{display:flex;align-items:center;gap:26px}
   .live{display:flex;align-items:center;gap:10px;font-size:18px;color:var(--ink-3)}
@@ -46,18 +46,18 @@
   .live.stale i{background:var(--warn);animation:none}
   .live.dead i{background:var(--crit);animation:none}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-  .clock{font-family:var(--cond);font-weight:700;font-size:34px;color:var(--ink);
+  .clock{font-family:var(--cond);font-weight:700;font-size:30px;color:var(--ink);
     font-variant-numeric:tabular-nums}
 
-  .qrow{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;min-height:0}
+  .qrow{display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:0 0 auto;min-height:0}
   /* points, reviews and hours side by side — one panel per share of the pool */
-  .qrow.three{grid-template-columns:1fr 1fr 1fr}
-  .qrow.three .q{padding:20px 22px}
-  .qrow.three .qhead h2{font-size:25px;letter-spacing:.1em}
+  .qrow.three{grid-template-columns:1fr 1fr 1fr;flex:1;min-height:0}
+  .qrow.three .q{padding:16px 20px}
+  .qrow.three .qhead h2{font-size:23px;letter-spacing:.1em}
   .q{background:var(--panel);border:1px solid var(--seam);border-radius:14px;
-    padding:22px 26px;display:flex;flex-direction:column;min-height:0}
-  .qhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
-  .qhead h2{font-family:var(--cond);font-weight:700;font-size:28px;letter-spacing:.12em;
+    padding:18px 24px;display:flex;flex-direction:column;min-height:0}
+  .qhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+  .qhead h2{font-family:var(--cond);font-weight:700;font-size:26px;letter-spacing:.12em;
     text-transform:uppercase;color:var(--ink);margin:0}
   .tag{font-family:var(--cond);font-weight:600;font-size:19px;letter-spacing:.08em;
     text-transform:uppercase;color:var(--ink-3)}
@@ -85,12 +85,21 @@
   .splitlegend b{color:var(--ink);font-variant-numeric:tabular-nums}
   .sw{width:14px;height:14px;border-radius:4px;display:inline-block;margin-right:9px}
 
-  /* standings — rows share whatever height is left, so the roster can grow
-     from 13 to 20 without the last one sliding under the footer */
+  /* Standings. A short roster runs down one column with the rows spread out.
+     Past twelve it splits into two, which is the only way a name stays 25px
+     tall on a wall screen once the crew is seventeen. The panel is sized by
+     what the list needs rather than the list being squeezed into half the
+     screen, so the bottom row and the note under it always have their room.
+     Andrew, 28 September: "the bottom rows are getting cut off". */
   .stand{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;
     min-height:0;overflow:hidden}
   .srow{display:grid;grid-template-columns:38px 132px 1fr 116px;align-items:center;gap:12px;
-    flex:1 1 0;min-height:0;max-height:44px}
+    flex:1 1 0;min-height:30px;max-height:44px}
+  /* grid-template-rows is set from the roster size when the list is rendered */
+  .stand.two{display:grid;grid-auto-flow:column;grid-template-columns:1fr 1fr;
+    column-gap:34px;overflow:visible}
+  .stand.two .srow{grid-template-columns:34px 118px 1fr 104px;gap:10px;
+    min-height:0;max-height:none}
   .srow .rk{font-family:var(--cond);font-weight:600;font-size:21px;color:var(--ink-3);
     text-align:right;font-variant-numeric:tabular-nums}
   .srow .nm{font-family:var(--cond);font-weight:700;font-size:25px;letter-spacing:.05em;
@@ -105,13 +114,13 @@
     min-height:0;overflow:hidden}
   .mrow{display:grid;grid-template-columns:118px 1fr 44px 96px;align-items:center;gap:10px;
     flex:1 1 0;min-height:0;max-height:38px}
-  .mrow .nm{font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.05em;
+  .mrow .nm{font-family:var(--cond);font-weight:700;font-size:var(--mfs,22px);letter-spacing:.05em;
     text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mrow .tk{height:15px;background:var(--panel-2);border-radius:4px;overflow:hidden}
   .mrow .tk i{display:block;height:100%;border-radius:0 4px 4px 0}
-  .mrow .n{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
+  .mrow .n{font-family:var(--cond);font-weight:700;font-size:var(--mfs,22px);text-align:right;
     font-variant-numeric:tabular-nums;color:var(--ink-2)}
-  .mrow .am{font-family:var(--cond);font-weight:700;font-size:22px;text-align:right;
+  .mrow .am{font-family:var(--cond);font-weight:700;font-size:var(--mfs,22px);text-align:right;
     font-variant-numeric:tabular-nums;color:var(--ink)}
   /* hours are the widest figure in a list (218.7) */
   #hrsList .mrow{grid-template-columns:118px 1fr 62px 96px}
@@ -127,8 +136,8 @@
   .ff .nm,.ff .am{color:var(--warn)}
   .ff{opacity:.9}
 
-  .qfoot{font-size:16px;line-height:1.4;color:var(--ink-3);margin-top:12px;border-top:1px solid var(--seam);
-    padding-top:11px}
+  .qfoot{font-size:15px;line-height:1.35;color:var(--ink-3);margin-top:9px;border-top:1px solid var(--seam);
+    padding-top:9px}
   .qfoot b{color:var(--ink-2)}
   .qfoot b.amb{color:var(--warn)}
 
@@ -264,7 +273,14 @@
     var max = 1;
     rows.forEach(function(c){ max = Math.max(max, c.share, c.forfeited); });
 
-    $("stand").innerHTML = rows.map(function(c, i){
+    /* Two columns once the crew is bigger than twelve. Ranked down the first
+       column and on down the second, so first place is still top left. */
+    var two = rows.length > 12, stand = $("stand");
+    stand.className = "stand" + (two ? " two" : "");
+    stand.style.gridTemplateRows = two
+      ? "repeat(" + Math.ceil(rows.length / 2) + ", auto)" : "";
+
+    stand.innerHTML = rows.map(function(c, i){
       var bars, amt;
       if (c.paid){
         bars = '<i style="width:'+((c.points_amount/max)*100).toFixed(2)+'%;background:var(--s-points)"></i>'
@@ -286,6 +302,29 @@
         + '<div class="tk">'+bars+'</div>'
         + '<div class="am">'+amt+'</div></div>';
     }).join("");
+  }
+
+  /* The three lists at the bottom share one strip of screen between them and
+     have to hold every name on the roster. Rather than pick a type size that
+     happens to suit today's crew, each list is measured after it is drawn and
+     the rows are set to whatever still fits — never below 15px, never above
+     the 22px they have always been. Add a mover and the type steps down by a
+     point instead of the last row being sliced in half. This holds a crew of
+     about twenty on a 1080-line screen; past that the three lists would need
+     splitting in two the way the standings above already do. */
+  function fitMiniRows(){
+    ["ptsList", "revList", "hrsList"].forEach(function(id){
+      var el = $(id), rows = el.children.length;
+      if (!rows) return;
+      var per = el.clientHeight / rows, size = 22;
+      el.style.setProperty("--mfs", size + "px");
+      /* Step down until the tallest thing in a row — the name — fits the space
+         that row was given. Measured rather than guessed: the row box itself
+         is always the height it was handed, so it can never be the test. */
+      while (size > 15 && el.children[0].firstElementChild.offsetHeight > per) {
+        el.style.setProperty("--mfs", --size + "px");
+      }
+    });
   }
 
   function renderMini(id, d, key, amtKey, colour){
@@ -375,6 +414,8 @@
     renderMini("ptsList", d, "points", "points_amount", "var(--s-points)");
     renderMini("revList", d, "review_points", "reviews_amount", "var(--s-reviews)");
     renderMini("hrsList", d, "hours", "hours_amount", "var(--s-hours)");
+    /* after all three, because the standings above decide how much is left */
+    fitMiniRows();
   }
 
   var failures = 0;
@@ -416,6 +457,9 @@
   }
 
   window.addEventListener("resize", fit);
+  /* Barlow Condensed lands after the first paint and every row changes height
+     with it, so the fit is taken again once it is actually in use. */
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitMiniRows);
   fit(); clock(); load();
   setInterval(clock, 20000);
   setInterval(load, REFRESH_MS);
