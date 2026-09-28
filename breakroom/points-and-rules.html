@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Performance Points and Rules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  /* One 1920x1080 sheet for the break-room screen, in the same colours as the
+     revenue share board so the two read as one thing. Rendered to a PNG with
+     headless Chrome; see the README beside this file. Wording is Andrew's own,
+     copied exactly, because this is the sheet the crew will be held to. */
+  :root{
+    --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
+    --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
+    --brand:#f0762e; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:1920px;height:1080px;overflow:hidden;
+    background:var(--plane);color:var(--ink-2);font-family:var(--sans)}
+
+  #sheet{width:1920px;height:1080px;padding:30px 40px 26px;
+    display:flex;flex-direction:column;gap:18px}
+
+  .top{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2px solid var(--seam);padding-bottom:14px}
+  .brand{font-family:var(--cond);font-weight:700;font-size:38px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink)}
+  .brand em{color:var(--brand);font-style:normal}
+  .kicker{font-family:var(--cond);font-weight:600;font-size:25px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-3);margin-left:22px}
+
+  .cols{display:grid;grid-template-columns:1140px 1fr;gap:26px;flex:1;min-height:0}
+  .card{background:var(--panel);border:1px solid var(--seam);border-radius:14px;
+    padding:20px 24px;display:flex;flex-direction:column;min-height:0}
+  .card h2{font-family:var(--cond);font-weight:700;font-size:27px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink);margin:0 0 12px}
+  .card h2 span{color:var(--ink-3);font-size:20px;letter-spacing:.08em;margin-left:14px}
+
+  /* points */
+  .rows{display:flex;flex-direction:column;flex:1;min-height:0}
+  .r{display:grid;grid-template-columns:1fr 92px;align-items:center;gap:16px;
+    flex:1 1 0;min-height:0;border-top:1px solid var(--seam);padding:0 2px}
+  .r:first-child{border-top:0}
+  .r .t{font-size:22px;line-height:1.2;color:var(--ink)}
+  .r .t b{color:var(--ink-3);font-weight:500;font-size:19px}
+  .r .p{font-family:var(--cond);font-weight:700;font-size:30px;text-align:center;
+    border-radius:8px;padding:3px 0;font-variant-numeric:tabular-nums}
+  .plus  .p{color:#0f0d0b;background:var(--good)}
+  .one   .p{color:var(--ink);background:var(--panel-2)}
+  .two   .p{color:#0f0d0b;background:var(--warn)}
+  .three .p{color:#fff;background:#b3452a}
+  .five  .p{color:#fff;background:var(--crit)}
+  .plus .t{color:#8fe08f}
+
+  /* rules */
+  /* Rules are different lengths, so giving every one an equal slice of the
+     column left a one-line rule floating in space and a four-line one jammed
+     against its neighbour. Each takes the height it needs and the slack is
+     shared out between them instead. */
+  .rules{display:flex;flex-direction:column;flex:1;min-height:0;
+    justify-content:space-between}
+  .u{display:flex;gap:13px;align-items:flex-start;flex:0 0 auto;
+    border-top:1px solid var(--seam);padding:11px 2px}
+  .u:first-child{border-top:0}
+  .u i{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--brand);
+    margin-top:9px}
+  .u p{margin:0;font-size:20px;line-height:1.3;color:var(--ink-2)}
+  .u p b{color:var(--ink);font-weight:700}
+  .u p em{font-style:normal;color:var(--brand);font-weight:700}
+
+  .foot{display:flex;justify-content:space-between;align-items:center;
+    font-size:18px;color:var(--ink-3);border-top:1px solid var(--seam);padding-top:12px}
+  .foot b{color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div id="sheet">
+
+  <div class="top">
+    <div>
+      <span class="brand">Immediate Movers <em>&amp;</em> Storage</span>
+      <span class="kicker">Performance Points &amp; Rules</span>
+    </div>
+    <span class="kicker" style="margin:0">Effective 1 October 2026</span>
+  </div>
+
+  <div class="cols">
+
+    <div class="card">
+      <h2>Performance Points <span>What earns and what costs</span></h2>
+      <div class="rows">
+        <div class="r plus"><div class="t">Came In On Day Off</div><div class="p">+1</div></div>
+        <div class="r one"><div class="t">Policy Violation</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Up to 30 Mins Late</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Applicable Material/Equipment not removed from truck</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Truck not restocked</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Truck cleanliness not acceptable</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Equipment/Pads not neatly organized on truck</div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Not Out By Shop Time <b>(Unless someone is late)</b></div><div class="p">&minus;1</div></div>
+        <div class="r one"><div class="t">Failure to perform pre-inspection walkthrough properly</div><div class="p">&minus;1</div></div>
+        <div class="r two"><div class="t">31 to 60 Mins Late</div><div class="p">&minus;2</div></div>
+        <div class="r two"><div class="t">Stopped before first job without need for fuel <b>(15-20% or less)</b></div><div class="p">&minus;2</div></div>
+        <div class="r two"><div class="t">Customer Complaint &ndash; Vaping/Smoking in sight of customer</div><div class="p">&minus;2</div></div>
+        <div class="r two"><div class="t">Call Off &ndash; Unable to work scheduled shift when time off was not requested in advance</div><div class="p">&minus;2</div></div>
+        <div class="r three"><div class="t">61+ Mins Late</div><div class="p">&minus;3</div></div>
+        <div class="r three"><div class="t">Same Day Call Off</div><div class="p">&minus;3</div></div>
+        <div class="r three"><div class="t">Claim</div><div class="p">&minus;3</div></div>
+        <div class="r five"><div class="t">Customer Complaint &ndash; Specifically Names You <b>(Slow, Complaining, Attitude, Cussing, Excessive Breaks) &middot; can be in addition to a claim</b></div><div class="p">&minus;5</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Rules</h2>
+      <div class="rules">
+        <div class="u"><i></i><p>Each person starts with <b>15 points</b>.</p></div>
+        <div class="u"><i></i><p>Must have <b>100 hours</b> to qualify for the bonus.</p></div>
+        <div class="u"><i></i><p>Loss of <b>15</b> cumulative points in a rolling 60-day period <em>&rarr;</em> Written Warning.</p></div>
+        <div class="u"><i></i><p>Loss of <b>30</b> cumulative points in a rolling 60-day period <em>&rarr;</em> 7-Day Unpaid Suspension.</p></div>
+        <div class="u"><i></i><p>Loss of <b>45</b> cumulative points in a rolling 60-day period <em>&rarr;</em> Termination.</p></div>
+        <div class="u"><i></i><p>Individual deductions will be assessed to the responsible employee(s) when there is an isolated incident resulting from failure to follow company procedures, negligence, or preventable employee error.</p></div>
+        <div class="u"><i></i><p><b>Lost equipment</b> is an individual deduction.</p></div>
+        <div class="u"><i></i><p>Any customer issue escalated to Andrew will be entered into the claim process, regardless of reason or severity. Handled without getting to Andrew, it is <b>not</b> a claim.</p></div>
+        <div class="u"><i></i><p>Claim deductions include a <b>$50 fee</b> toward the third-party claims handler expense.</p></div>
+        <div class="u"><i></i><p>Must leave <b>2 weeks notice</b> to earn the bonus.</p></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <span>Points reset to <b>15</b> at the start of every month. Discipline is measured on a <b>rolling 60 days</b>, not the calendar month.</span>
+    <span>Your own points, hours and share: <b>share.immediatemover.com</b></span>
+  </div>
+
+</div>
+</body>
+</html>

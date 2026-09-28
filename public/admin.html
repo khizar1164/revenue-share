@@ -239,7 +239,7 @@ Tyler Johnston  44.25"></textarea>
 
     <div class="panel">
       <h2>Claim deductions</h2>
-      <p class="dek">Comes off the whole pool before it splits.</p>
+      <p class="dek">Comes off the whole pool before it splits. Type the <b>full amount including the $50 third-party handler fee</b> &mdash; nothing is added on top. Andrew, 28 September: "its something I will add into the claim amount when I enter the claim in".</p>
       <div class="frow">
         <div style="max-width:130px"><label for="clDate">Date</label><input type="date" id="clDate"></div>
         <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
@@ -277,20 +277,36 @@ Tyler Johnston  44.25"></textarea>
       <div class="frow">
         <div><label for="ptReason">What happened</label>
           <select id="ptReason">
+            <!-- Andrew's finalised sheet, 28 September 2026, in his order and his
+                 wording, because this is the list going up in the break room and
+                 the two have to say the same thing.
+
+                 Lateness is three bands now, so a manager entering one by hand
+                 picks the same band the tardy log would have worked out. The
+                 one-minute buffer is deliberately not written down anywhere the
+                 crew can see: "we are allowing a 1 minute buffer but we arent
+                 telling the movers". It lives in latePenalty, not here.
+
+                 Lost equipment has come off this list. Andrew's rules now make it
+                 an individual deduction, which is money off one person, so it
+                 belongs in the panel below rather than being a point as well. -->
             <option value="1">Came in on day off (+1)</option>
-            <option value="-5">Customer complaint naming you (−5)</option>
-            <option value="-3">Claim (−3)</option>
-            <option value="-3">Same day call off (−3)</option>
-            <option value="-2">Call off — unable to work scheduled shift when time off was not requested in advance (−2)</option>
-            <option value="-2">Lost equipment (−2)</option>
-            <option value="-2">Stopped before first job, no fuel need (−2)</option>
-            <option value="-1">Late (−1)</option>
-            <option value="-1">Not out by shop time (−1)</option>
-            <option value="-1">Pads not neatly organized on truck (−1)</option>
+            <option value="-1">Policy violation (−1)</option>
+            <option value="-1">Up to 30 mins late (−1)</option>
+            <option value="-1">Applicable material/equipment not removed from truck (−1)</option>
             <option value="-1">Truck not restocked (−1)</option>
             <option value="-1">Truck cleanliness not acceptable (−1)</option>
-            <option value="-1">Policy violation (−1)</option>
-            <option value="-1">Missed pre-inspection walkthrough (−1)</option>
+            <option value="-1">Equipment/pads not neatly organized on truck (−1)</option>
+            <option value="-1">Not out by shop time (−1)</option>
+            <option value="-1">Failure to perform pre-inspection walkthrough properly (−1)</option>
+            <option value="-2">31 to 60 mins late (−2)</option>
+            <option value="-2">Stopped before first job without need for fuel (15-20% or less) (−2)</option>
+            <option value="-2">Customer complaint — vaping/smoking in sight of customer (−2)</option>
+            <option value="-2">Call off — unable to work scheduled shift when time off was not requested in advance (−2)</option>
+            <option value="-3">61+ mins late (−3)</option>
+            <option value="-3">Same day call off (−3)</option>
+            <option value="-3">Claim (−3)</option>
+            <option value="-5">Customer complaint — specifically names you (−5)</option>
           </select>
         </div>
         <button id="ptSave">Add</button>
