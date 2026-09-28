@@ -1,8 +1,8 @@
 /* Matthew's tardy log → point deductions, tested on a made-up log shaped
    exactly like his (real attendance stays out of the repository).
-   Rules (28 September): lateness is graded on the minutes — 1 is forgiven,
-   2-30 is -1, 31-60 is -2, 61+ is -3. Truck not out on time -1, call off -2,
-   same day call off -3. */
+   Rules: up to September a late is a flat -1. From 1 October lateness is
+   graded — 1 forgiven, 2-30 is -1, 31-60 is -2, 61+ is -3. Truck not out on
+   time -1, call off -2, same day call off -3. */
 import { classifyTab, parseLogGrid, toEvents, summarise, PENALTY, latePenalty }
   from "../src/sync/tardy.js";
 
@@ -68,28 +68,33 @@ const pts = id => events.filter(e => e.employee_id === id).reduce((a, e) => a + 
 check("truck -1, call off -2, same day call off -3",
   PENALTY.truck === -1 && PENALTY.calloff === -2 && PENALTY.samedaycalloff === -3);
 
-console.log("\n3a. THE MINUTE BANDS");
-check("1 minute is forgiven", latePenalty(1) === 0);
-check("2 minutes is -1", latePenalty(2) === -1);
-check("30 minutes is still -1", latePenalty(30) === -1);
-check("31 minutes is -2", latePenalty(31) === -2);
-check("60 minutes is still -2", latePenalty(60) === -2);
-check("61 minutes is -3", latePenalty(61) === -3);
-check("two hours is still -3, not worse", latePenalty(120) === -3);
-check("a forgiven minute leaves no entry at all",
-  !events.some(e => e.employee_id === "sam" && e.occurred_on === "2026-09-03" && e.type === "late"));
+console.log("\n3a. THE MINUTE BANDS, FROM 1 OCTOBER");
+const oct = "2026-10-05";
+check("1 minute is forgiven", latePenalty(1, oct) === 0);
+check("2 minutes is -1", latePenalty(2, oct) === -1);
+check("30 minutes is still -1", latePenalty(30, oct) === -1);
+check("31 minutes is -2", latePenalty(31, oct) === -2);
+check("60 minutes is still -2", latePenalty(60, oct) === -2);
+check("61 minutes is -3", latePenalty(61, oct) === -3);
+check("two hours is still -3, not worse", latePenalty(120, oct) === -3);
 
-console.log("\n3b. WHAT THAT COMES TO");
-check("Sam: 4 min -1, 1 min nothing, 2 min -1, plus a late truck = -3",
-  pts("sam") === -3, `${pts("sam")}`);
+console.log("\n3b. SEPTEMBER IS LEFT ALONE");
+const sep = "2026-09-30";
+check("a September minute is still -1, not forgiven", latePenalty(1, sep) === -1);
+check("a September hour and a quarter is still -1, not -3", latePenalty(75, sep) === -1);
+check("the bands start on the 1st, not the 2nd", latePenalty(75, "2026-10-01") === -3);
+check("the last day of September is still flat", latePenalty(75, "2026-09-30") === -1);
+
+console.log("\n3c. WHAT SEPTEMBER COMES TO");
+check("Sam: 3 late at -1 each, plus a late truck = -4", pts("sam") === -4, `${pts("sam")}`);
 const samSep3 = events.filter(e => e.employee_id === "sam" && e.occurred_on === "2026-09-03");
-check("a minute late and a late truck the same day is just the truck",
-  samSep3.reduce((a, e) => a + e.delta, 0) === -1, samSep3.map(e => e.reason).join(" + "));
-check("\"Josh P\" is Joshua Pama and \"Josh T\" is Josh Trim", pts("pama") === -2 && pts("trim") !== 0);
+check("late and truck late the same day is -2", samSep3.reduce((a, e) => a + e.delta, 0) === -2,
+  samSep3.map(e => e.reason).join(" + "));
+check("\"Josh P\" is Joshua Pama and \"Josh T\" is Josh Trim", pts("pama") === -3 && pts("trim") !== 0);
 check("a call off written in both tabs counts once",
   events.filter(e => e.employee_id === "trim" && e.type === "calloff").length === 1, `Josh T ${pts("trim")}`);
-check("Josh T: 3 min, 20 min, 3 min, one call off = -5", pts("trim") === -5);
-check("Dana: 45 min -2, 75 min -3, same day call off -3 = -8", pts("dana") === -8, `${pts("dana")}`);
+check("Josh T: 3 late + 1 call off = -5", pts("trim") === -5);
+check("Dana: 2 late at -1, same day call off -3 = -5", pts("dana") === -5, `${pts("dana")}`);
 check("a same day call off beats a plain one written in the other tab",
   events.filter(e => e.employee_id === "dana" && /call off/i.test(e.reason)).length === 1
   && events.some(e => e.employee_id === "dana" && e.type === "samedaycalloff"));

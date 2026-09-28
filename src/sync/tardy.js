@@ -4,7 +4,8 @@
  * the shop late: a row per mover, a column per date, minutes late in the cell,
  * or "CALL OFF". The rules, as Matthew and Andrew set them (14 September):
  *
- *   late                 graded on the minutes, see latePenalty below
+ *   late                 flat -1 up to September, graded on the minutes from
+ *                        1 October 2026 — see latePenalty below
  *   truck not out   -1   each name listed for that day
  *   call off        -2
  *   same day call off -3
@@ -33,17 +34,29 @@ import { nameMatcher } from "./hours.js";
 export const TAG = "tardy-log";
 export const PENALTY = { truck: -1, calloff: -2, samedaycalloff: -3 };
 
+/* The bands start on 1 October 2026, at Andrew's word. This date matters more
+   than it looks: the tardy log is rebuilt from Matthew's sheet on every run,
+   so without a cutover the first sync after the deploy would quietly rescore
+   every September late and move people's totals for a month they had already
+   been told about. Before this date a late is a flat -1, exactly as it has
+   been all September. */
+export const GRADED_FROM = "2026-10-01";
+
 /**
- * Minutes late → points. Andrew's bands, 28 September 2026:
+ * Minutes late → points. Andrew's bands, from 1 October 2026:
  *   1 minute        nothing
  *   2 to 30         -1
  *   31 to 60        -2
  *   61 and over     -3
  * Anything that scores nothing is never written down, so a one-minute late
  * leaves no entry on anyone's ledger rather than a puzzling zero.
+ *
+ * Dates are ISO, so a plain string comparison orders them correctly.
  */
-export function latePenalty(minutes) {
-  if (!(minutes >= 2)) return 0;
+export function latePenalty(minutes, onDate) {
+  if (!(minutes > 0)) return 0;
+  if (!onDate || onDate < GRADED_FROM) return -1;   // September and earlier
+  if (minutes < 2) return 0;
   if (minutes <= 30) return -1;
   if (minutes <= 60) return -2;
   return -3;
@@ -132,7 +145,7 @@ export function toEvents(entries, roster) {
     }
 
     /* graded: a minute late costs nothing, so nothing is written down */
-    const delta = e.type === "late" ? latePenalty(e.minutes) : PENALTY[e.type];
+    const delta = e.type === "late" ? latePenalty(e.minutes, e.date) : PENALTY[e.type];
     if (delta === 0) continue;
 
     events.push({

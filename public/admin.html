@@ -269,7 +269,7 @@ Tyler Johnston  44.25"></textarea>
 
     <div class="panel">
       <h2>Points</h2>
-      <p class="dek"><b>Came in on day off</b> is added automatically from the SmartMoving schedule, and <b>late, truck not out on time and call offs come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. This is for everything else a manager sees.</p>
+      <p class="dek"><b>Late, truck not out on time and call offs come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in on day off</b>, which nothing else can know about.</p>
       <div class="frow">
         <div style="max-width:130px"><label for="ptDate">Date</label><input type="date" id="ptDate"></div>
         <div><label for="ptWho">Who</label><select id="ptWho"></select></div>
@@ -277,6 +277,7 @@ Tyler Johnston  44.25"></textarea>
       <div class="frow">
         <div><label for="ptReason">What happened</label>
           <select id="ptReason">
+            <option value="1">Came in on day off (+1)</option>
             <option value="-5">Customer complaint naming you (−5)</option>
             <option value="-3">Claim (−3)</option>
             <option value="-3">Same day call off (−3)</option>
@@ -878,7 +879,9 @@ Tyler Johnston  44.25"></textarea>
   });
 
   $("ptSave").addEventListener("click", function(){
-    var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\(−?\d+\)$/, "");
+    /* strips the score off the label — "(+1)" as well as "(−2)", or the
+       reason saved on the entry reads "Came in on day off (+1)" */
+    var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\([+−-]?\d+\)$/, "");
     api("/api/admin/points", { method:"POST", body: JSON.stringify({
       employee_id: $("ptWho").value, occurred_on: $("ptDate").value,
       delta: Number(sel.value), reason: text
