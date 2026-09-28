@@ -1,8 +1,15 @@
-/* Same-day job points, derived rather than logged.
+/* "Came in on day off" points, derived rather than logged.
  *
  * A mover who runs two jobs on one date earns +1; three jobs, +2. This is the
  * only point event nobody has to remember, because the job dates already say
  * it happened. August 2026 had 48 of them across the crew, worth 55 points.
+ *
+ * Andrew renamed this from "Same-day job" on 28 September 2026, for the rules
+ * list going on the break-room TV. Worth knowing that the name and the test
+ * are not the same thing: what is actually measured is two or more jobs on one
+ * date, which is not always a day off, and a day off worked as a single job
+ * earns nothing here. If that gap matters, it needs a reason a manager enters
+ * by hand, because nothing in the schedule records whose day off it was.
  *
  * Rewritten each run for the month in question, so re-syncing after SmartMoving
  * gains a late job corrects the total instead of doubling it.
@@ -10,7 +17,12 @@
 
 import { query, withTransaction } from "../db.js";
 
-const REASON = "Same-day job";
+const REASON = "Came in on day off";
+
+/* What these rows were called until 28 September 2026. The wording is the key
+   the rebuild below deletes on, so the old one has to stay listed: without it
+   the September rows would be stranded and the month would count twice. */
+const LEGACY_REASONS = ["Same-day job"];
 
 export async function syncSameDayPoints(period) {
   const found = await query(
@@ -38,10 +50,10 @@ export async function syncSameDayPoints(period) {
     /* only our own derived rows are replaced; anything a manager typed stays */
     await c.query(
       `delete from point_events
-        where reason like $1
-          and recorded_by = 'system'
-          and date_trunc('month', occurred_on) = $2::date`,
-      [REASON + "%", period]);
+        where recorded_by = 'system'
+          and date_trunc('month', occurred_on) = $2::date
+          and reason like any ($1::text[])`,
+      [[REASON, ...LEGACY_REASONS].map(r => r + "%"), period]);
 
     for (const e of events) {
       await c.query(

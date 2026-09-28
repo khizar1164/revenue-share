@@ -4,10 +4,19 @@
  * the shop late: a row per mover, a column per date, minutes late in the cell,
  * or "CALL OFF". The rules, as Matthew and Andrew set them (14 September):
  *
- *   late            -1   anything he logs is late — the grace period has
- *                        already been applied before he writes it down
+ *   late                 graded on the minutes, see latePenalty below
  *   truck not out   -1   each name listed for that day
  *   call off        -2
+ *   same day call off -3
+ *
+ * Andrew graded lateness on 28 September 2026. Until then anything Matthew
+ * logged cost a flat -1, so a minute late and an hour late were the same
+ * thing. A single minute now costs nothing at all and no entry is written
+ * for it, which is what "1 min = nothing" has to mean for the crew to
+ * believe it.
+ *
+ * Trucks not out on time are still a flat -1 — Andrew graded tardies, and
+ * grading trucks too would quietly change what people lose. Worth asking.
  *
  * Late and a late truck on the same day are two entries, so -2 — which is
  * what Matthew asked for.
@@ -22,7 +31,23 @@ import { matchableRoster, ignoredNames } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "tardy-log";
-export const PENALTY = { late: -1, truck: -1, calloff: -2 };
+export const PENALTY = { truck: -1, calloff: -2, samedaycalloff: -3 };
+
+/**
+ * Minutes late → points. Andrew's bands, 28 September 2026:
+ *   1 minute        nothing
+ *   2 to 30         -1
+ *   31 to 60        -2
+ *   61 and over     -3
+ * Anything that scores nothing is never written down, so a one-minute late
+ * leaves no entry on anyone's ledger rather than a puzzling zero.
+ */
+export function latePenalty(minutes) {
+  if (!(minutes >= 2)) return 0;
+  if (minutes <= 30) return -1;
+  if (minutes <= 60) return -2;
+  return -3;
+}
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july",
                 "august", "september", "october", "november", "december"];
@@ -68,7 +93,10 @@ export function parseLogGrid(grid, { kind, year, month }) {
       const v = text(row[i]);
       if (!v || v === "0") continue;
       const date = `${year}-${pad(month)}-${pad(day)}`;
-      if (/call\s*-?\s*off/i.test(v)) {
+      /* "same day" has to be looked for first — it contains "call off" */
+      if (/same\s*-?\s*day.*call\s*-?\s*off/i.test(v)) {
+        out.entries.push({ name, date, type: "samedaycalloff" });
+      } else if (/call\s*-?\s*off/i.test(v)) {
         out.entries.push({ name, date, type: "calloff" });
       } else if (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0) {
         out.entries.push({ name, date, type: kind, minutes: Number(v) });
@@ -83,28 +111,50 @@ export function parseLogGrid(grid, { kind, year, month }) {
 /** Entries → point events for people on the roster. */
 export function toEvents(entries, roster) {
   const match = nameMatcher(roster);
-  const events = [], unmatched = new Set(), callOffs = new Set();
+  const events = [], unmatched = new Set();
+
+  /* One absence is one deduction. A call off can appear in both tabs, and the
+     same one may be written plainly in one and as a same-day in the other, so
+     they are collected per person per date and the worse wording wins. */
+  const callOffs = new Map();
 
   for (const e of entries) {
     const who = match(e.name);
     if (!who) { unmatched.add(e.name); continue; }
 
-    /* a call off written in both tabs is still one call off */
-    if (e.type === "calloff") {
-      const key = `${who.id}|${e.date}`;
-      if (callOffs.has(key)) continue;
-      callOffs.add(key);
+    if (e.type === "calloff" || e.type === "samedaycalloff") {
+      const key  = `${who.id}|${e.date}`;
+      const seen = callOffs.get(key);
+      if (!seen || PENALTY[e.type] < PENALTY[seen.type]) {
+        callOffs.set(key, { who, date: e.date, type: e.type });
+      }
+      continue;
     }
+
+    /* graded: a minute late costs nothing, so nothing is written down */
+    const delta = e.type === "late" ? latePenalty(e.minutes) : PENALTY[e.type];
+    if (delta === 0) continue;
 
     events.push({
       employee_id: who.id,
       full_name:   who.full_name,
       occurred_on: e.date,
       type:        e.type,
-      delta:       PENALTY[e.type],
-      reason: e.type === "calloff" ? "Call off (tardy log)"
-            : e.type === "truck"   ? `Truck not out on time — ${e.minutes} min (tardy log)`
-            :                        `Late — ${e.minutes} min (tardy log)`
+      delta,
+      reason: e.type === "truck" ? `Truck not out on time — ${e.minutes} min (tardy log)`
+            :                      `Late — ${e.minutes} min (tardy log)`
+    });
+  }
+
+  for (const c of callOffs.values()) {
+    events.push({
+      employee_id: c.who.id,
+      full_name:   c.who.full_name,
+      occurred_on: c.date,
+      type:        c.type,
+      delta:       PENALTY[c.type],
+      reason: c.type === "samedaycalloff" ? "Same day call off (tardy log)"
+            :                               "Call off (tardy log)"
     });
   }
   return { events, unmatched: [...unmatched] };
@@ -133,6 +183,7 @@ export function summarise({ period, events, unmatched, pastCrew = [], warnings }
   const total = events.reduce((a, e) => a + e.delta, 0);
   let s = `${MONTHS[m - 1][0].toUpperCase() + MONTHS[m - 1].slice(1)}: ` +
           `${n("late")} late, ${n("truck")} trucks late, ${n("calloff")} call off${n("calloff") === 1 ? "" : "s"}` +
+          (n("samedaycalloff") ? `, ${n("samedaycalloff")} same day` : "") +
           ` → ${total} points across ${people} ${people === 1 ? "person" : "people"}`;
   if (unmatched.length) s += `; NOT MATCHED: ${unmatched.join(", ")}`;
   if (pastCrew.length) s += `; past crew, no points: ${pastCrew.join(", ")}`;

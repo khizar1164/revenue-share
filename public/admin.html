@@ -269,7 +269,7 @@ Tyler Johnston  44.25"></textarea>
 
     <div class="panel">
       <h2>Points</h2>
-      <p class="dek">Same-day jobs are added automatically from SmartMoving, and <b>late, truck not out on time and call offs come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. This is for everything else a manager sees.</p>
+      <p class="dek"><b>Came in on day off</b> is added automatically from the SmartMoving schedule, and <b>late, truck not out on time and call offs come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. This is for everything else a manager sees.</p>
       <div class="frow">
         <div style="max-width:130px"><label for="ptDate">Date</label><input type="date" id="ptDate"></div>
         <div><label for="ptWho">Who</label><select id="ptWho"></select></div>
@@ -279,12 +279,15 @@ Tyler Johnston  44.25"></textarea>
           <select id="ptReason">
             <option value="-5">Customer complaint naming you (−5)</option>
             <option value="-3">Claim (−3)</option>
-            <option value="-2">Call off (−2)</option>
+            <option value="-3">Same day call off (−3)</option>
+            <option value="-2">Call off — unable to work scheduled shift when time off was not requested in advance (−2)</option>
             <option value="-2">Lost equipment (−2)</option>
             <option value="-2">Stopped before first job, no fuel need (−2)</option>
             <option value="-1">Late (−1)</option>
             <option value="-1">Not out by shop time (−1)</option>
             <option value="-1">Pads not neatly organized on truck (−1)</option>
+            <option value="-1">Truck not restocked (−1)</option>
+            <option value="-1">Truck cleanliness not acceptable (−1)</option>
             <option value="-1">Policy violation (−1)</option>
             <option value="-1">Missed pre-inspection walkthrough (−1)</option>
           </select>

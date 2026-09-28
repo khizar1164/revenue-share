@@ -600,8 +600,8 @@ app.delete("/api/admin/points/:id", wrap(async (req, res) => {
   const row = (await query(`select recorded_by from point_events where id = $1`, [id])).rows[0];
   if (!row) return res.status(404).json({ error: "that entry is already gone" });
   if (row.recorded_by === "system") {
-    return res.status(409).json({ error: "same-day points come from the SmartMoving schedule — " +
-      "fix the crew on that job in SmartMoving and it corrects itself on the next sync" });
+    return res.status(409).json({ error: "\"came in on day off\" points come from the SmartMoving " +
+      "schedule — fix the crew on that job in SmartMoving and it corrects itself on the next sync" });
   }
   /* once the log is read automatically, a removed entry would come back within
      half an hour — the correction belongs in Matthew's sheet */

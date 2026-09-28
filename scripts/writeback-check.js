@@ -95,7 +95,7 @@ try {
     check("hours are backed up", types.has("hours"));
     check("bonuses are backed up", types.has("bonus"));
     check("the same-day points derived from the schedule are there",
-      body.some(r => /same-day/i.test(r[4] ?? "")));
+      body.some(r => /came in on day off|same-day/i.test(r[4] ?? "")));
 
     const dbPoints = Number((await query(`select count(*)::int n from point_events`)).rows[0].n);
     check("every point event made it", body.filter(r => r[0] === "point").length === dbPoints,

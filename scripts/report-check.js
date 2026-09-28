@@ -82,7 +82,7 @@ try {
       (r.ledger || []).some(e => e.reason === "Call off" && e.delta === -2),
       `${(r.ledger || []).length} entries`);
     check("same-day jobs are in the ledger without anyone logging them",
-      (r.ledger || []).some(e => /same-day/i.test(e.reason)));
+      (r.ledger || []).some(e => /came in on day off|same-day/i.test(e.reason)));
     check("the running total reconciles",
       15 + (r.ledger || []).reduce((s, e) => s + e.delta, 0) === r.points, `${r.points} points`);
     check("discipline counts the call off", r.discipline_lost >= 2, `${r.discipline_lost} lost`);

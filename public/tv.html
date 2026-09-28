@@ -119,12 +119,18 @@
   /* someone short on hours is dimmed; someone who walked is red */
   .nq{opacity:.42}
   .nq .am{color:var(--ink-3)}
-  .ff .nm,.ff .am{color:var(--crit)}
+  /* Amber, not red, and no minus sign. Red with a "−" read to the crew as
+     money being taken off their cheque; it is the opposite — their share went
+     back into the pool and was shared out among everyone else. Amber is
+     already what "Redistributed" wears in the pool strip, so the same colour
+     now means the same thing in both places. Andrew, 28 September. */
+  .ff .nm,.ff .am{color:var(--warn)}
   .ff{opacity:.9}
 
   .qfoot{font-size:16px;line-height:1.4;color:var(--ink-3);margin-top:12px;border-top:1px solid var(--seam);
     padding-top:11px}
   .qfoot b{color:var(--ink-2)}
+  .qfoot b.amb{color:var(--warn)}
 
   /* a state the board will genuinely be in until hours arrive each month */
   .pending{margin:12px 0 0;padding:10px 16px;border-radius:10px;
@@ -177,6 +183,7 @@
     <div class="q">
       <div class="qhead"><h2>Where everyone stands</h2><div class="tag">Total share</div></div>
       <div class="stand" id="stand"></div>
+      <div class="qfoot">An <b class="amb">amber</b> figure went back into the pool and was shared out. It is <b>not</b> taken off anyone's pay.</div>
     </div>
   </div>
 
@@ -194,7 +201,7 @@
     <div class="q">
       <div class="qhead"><h2>Hours worked</h2><div class="tag"><span class="wH">15%</span> &mdash; <b id="q5">$0.00</b></div></div>
       <div class="mini" id="hrsList"></div>
-      <div class="qfoot">More hours, bigger share. Faded = <b>under <span class="wMin">100</span> hours</b> &middot; red = <b>left without notice</b>.</div>
+      <div class="qfoot">More hours, bigger share. Faded = <b>under <span class="wMin">100</span> hours</b> &middot; <b class="amb">amber</b> = <b>left without notice</b>.</div>
     </div>
   </div>
 
@@ -265,8 +272,9 @@
              + '<i style="width:'+(((c.hours_amount||0)/max)*100).toFixed(2)+'%;background:var(--s-hours)"></i>';
         amt = usd(c.share);
       } else if (c.forfeits){
-        bars = '<i style="width:'+((c.forfeited/max)*100).toFixed(2)+'%;background:var(--crit);opacity:.55"></i>';
-        amt = "−" + usd(c.forfeited);
+        bars = '<i style="width:'+((c.forfeited/max)*100).toFixed(2)+'%;background:var(--warn);opacity:.55"></i>';
+        /* no minus: this is not a deduction, it is what went back to the pool */
+        amt = usd(c.forfeited);
       } else {
         /* never their hours — see the note above renderStandings */
         bars = "";
@@ -292,7 +300,7 @@
       return '<div class="mrow'+cls(c)+'">'
         + '<div class="nm">'+esc(c.code_name)+'</div>'
         + '<div class="tk"><i style="width:'+((c[key]/max)*100).toFixed(2)+'%;background:'
-        + (c.forfeits ? "var(--crit)" : colour) + '"></i></div>'
+        + (c.forfeits ? "var(--warn)" : colour) + '"></i></div>'
         + '<div class="n">'+c[key]+'</div>'
         + '<div class="am">'+amt+'</div></div>';
     }).join("");
