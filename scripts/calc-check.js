@@ -6,9 +6,10 @@ import { query, close } from "../src/db.js";
 const usd = n => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = n => (n * 100).toFixed(1) + "%";
 
-console.log("deriving same-day job points from the job index…");
+console.log("sweeping up anything left from the old same-day rule…");
 const sd = await syncSameDayPoints("2026-08-01");
-console.log(`  ${sd.days} same-day dates, ${sd.points} points — nobody logged any of them\n`);
+console.log(`  ${sd.removed} removed, worth ${sd.points} points
+`);
 
 const r = await monthly(2026, 8);
 

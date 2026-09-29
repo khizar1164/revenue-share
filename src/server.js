@@ -591,18 +591,15 @@ app.get("/api/admin/points", wrap(async (req, res) => {
   res.json(r.rows);
 }));
 
-/* Same-day points are rebuilt from the SmartMoving schedule on every sync, so
-   deleting one here would only bring it back hours later. If one is wrong,
-   the schedule is what needs fixing — say so rather than pretend it worked. */
+/* Nothing writes recorded_by = 'system' any more. "Came in on day off" stopped
+   being read off the SmartMoving schedule on 29 September 2026, so a row still
+   carrying that tag is a leftover of the old rule and deleting it is exactly
+   what should happen. */
 app.delete("/api/admin/points/:id", wrap(async (req, res) => {
   const id = rowId(req.params.id);
   if (!id) return res.status(400).json({ error: "not a point entry id" });
   const row = (await query(`select recorded_by from point_events where id = $1`, [id])).rows[0];
   if (!row) return res.status(404).json({ error: "that entry is already gone" });
-  if (row.recorded_by === "system") {
-    return res.status(409).json({ error: "\"came in on day off\" points come from the SmartMoving " +
-      "schedule — fix the crew on that job in SmartMoving and it corrects itself on the next sync" });
-  }
   /* once the log is read automatically, a removed entry would come back within
      half an hour — the correction belongs in Matthew's sheet */
   if (row.recorded_by === "tardy-log" && process.env.TARDY_SHEET_ID) {

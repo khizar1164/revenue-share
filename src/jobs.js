@@ -107,6 +107,7 @@ export async function syncSmartMoving({ year, month } = {}) {
     added.push(`${member.name} as ${code}`);
   }
 
+  /* only sweeps up after the old automatic rule now — see sync/points.js */
   const sd = await syncSameDayPoints(period);
 
   return {
@@ -114,8 +115,8 @@ export async function syncSmartMoving({ year, month } = {}) {
     jobs: index.jobs.length,
     crew: index.crew.length,
     enrolled: added,
-    same_day_dates: sd.days,
-    same_day_points: sd.points,
+    day_off_rows_removed: sd.removed,
+    day_off_points_removed: sd.points,
     api_calls: client.callCount
   };
 }

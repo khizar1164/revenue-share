@@ -92,6 +92,7 @@ try {
   if (added.length) console.log("  enrolled: " + added.join(", "));
 
   const sd = await syncSameDayPoints(period);
+  if (sd.removed) console.log(`  swept up ${sd.removed} leftover day-off point(s), worth ${sd.points}`);
 
   const counts = await query(
     `select (select count(*) from sm_jobs where date_trunc('month', service_date) = $1::date) as jobs,
@@ -99,7 +100,7 @@ try {
               where date_trunc('month', j.service_date) = $1::date) as links`, [period]);
 
   const detail = `${counts.rows[0].jobs} jobs, ${counts.rows[0].links} crew links, ` +
-                 `${sd.days} same-day dates worth ${sd.points} points, ${client.callCount} API calls`;
+                 `${sd.removed ? sd.removed + " leftover day-off point(s) swept up, " : ""}${client.callCount} API calls`;
   console.log("  " + detail);
 
   await query(`update sync_runs set ended_at = now(), ok = true, detail = $2 where id = $1`,

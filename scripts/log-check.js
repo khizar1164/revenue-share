@@ -62,13 +62,23 @@ try {
   check("removing it twice says so", (await call(`/api/admin/points/${pid}`, { method: "DELETE" })).status === 404);
   check("a junk id is refused", (await call(`/api/admin/points/1;drop`, { method: "DELETE" })).status === 400);
 
-  const sys = (await query(`select id from point_events where recorded_by = 'system' limit 1`)).rows[0];
-  if (sys) {
-    const r = await call(`/api/admin/points/${sys.id}`, { method: "DELETE" });
-    const b = await r.json();
-    check("same-day points are not removable — they'd come straight back", r.status === 409, b.error?.slice(0, 60));
-    check("…and are left in place", (await query(`select 1 from point_events where id = $1`, [sys.id])).rowCount === 1);
-  }
+  /* A row tagged 'system' used to be refused, because the SmartMoving schedule
+     rebuilt it within the hour and a delete would only have looked like it
+     worked. Nothing writes that tag any more — Matthew, 29 September: "can you
+     remove all of the same day job points that are currently imported" — so a
+     leftover is now exactly the thing an admin should be able to take off.
+     The row is made here rather than hunted for, because after the sweep there
+     are none left to find. */
+  const leftover = (await query(
+    `insert into point_events (employee_id, occurred_on, delta, reason, recorded_by)
+     values ($1, '2026-07-15', 1, 'Came in on day off (2 jobs)', 'system') returning id`,
+    [who.id])).rows[0];
+  made.points.push(leftover.id);
+  const r = await call(`/api/admin/points/${leftover.id}`, { method: "DELETE" });
+  check("a leftover day-off point can now be removed", r.status === 204, "status " + r.status);
+  check("…and is really gone",
+    !(await query(`select 1 from point_events where id = $1`, [leftover.id])).rowCount);
+  made.points = made.points.filter(id => String(id) !== String(leftover.id));
 
   console.log("\n2. CLAIMS");
   const c = await call("/api/admin/claims", { method: "POST", body: JSON.stringify({

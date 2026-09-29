@@ -1,89 +1,58 @@
-/* "Came in on day off" points, derived rather than logged.
+/* "Came in on day off" — no longer derived from anything.
  *
- * A mover who runs two jobs on one date earns +1; three jobs, +2. This is the
- * only point event nobody has to remember, because the job dates already say
- * it happened. August 2026 had 48 of them across the crew, worth 55 points.
+ * This used to read the SmartMoving schedule: anyone on two jobs in one day
+ * earned +1, three jobs +2. Matthew spotted on 29 September 2026 what that
+ * actually measured. "So its pulling data for every day that someone is
+ * assigned to a job? We dont want it to do that. That is when someone is not
+ * scheduled to work but comes into work on their day off."
  *
- * Andrew renamed this from "Same-day job" on 28 September 2026, then settled
- * what it should actually mean: coming in on your day off is worth +1, and it
- * has nothing to do with how many jobs you ran. "I'm not sure where the 2 job
- * thing came into factor."
+ * He is right, and the two are not the same thing at all. Working two jobs on
+ * a Tuesday you were rostered for is an ordinary day. Coming in on a Sunday
+ * you were not rostered for is the thing worth a point. The schedule knows the
+ * first and cannot know the second, because nothing in SmartMoving records
+ * whose day off it was. Andrew had already said the same on 28 September:
+ * "Im not sure where the 2 job thing came into factor. Going forward lets have
+ * it set as if they come in on their day off it counts as 1, not nececssarily
+ * tied to quantity of jobs."
  *
- * Nothing in the schedule records whose day off it was, so from 1 October this
- * stops being derived and becomes a reason a manager picks in the admin panel.
- * September keeps what it already earned — the month has been shown to the
- * crew and rescoring it now would move totals they have already seen.
+ * So it is now a reason a manager picks in the admin panel, worth +1, and this
+ * file exists only to sweep up after the old rule. It ran for August and
+ * September and left 91 entries worth 99 points behind; Matthew asked for all
+ * of them, both months: "Please remove all of the current ones". Neither month
+ * had been paid, so nobody was clawed back.
  *
- * Rewritten each run for the month in question, so re-syncing after SmartMoving
- * gains a late job corrects the total instead of doubling it.
+ * The sweep stays rather than being deleted outright. The old rows were
+ * rebuilt on every sync, so one straggler on a service that had not restarted
+ * would quietly reappear on the board. Once it has nothing left to remove it
+ * costs one delete that matches no rows.
  */
 
-import { query, withTransaction } from "../db.js";
+import { query } from "../db.js";
 
-const REASON = "Came in on day off";
+/* Every wording the derived rows ever carried. recorded_by = 'system' was only
+   ever used for these, so the tag alone is enough, but the reasons are matched
+   too so a future automatic source cannot be swept away by accident. */
+const DERIVED_REASONS = ["Came in on day off%", "Same-day job%"];
 
-/* What these rows were called until 28 September 2026. The wording is the key
-   the rebuild below deletes on, so the old one has to stay listed: without it
-   the September rows would be stranded and the month would count twice. */
-const LEGACY_REASONS = ["Same-day job"];
+/** The reason a manager picks by hand. Kept here so the admin panel and any
+    report agree on one spelling. */
+export const REASON = "Came in on day off";
 
-/* Derived up to the end of September only. From October a manager records it,
-   because the job dates cannot tell us whose day off it was. */
-export const DERIVED_UNTIL = "2026-10-01";
-
-export async function syncSameDayPoints(period) {
-  if (period >= DERIVED_UNTIL) {
-    /* still clear our own rows for the month, so a re-run of an earlier
-       version cannot leave derived points stranded in October */
-    await query(
-      `delete from point_events
-        where recorded_by = 'system'
-          and date_trunc('month', occurred_on) = $2::date
-          and reason like any ($1::text[])`,
-      [[REASON, ...LEGACY_REASONS].map(r => r + "%"), period]);
-    return { days: 0, points: 0 };
-  }
-
-  const found = await query(
-    `select e.id                       as employee_id,
-            j.service_date             as on_date,
-            count(*)::int              as jobs
-       from sm_job_crew jc
-       join sm_jobs j  on j.job_id = jc.job_id
-       join employees e on e.sm_crew_id = jc.sm_crew_id
-      where j.service_date is not null
-        and date_trunc('month', j.service_date) = $1::date
-      group by e.id, j.service_date
-     having count(*) > 1
-      order by j.service_date`,
-    [period]);
-
-  const events = found.rows.map(r => ({
-    employee_id: r.employee_id,
-    occurred_on: r.on_date,
-    delta: r.jobs - 1,
-    reason: `${REASON} (${r.jobs} jobs)`
-  }));
-
-  await withTransaction(async c => {
-    /* only our own derived rows are replaced; anything a manager typed stays */
-    await c.query(
-      `delete from point_events
-        where recorded_by = 'system'
-          and date_trunc('month', occurred_on) = $2::date
-          and reason like any ($1::text[])`,
-      [[REASON, ...LEGACY_REASONS].map(r => r + "%"), period]);
-
-    for (const e of events) {
-      await c.query(
-        `insert into point_events (employee_id, occurred_on, delta, reason, recorded_by)
-         values ($1, $2, $3, $4, 'system')`,
-        [e.employee_id, e.occurred_on, e.delta, e.reason]);
-    }
-  });
+/**
+ * Remove anything left from the old automatic rule, in every month rather than
+ * just the one being synced — August had to go as well as September, and a
+ * sync only ever looks at the current month.
+ */
+export async function syncSameDayPoints(_period) {
+  const gone = await query(
+    `delete from point_events
+      where recorded_by = 'system'
+        and reason like any ($1::text[])
+      returning delta`,
+    [DERIVED_REASONS]);
 
   return {
-    days: events.length,
-    points: events.reduce((a, e) => a + e.delta, 0)
+    removed: gone.rowCount,
+    points:  gone.rows.reduce((a, r) => a + Number(r.delta), 0)
   };
 }
