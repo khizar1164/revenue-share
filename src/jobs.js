@@ -124,13 +124,18 @@ export async function syncSmartMoving({ year, month } = {}) {
 /* ------------------------------------------------------------------ hours --- */
 
 /**
- * Hours come from Connecteam, which produces a fresh spreadsheet per pull —
- * weekly through the month, and a full-month export at month end that
- * supersedes those weeks. We find them in Drive rather than asking Matthew to
- * copy anything into a standing tab.
+ * Hours come from the Hours tab, which Matthew pastes into after he has
+ * corrected the timesheets for payroll. Khizar and Matthew settled this on
+ * 2 October: no Connecteam, he copies into the sheet.
  *
- * The hand-maintained Hours tab is still read as a fallback, so hours can
- * always be entered by hand if Connecteam or Drive is unavailable.
+ * Reading Connecteam's weekly exports straight out of Drive is still here and
+ * still works, but it is now off unless HOURS_FOLDER_ID says where to look.
+ * That is deliberate. The Drive API is not enabled on this project, so an
+ * unconditional attempt failed on every run and wrote "Connecteam unavailable"
+ * into the log every ten minutes. A permanent error nobody acts on is worse
+ * than no error at all: it is the noise a real failure hides in, which is
+ * exactly how four days of missing truck deductions went unnoticed in
+ * September. Set HOURS_FOLDER_ID and it comes back.
  */
 export async function syncHours({ period } = {}) {
   if (!loadCredentials()) throw new Error("no Google credentials configured");
@@ -140,25 +145,27 @@ export async function syncHours({ period } = {}) {
   const parts = [];
 
   let fromDrive = null;
-  try {
-    fromDrive = await importWeeklyHours(google, {
-      folderId: process.env.HOURS_FOLDER_ID || undefined, period: p });
-    const months = fromDrive.weeks.filter(w => w.kind === "month").length;
-    parts.push(`${fromDrive.files} Connecteam file${fromDrive.files === 1 ? "" : "s"}` +
-               (months ? ` (${months} month-end)` : "") +
-               ` → ${fromDrive.written} people`);
-    if (fromDrive.unmatched.length) {
-      parts.push(`NOT MATCHED: ${fromDrive.unmatched.map(u => u.name).join(", ")}`);
+  if (process.env.HOURS_FOLDER_ID) {
+    try {
+      fromDrive = await importWeeklyHours(google, {
+        folderId: process.env.HOURS_FOLDER_ID, period: p });
+      const months = fromDrive.weeks.filter(w => w.kind === "month").length;
+      parts.push(`${fromDrive.files} Connecteam file${fromDrive.files === 1 ? "" : "s"}` +
+                 (months ? ` (${months} month-end)` : "") +
+                 ` → ${fromDrive.written} people`);
+      if (fromDrive.unmatched.length) {
+        parts.push(`NOT MATCHED: ${fromDrive.unmatched.map(u => u.name).join(", ")}`);
+      }
+    } catch (e) {
+      /* Drive being unavailable must not stop the sheet from working */
+      parts.push(`Connecteam unavailable (${e.message.slice(0, 80)})`);
     }
-  } catch (e) {
-    /* Drive being unavailable must not stop the manual tab from working */
-    parts.push(`Connecteam unavailable (${e.message.slice(0, 80)})`);
   }
 
   if (process.env.SHEET_ID && !(fromDrive && fromDrive.written)) {
     const manual = await importHours(google, process.env.SHEET_ID, { period: p });
     if (manual.rowsRead) {
-      parts.push(`manual Hours tab → ${manual.written} people`);
+      parts.push(`Hours tab → ${manual.written} people`);
       if (manual.unmatched.length) {
         parts.push(`NOT MATCHED: ${manual.unmatched.map(u => u.name).join(", ")}`);
       }
