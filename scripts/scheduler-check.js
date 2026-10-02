@@ -57,6 +57,22 @@ console.log("\n2. A JOB THAT THROWS DOES NOT TAKE ANYTHING WITH IT");
   check("the failure is counted", bad.consecutive_failures === 1);
   check("the other job still ran", goodRuns === 1);
   check("the healthy job has no error", st.find(j => j.name === "fine").last_error === null);
+
+  /* A job that fails and then recovers must stop saying it is failing. The
+     admin panel paints a job red purely on this counter, so a counter that
+     only climbs leaves a working job showing FAILING for ever. */
+  let blows = true;
+  s.add("recovers", async () => { if (blows) throw new Error("not yet"); return "better now"; },
+    { everyMs: 60_000 });
+  await s.run("recovers");
+  check("it is failing while it fails",
+    s.status().find(j => j.name === "recovers").consecutive_failures === 1);
+  blows = false;
+  await s.run("recovers");
+  const back = s.status().find(j => j.name === "recovers");
+  check("a successful run clears the count", back.consecutive_failures === 0,
+    `consecutive_failures = ${back.consecutive_failures}`);
+  check("and clears the error with it", back.last_error === null);
   s.stop();
 }
 

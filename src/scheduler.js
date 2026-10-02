@@ -85,6 +85,14 @@ export function createScheduler({ log = console.log } = {}) {
       job.lastOk = new Date();
       job.lastError = null;
       job.lastDetail = text;
+      /* "consecutive" has to mean consecutive. Without this the counter only
+         ever climbs, so one bad run marks a job FAILING on the admin panel for
+         ever while every run since has succeeded. That is what Matthew saw on
+         2 October: tardies and reviews both failed on 30 September, both
+         recovered within the hour, and both still showed red two days later
+         with no error underneath, because lastError is cleared here and the
+         badge reads this counter. A panel that cries wolf is worse than none. */
+      job.failures = 0;
       if (runId) {
         await query(`update sync_runs set ended_at = now(), ok = true, detail = $2 where id = $1`,
           [runId, text.slice(0, 1000)]).catch(() => {});
