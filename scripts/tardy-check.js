@@ -65,8 +65,9 @@ console.log("\n3. TURNING IT INTO POINTS");
 const truck = parseLogGrid(TRUCK, { kind: "truck", year: 2026, month: 9 });
 const { events, unmatched } = toEvents([...late.entries, ...truck.entries], ROSTER);
 const pts = id => events.filter(e => e.employee_id === id).reduce((a, e) => a + e.delta, 0);
-check("truck -1, call off -2, same day call off -3",
-  PENALTY.truck === -1 && PENALTY.calloff === -2 && PENALTY.samedaycalloff === -3);
+check("truck -1, call off -2, same day call off -3, no call no show -10",
+  PENALTY.truck === -1 && PENALTY.calloff === -2 && PENALTY.samedaycalloff === -3
+  && PENALTY.nocallnoshow === -10);
 
 console.log("\n3a. THE MINUTE BANDS, FROM 1 OCTOBER");
 const oct = "2026-10-05";
@@ -100,6 +101,32 @@ check("a same day call off beats a plain one written in the other tab",
   && events.some(e => e.employee_id === "dana" && e.type === "samedaycalloff"));
 check("someone not on the roster is reported, not dropped silently", unmatched.includes("Nobody Here"));
 check("reasons say where they came from", events.every(e => /tardy log/.test(e.reason)), events[0].reason);
+
+/* Andrew added this on 2 October: lateness not communicated within 30 minutes
+   of shift start. It is the only thing on the sheet that costs double digits,
+   so it has to be read exactly and it must never be mistaken for a call off. */
+console.log("\n3d. NO CALL NO SHOW");
+{
+  const ncns = w => parseLogGrid(csv(`Employee,9/1,9/2\nSam,${w},`),
+    { kind: "late", year: 2026, month: 9 }).entries[0];
+  check("\"NO CALL NO SHOW\" is read as one", ncns("NO CALL NO SHOW")?.type === "nocallnoshow");
+  check("\"No Call/No Show\" too", ncns("No Call/No Show")?.type === "nocallnoshow");
+  check("\"no-call-no-show\" too", ncns("no-call-no-show")?.type === "nocallnoshow");
+  check("\"NCNS\" too", ncns("NCNS")?.type === "nocallnoshow");
+  check("it is never mistaken for a plain call off", ncns("NO CALL NO SHOW")?.type !== "calloff");
+  check("a plain call off is still a call off", ncns("CALL OFF")?.type === "calloff");
+
+  /* One morning, one absence. Written both ways across the two tabs it must
+     cost 10, not 12. */
+  const both = toEvents([
+    { name: "Sam", date: "2026-09-02", type: "calloff" },
+    { name: "Sam", date: "2026-09-02", type: "nocallnoshow" }
+  ], ROSTER);
+  check("the same absence written two ways counts once",
+    both.events.length === 1, `${both.events.length} event(s)`);
+  check("and the worse wording wins", both.events[0].delta === -10, `${both.events[0].delta}`);
+  check("the reason names it", /no call no show/i.test(both.events[0].reason), both.events[0].reason);
+}
 
 console.log("\n4. REFUSING WHAT IT CAN'T READ");
 const renamed = parseLogGrid(csv("Name,9/1,9/2\nSam,3,"), { kind: "late", year: 2026, month: 9 });

@@ -41,19 +41,35 @@
   .card h2 span{color:var(--ink-3);font-size:20px;letter-spacing:.08em;margin-left:14px}
 
   /* points */
-  .rows{display:flex;flex-direction:column;flex:1;min-height:0}
+  /* Equal slices worked while every line fitted on one row. Adding the +3 and
+     the −10 took it to nineteen, and the two-line rules then overflowed their
+     slice and printed on top of the row below — the complaint rule ran straight
+     through No Call No Show. So these size to their content now and share the
+     slack, the same way the rules column already did. */
+  .rows{display:flex;flex-direction:column;flex:1;min-height:0;
+    justify-content:space-between}
   .r{display:grid;grid-template-columns:1fr 92px;align-items:center;gap:16px;
-    flex:1 1 0;min-height:0;border-top:1px solid var(--seam);padding:0 2px}
+    flex:0 0 auto;border-top:1px solid var(--seam);padding:3px 2px}
   .r:first-child{border-top:0}
-  .r .t{font-size:22px;line-height:1.2;color:var(--ink)}
-  .r .t b{color:var(--ink-3);font-weight:500;font-size:19px}
-  .r .p{font-family:var(--cond);font-weight:700;font-size:30px;text-align:center;
-    border-radius:8px;padding:3px 0;font-variant-numeric:tabular-nums}
+  .r .t{font-size:20px;line-height:1.25;color:var(--ink)}
+  .r .t b{color:var(--ink-3);font-weight:500;font-size:17px}
+  /* The number sets the height of every row, not the words beside it — which
+     is why nineteen rows wanted 976px in an 805px column and the bottom three
+     fell off the card. Default leading on a 30px line box was most of it, so
+     the fix is line-height, not a smaller number: the figure stays big enough
+     to read from across the break room. */
+  .r .p{font-family:var(--cond);font-weight:700;font-size:28px;line-height:1;
+    text-align:center;border-radius:8px;padding:2px 0;
+    font-variant-numeric:tabular-nums}
   .plus  .p{color:#0f0d0b;background:var(--good)}
   .one   .p{color:var(--ink);background:var(--panel-2)}
   .two   .p{color:#0f0d0b;background:var(--warn)}
   .three .p{color:#fff;background:#b3452a}
   .five  .p{color:#fff;background:var(--crit)}
+  /* Ten is its own colour on purpose. No call no show costs double the worst
+     thing above it, and a crew reading this from across the room should see
+     that before they read the number. */
+  .ten   .p{color:#fff;background:#8f1d1d;box-shadow:inset 0 0 0 2px var(--crit)}
   .plus .t{color:#8fe08f}
 
   /* rules */
@@ -93,6 +109,7 @@
     <div class="card">
       <h2>Performance Points <span>What earns and what costs</span></h2>
       <div class="rows">
+        <div class="r plus"><div class="t">Most Job Photos Submitted</div><div class="p">+3</div></div>
         <div class="r plus"><div class="t">Came In On Day Off</div><div class="p">+1</div></div>
         <div class="r one"><div class="t">Policy Violation</div><div class="p">&minus;1</div></div>
         <div class="r one"><div class="t">Up to 30 Mins Late</div><div class="p">&minus;1</div></div>
@@ -110,6 +127,7 @@
         <div class="r three"><div class="t">Same Day Call Off</div><div class="p">&minus;3</div></div>
         <div class="r three"><div class="t">Claim</div><div class="p">&minus;3</div></div>
         <div class="r five"><div class="t">Customer Complaint &ndash; Specifically Names You <b>(Slow, Complaining, Attitude, Cussing, Excessive Breaks) &middot; can be in addition to a claim</b></div><div class="p">&minus;5</div></div>
+        <div class="r ten"><div class="t">No Call No Show <b>(When tardiness not communicated within 30 minutes after shift start time)</b></div><div class="p">&minus;10</div></div>
       </div>
     </div>
 

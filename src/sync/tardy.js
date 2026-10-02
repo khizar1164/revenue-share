@@ -9,6 +9,8 @@
  *   truck not out   -1   each name listed for that day
  *   call off        -2
  *   same day call off -3
+ *   no call no show  -10 Andrew, 2 October 2026: lateness not communicated
+ *                        within 30 minutes of shift start
  *
  * Andrew graded lateness on 28 September 2026. Until then anything Matthew
  * logged cost a flat -1, so a minute late and an hour late were the same
@@ -32,7 +34,7 @@ import { matchableRoster, ignoredNames } from "../roster.js";
 import { nameMatcher } from "./hours.js";
 
 export const TAG = "tardy-log";
-export const PENALTY = { truck: -1, calloff: -2, samedaycalloff: -3 };
+export const PENALTY = { truck: -1, calloff: -2, samedaycalloff: -3, nocallnoshow: -10 };
 
 /* The bands start on 1 October 2026, at Andrew's word. This date matters more
    than it looks: the tardy log is rebuilt from Matthew's sheet on every run,
@@ -106,8 +108,14 @@ export function parseLogGrid(grid, { kind, year, month }) {
       const v = text(row[i]);
       if (!v || v === "0") continue;
       const date = `${year}-${pad(month)}-${pad(day)}`;
-      /* "same day" has to be looked for first — it contains "call off" */
-      if (/same\s*-?\s*day.*call\s*-?\s*off/i.test(v)) {
+      /* Order matters here. "Same day" has to be looked for before "call off"
+         because it contains it, and no call no show has to be looked for
+         before both: "no call / no show" does not contain "call off" today,
+         but it is one careless abbreviation away from doing so, and silently
+         scoring a -10 as a -2 is the kind of mistake nobody would catch. */
+      if (/no\s*[-\/,]?\s*call\s*[-\/,]?\s*no\s*[-\/,]?\s*show|^ncns$/i.test(v)) {
+        out.entries.push({ name, date, type: "nocallnoshow" });
+      } else if (/same\s*-?\s*day.*call\s*-?\s*off/i.test(v)) {
         out.entries.push({ name, date, type: "samedaycalloff" });
       } else if (/call\s*-?\s*off/i.test(v)) {
         out.entries.push({ name, date, type: "calloff" });
@@ -128,14 +136,19 @@ export function toEvents(entries, roster) {
 
   /* One absence is one deduction. A call off can appear in both tabs, and the
      same one may be written plainly in one and as a same-day in the other, so
-     they are collected per person per date and the worse wording wins. */
+     they are collected per person per date and the worse wording wins.
+
+     No call no show belongs in here rather than beside it: a man who never
+     turned up is absent once, however many ways that gets written down. If it
+     were counted separately, someone marked a call off in one tab and a no
+     call no show in the other would lose 12 points for one morning. */
   const callOffs = new Map();
 
   for (const e of entries) {
     const who = match(e.name);
     if (!who) { unmatched.add(e.name); continue; }
 
-    if (e.type === "calloff" || e.type === "samedaycalloff") {
+    if (e.type === "calloff" || e.type === "samedaycalloff" || e.type === "nocallnoshow") {
       const key  = `${who.id}|${e.date}`;
       const seen = callOffs.get(key);
       if (!seen || PENALTY[e.type] < PENALTY[seen.type]) {
@@ -166,7 +179,8 @@ export function toEvents(entries, roster) {
       occurred_on: c.date,
       type:        c.type,
       delta:       PENALTY[c.type],
-      reason: c.type === "samedaycalloff" ? "Same day call off (tardy log)"
+      reason: c.type === "nocallnoshow"   ? "No call no show (tardy log)"
+            : c.type === "samedaycalloff" ? "Same day call off (tardy log)"
             :                               "Call off (tardy log)"
     });
   }
@@ -197,6 +211,7 @@ export function summarise({ period, events, unmatched, pastCrew = [], warnings }
   let s = `${MONTHS[m - 1][0].toUpperCase() + MONTHS[m - 1].slice(1)}: ` +
           `${n("late")} late, ${n("truck")} trucks late, ${n("calloff")} call off${n("calloff") === 1 ? "" : "s"}` +
           (n("samedaycalloff") ? `, ${n("samedaycalloff")} same day` : "") +
+          (n("nocallnoshow") ? `, ${n("nocallnoshow")} no call no show` : "") +
           ` → ${total} points across ${people} ${people === 1 ? "person" : "people"}`;
   if (unmatched.length) s += `; NOT MATCHED: ${unmatched.join(", ")}`;
   if (pastCrew.length) s += `; past crew, no points: ${pastCrew.join(", ")}`;

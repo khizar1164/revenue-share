@@ -269,7 +269,7 @@ Tyler Johnston  44.25"></textarea>
 
     <div class="panel">
       <h2>Points</h2>
-      <p class="dek"><b>Late, truck not out on time and call offs come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in on day off</b>, which is now entered by hand and nothing else can work out: the schedule knows who was on a job, not whose day off it was.</p>
+      <p class="dek"><b>Late, truck not out on time, call offs and no call no shows come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in on day off</b>, which is now entered by hand and nothing else can work out: the schedule knows who was on a job, not whose day off it was.</p>
       <div class="frow">
         <div style="max-width:130px"><label for="ptDate">Date</label><input type="date" id="ptDate"></div>
         <div><label for="ptWho">Who</label><select id="ptWho"></select></div>
@@ -290,6 +290,7 @@ Tyler Johnston  44.25"></textarea>
                  Lost equipment has come off this list. Andrew's rules now make it
                  an individual deduction, which is money off one person, so it
                  belongs in the panel below rather than being a point as well. -->
+            <option value="3">Most job photos submitted (+3)</option>
             <option value="1">Came in on day off (+1)</option>
             <option value="-1">Policy violation (−1)</option>
             <option value="-1">Up to 30 mins late (−1)</option>
@@ -307,6 +308,7 @@ Tyler Johnston  44.25"></textarea>
             <option value="-3">Same day call off (−3)</option>
             <option value="-3">Claim (−3)</option>
             <option value="-5">Customer complaint — specifically names you (−5)</option>
+            <option value="-10">No call no show — tardiness not communicated within 30 minutes of shift start (−10)</option>
           </select>
         </div>
         <button id="ptSave">Add</button>
