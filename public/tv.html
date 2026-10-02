@@ -39,6 +39,15 @@
   .brand em{color:var(--brand);font-style:normal}
   .month{font-family:var(--cond);font-weight:600;font-size:23px;letter-spacing:.18em;
     text-transform:uppercase;color:var(--ink-3);margin-left:20px}
+  /* The board alternates between two months, so the month name alone is no
+     longer enough — from across the room nobody reads it, and last month's
+     closed figures look exactly like this month's live ones. This badge is the
+     thing that tells them apart at a glance. */
+  .final{display:none;font-family:var(--cond);font-weight:700;font-size:19px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--plane);
+    background:var(--brand);border-radius:6px;padding:2px 11px;margin-left:14px;
+    position:relative;top:-3px}
+  .final.on{display:inline-block}
   .right{display:flex;align-items:center;gap:26px}
   .live{display:flex;align-items:center;gap:10px;font-size:18px;color:var(--ink-3)}
   .live i{width:11px;height:11px;border-radius:50%;background:var(--good);display:block;
@@ -158,7 +167,7 @@
   <div class="top">
     <div>
       <span class="brand">Immediate Movers <em>&amp;</em> Storage</span>
-      <span class="month" id="month">&mdash;</span>
+      <span class="month" id="month">&mdash;</span><span class="final" id="final">Final</span>
     </div>
     <div class="right">
       <div class="live" id="live"><i></i><span id="liveText">live</span></div>
@@ -227,6 +236,18 @@
      you may want it still showing the one being closed out. */
   var MONTH = (location.search.match(/[?&]month=(\d{4}-\d{2})/) || [])[1] || "";
   var REFRESH_MS = 60000;
+
+  /* Matthew asked for last month on the wall as well as this one, 2 October.
+     Side by side was the obvious answer and the wrong one: the standings are
+     already shrinking their own rows to fit 17 people across the full width,
+     and half that width is unreadable from across the break room — and the
+     crew grows, it does not shrink. So the board shows one month at a time and
+     swaps between them. Longer on the current month, because that is the one
+     people are working in.
+
+     A pinned ?month= never rotates. Someone who asks for one month means that
+     month, and a screen that wandered off it would be a bug, not a feature. */
+  var SHOW_MS = { current: 25000, previous: 15000 };
   var VERSION = "";
   var $ = function(id){ return document.getElementById(id); };
   var usd = function(n){
@@ -424,24 +445,83 @@
     $("liveText").textContent = text;
   }
 
-  function load(){
-    fetch("/api/board/" + encodeURIComponent(TOKEN) + (MONTH ? "?month=" + MONTH : ""),
-          { cache: "no-store" })
+  /* Last calendar month as YYYY-MM. getMonth() is zero-based, so it is already
+     last month's number once you read it as one-based — January is the only
+     case that has to step back a year. */
+  function prevPeriod(){
+    var n = new Date(), y = n.getFullYear(), m = n.getMonth();
+    if (m === 0) { y -= 1; m = 12; }
+    return y + "-" + (m < 10 ? "0" : "") + m;
+  }
+
+  function fetchBoard(month){
+    return fetch("/api/board/" + encodeURIComponent(TOKEN) + (month ? "?month=" + month : ""),
+                 { cache: "no-store" })
       .then(function(r){
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
-      })
-      .then(function(d){
+      });
+  }
+
+  var view = { current: null, previous: null };
+  var showing = "current";
+  var rotating = false;
+  var swapTimer = null;
+
+  function show(which){
+    var d = view[which];
+    if (!d) return;
+    showing = which;
+    $("final").className = "final" + (which === "previous" ? " on" : "");
+    render(d);
+    fit();
+  }
+
+  function scheduleSwap(){
+    clearTimeout(swapTimer);
+    if (!rotating) return;
+    swapTimer = setTimeout(function(){
+      show(showing === "current" ? "previous" : "current");
+      scheduleSwap();
+    }, SHOW_MS[showing]);
+  }
+
+  function load(){
+    var jobs = [ fetchBoard(MONTH).then(function(d){ view.current = d; return d; }) ];
+    if (!MONTH) {
+      /* A month with no pool is not worth a slot on the wall, and the first
+         month of the programme has nothing before it at all. Either way: fetch
+         it, and if there is nothing there simply stop rotating rather than
+         swapping to an empty board every half minute. */
+      jobs.push(fetchBoard(prevPeriod())
+        .then(function(d){ view.previous = (d && d.pool > 0) ? d : null; })
+        /* One bad request must not pull last month off the wall. The board
+           already keeps the current month's last good figures up when the
+           server blinks, and the same has to apply here — without it a single
+           500 dropped last month, cut its turn short and stopped the cycle
+           until the next refresh a minute later. If last month has never been
+           fetched this is still null and the board simply does not rotate. */
+        .catch(function(){}));
+    }
+
+    Promise.all(jobs)
+      .then(function(res){
+        var d = res[0];
         /* a new deploy means new page code — reload to pick it up */
         if (d.version) {
           if (!VERSION) VERSION = d.version;
           else if (d.version !== VERSION) { location.reload(); return; }
         }
         failures = 0;
-        render(d);
+        var was = rotating;
+        rotating = !MONTH && !!view.previous;
+        if (!rotating) showing = "current";
+        show(showing);
+        /* only (re)arm when the answer changed, so a refresh landing mid-swap
+           does not keep restarting the clock on whichever month is up */
+        if (rotating !== was) scheduleSwap();
         setLive("", "live");
         $("err").style.display = "none";
-        fit();
       })
       .catch(function(e){
         failures++;
