@@ -46,13 +46,24 @@ run never hits SmartMoving or rewrites the sheet.
 ### Checks
 
 ```bash
-npm test            # calculation + API, no external services
+npm test            # the rules: no database, no network, never flaky
+npm run test:db     # gates, year to date and the point log, against the database
 npm run test:live   # admin and report flows against the real database
 ```
 
+`npm test` is the one to run constantly. It covers the calculation, the tardy
+rules, the review rules and the scheduler, and it passes with the database
+switched off entirely — so a red is always a real red.
+
+`npm run test:db` boots a server and talks to whatever `DATABASE_URL` points
+at, which today is production. `log-check` writes there: it creates a point
+event and a claim, dated July so they can never land in a month anyone is paid
+on, and removes them in a `finally`. Until these get a throwaway schema of
+their own, run them deliberately and not on a flaky connection — a dropped
+connection mid-run is the one way they could leave something behind.
+
 Others worth knowing: `scripts/hours-check.js`, `weekly-check.js`,
-`month-tab-check.js`, `scheduler-check.js`, `auth-check.js`,
-`writeback-check.js`.
+`month-tab-check.js`, `auth-check.js`, `writeback-check.js`.
 
 ## Email
 
