@@ -147,7 +147,38 @@ export function impactNarrative(incidents, limit = 4) {
  * sheet says what it costs in points, but it cannot say "your claim cost $550"
  * because the system does not know whose it was.
  */
-export function recordShows(incidents) {
+/**
+ * A documented claim, stated as the record holds it.
+ *
+ * Khizar, 7 October: "it is already documented you already know the claim is
+ * $550 on 28". Correct, and the earlier draft was too cautious: the amount,
+ * the job and the date are all recorded, so they belong on the notice.
+ *
+ * What is not recorded is who caused the damage. The claims table carries an
+ * amount and a job number and no employee, and the three point deduction for
+ * the September claim went to four people. So the sentence names the job and
+ * the amount, and states the person's connection to it as a fact — on the
+ * crew, and point-charged — without ever saying they cost the company that
+ * money. That is the difference between a figure that holds up and one that
+ * gets taken apart.
+ */
+const money = n => "$" + Number(n).toLocaleString("en-US",
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function claimLines(claims = []) {
+  return claims.map(c => {
+    const what = c.reason ? ` for ${String(c.reason).toLowerCase()}` : "";
+    const when = new Date(c.date + "T00:00:00").toLocaleDateString("en-US",
+      { month: "long", day: "numeric", year: "numeric" });
+    const tie = c.onCrew
+      ? "You were on the crew for that job and carry a 3 point deduction for it."
+      : "You carry a 3 point deduction for it.";
+    return `A claim of ${money(c.amount)}${what} is recorded against job ` +
+           `${c.job_number} on ${when}. ${tie}`;
+  });
+}
+
+export function recordShows(incidents, claims = []) {
   const bad = incidents.filter(i => i.delta < 0);
   const out = [];
 
@@ -183,6 +214,7 @@ export function recordShows(incidents) {
     out.push(`${reached.length} incident${reached.length === 1 ? "" : "s"} that reached a customer ` +
       `as a complaint or a claim.`);
   }
+  out.push(...claimLines(claims));
   return out;
 }
 
@@ -268,7 +300,7 @@ export function fill(data) {
     NEXT_ACTION: nextActionText(level),
     IMPACT_ROWS: impactNarrative(data.incidents).map(([reason, text]) =>
       `    <div class="imp"><span class="ik">${esc(reason)}</span><p>${esc(text)}</p></div>`).join("\n"),
-    RECORD_ROWS: recordShows(data.incidents)
+    RECORD_ROWS: recordShows(data.incidents, data.claims)
       .map(t => `    <li>${esc(t)}</li>`).join("\n") || "    <li>No countable pattern in the record.</li>",
     ACTUAL: esc(data.actual ?? ""),
     ACTUAL_CLS: data.actual ? "prefill" : "",
@@ -329,6 +361,8 @@ const EXAMPLES = {
       { date: "2026-10-02", delta: -1, reason: "Truck not restocked" },
       { date: "2026-10-05", delta: -5, reason: "Customer complaint — specifically names you" }
     ],
+    claims: [{ date: "2026-09-27", job_number: "10659", amount: 550,
+                reason: "Floor damage", onCrew: true }],
     prior: "Verbal 28 August about timekeeping. Verbal 19 September after the hour-late start.",
     required: "Be at the shop and ready to work at your scheduled start time, every shift. "
       + "If something goes wrong on a job, tell Matthew the same day rather than letting "
@@ -350,6 +384,10 @@ const EXAMPLES = {
       { date: "2026-10-03", delta: -5,  reason: "Customer complaint — specifically names you" },
       { date: "2026-10-06", delta: -10, reason: "No call no show (tardy log)" }
     ],
+    claims: [{ date: "2026-09-27", job_number: "10659", amount: 550,
+                reason: "Floor damage", onCrew: true },
+              { date: "2026-09-27", job_number: "10659", amount: 140.40,
+                reason: "Cabinet foot broke", onCrew: true }],
     prior: "Written warning issued 19 September 2026 after reaching 15 points. "
       + "Verbal 2 September about calling off without notice.",
     required: "Return from suspension able to be relied on: at the shop on time, every "
