@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Disciplinary Action Notice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap">
+<style>
+  /* Immediate Movers & Storage — Disciplinary Action Notice.
+     Replaces the three-page form Andrew disliked (2 October 2026).
+
+     Printed on US Letter. Rendered with headless Chrome --print-to-pdf, which
+     is also how the system will fill one in per person, so this file is both
+     the design and the template: anything between {{ }} is substituted.
+
+     The legal sentences are copied word for word from the old form and must
+     stay that way. At-will wording and the acknowledgement are the parts that
+     matter if a dismissal is ever challenged, and rewording them to read more
+     nicely is not a designer's decision to make. */
+  :root{
+    --brand:#FF5500;          /* Andrew's official orange */
+    --ink:#000000;
+    --grey:#787576;
+    --rule:#d8d5d0;
+    --wash:#f6f4f1;
+    --head:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --body:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  @page{ size:Letter; margin:14mm 14mm 12mm; }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;color:var(--ink);
+    font-family:var(--body);font-size:10.4pt;line-height:1.45}
+
+  .page{page-break-after:always}
+  .page:last-child{page-break-after:auto}
+
+  /* masthead */
+  .mast{display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:3px solid var(--brand);padding-bottom:7px;margin-bottom:14px}
+  .co{font-family:var(--head);font-weight:700;font-size:13pt;letter-spacing:.02em;
+    text-transform:uppercase}
+  .co em{color:var(--brand);font-style:normal}
+  .doc{font-family:var(--head);font-weight:600;font-size:10pt;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--grey)}
+
+  h2{font-family:var(--head);font-weight:700;font-size:9.5pt;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--brand);margin:15px 0 6px;
+    border-bottom:1px solid var(--rule);padding-bottom:3px}
+  p{margin:0 0 7px}
+  .muted{color:var(--grey)}
+
+  /* the who / when strip */
+  .who{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--rule)}
+  .who div{padding:6px 9px;border-right:1px solid var(--rule)}
+  .who div:last-child{border-right:0}
+  .who .k{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--grey);display:block;margin-bottom:1px}
+  .who .v{font-size:11pt;font-weight:500}
+
+  /* level of action */
+  .levels{display:flex;gap:10px;margin:10px 0 4px}
+  .lvl{flex:1;border:1px solid var(--rule);padding:7px 9px;display:flex;
+    align-items:center;gap:8px}
+  .lvl.on{border-color:var(--brand);background:#fff6f1;border-width:2px;padding:6px 8px}
+  .box{width:12px;height:12px;border:1.6px solid var(--grey);flex:0 0 auto;
+    position:relative;border-radius:2px}
+  .lvl.on .box{border-color:var(--brand);background:var(--brand)}
+  .lvl.on .box::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(43deg)}
+  .lvl b{font-family:var(--head);font-weight:700;font-size:9.5pt}
+  .lvl span{color:var(--grey);font-size:8.6pt}
+
+  /* the points box — the objective trigger, stated plainly */
+  .points{display:grid;grid-template-columns:auto auto auto 1fr;gap:0;
+    border:1px solid var(--rule);background:var(--wash);margin-top:4px}
+  .points div{padding:7px 12px;border-right:1px solid var(--rule)}
+  .points div:last-child{border-right:0}
+  .points .k{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--grey);display:block}
+  .points .n{font-family:var(--head);font-weight:700;font-size:17pt;line-height:1.1}
+  .points .n.bad{color:var(--brand)}
+  .points .note{font-size:8.6pt;color:var(--grey);line-height:1.35;padding-top:9px}
+
+  /* incident table */
+  table{width:100%;border-collapse:collapse;margin-top:3px}
+  th{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--grey);text-align:left;
+    border-bottom:1.5px solid var(--rule);padding:4px 6px}
+  td{padding:4px 6px;border-bottom:1px solid var(--rule);vertical-align:top}
+  td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  td.pts{font-weight:700}
+  tfoot td{border-bottom:0;border-top:1.5px solid var(--ink);font-weight:700}
+
+  /* value callout */
+  .value{border-left:3px solid var(--brand);background:var(--wash);
+    padding:8px 11px;margin-top:4px}
+  .value b{font-family:var(--head);font-weight:700}
+
+  /* write-in areas */
+  .lines{border:1px solid var(--rule);padding:8px 10px;min-height:52px;
+    background:repeating-linear-gradient(transparent,transparent 21px,var(--rule) 21px,var(--rule) 22px)}
+  .lines.tall{min-height:96px}
+  .lines.prefill{background:none;min-height:0;padding:7px 10px}
+
+  .legal{font-size:9pt;color:#222;margin-top:9px}
+  .legal p{margin:0 0 5px}
+
+  /* signatures */
+  .sigs{display:grid;grid-template-columns:1fr 150px;gap:18px 22px;margin-top:16px}
+  .sig{border-bottom:1px solid var(--ink);height:30px}
+  .sigk{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--grey);margin-top:3px}
+
+  /* core values page */
+  .cv-intro{font-size:10.6pt;margin-bottom:12px}
+  .cv{border-top:1px solid var(--rule);padding:9px 0}
+  .cv:first-of-type{border-top:0}
+  .cv h3{font-family:var(--head);font-weight:700;font-size:11.5pt;margin:0 0 3px;
+    color:var(--brand)}
+  .cv p{margin:0;font-size:10.2pt}
+  .cv p em{font-style:normal;font-weight:700;color:var(--ink)}
+
+  .foot{position:running(foot);}
+  .pagefoot{margin-top:14px;border-top:1px solid var(--rule);padding-top:6px;
+    display:flex;justify-content:space-between;font-size:8pt;color:var(--grey)}
+</style>
+</head>
+<body>
+
+<!-- ===================== PAGE 1 — the notice and the facts ================ -->
+<section class="page">
+
+  <div class="mast">
+    <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
+    <div class="doc">Disciplinary Action Notice</div>
+  </div>
+
+  <div class="who">
+    <div><span class="k">Employee</span><span class="v">{{EMPLOYEE_NAME}}</span></div>
+    <div><span class="k">Supervisor</span><span class="v">{{SUPERVISOR}}</span></div>
+    <div><span class="k">Date issued</span><span class="v">{{DATE_ISSUED}}</span></div>
+  </div>
+
+  <h2>Level of action</h2>
+  <div class="levels">
+    <div class="lvl {{LVL_WARNING}}"><span class="box"></span>
+      <div><b>Written Warning</b><br><span>15 points lost in 60 days</span></div></div>
+    <div class="lvl {{LVL_SUSPENSION}}"><span class="box"></span>
+      <div><b>Suspension</b><br><span>30 points &middot; 7 days unpaid</span></div></div>
+    <div class="lvl {{LVL_TERMINATION}}"><span class="box"></span>
+      <div><b>Termination</b><br><span>45 points lost in 60 days</span></div></div>
+  </div>
+
+  <p>This is a warning notice being issued to address performance and/or conduct.
+     You will have an opportunity to review, acknowledge, and correct the issues.</p>
+
+  <h2>Where this stands</h2>
+  <div class="points">
+    <div><span class="k">Points lost</span><span class="n bad">{{POINTS_LOST}}</span></div>
+    <div><span class="k">Threshold</span><span class="n">{{THRESHOLD}}</span></div>
+    <div><span class="k">Points now</span><span class="n">{{POINTS_NOW}}</span></div>
+    <div class="note">Everyone starts each month on 15 points. Discipline is measured
+      on a rolling 60 days, not the calendar month, so this covers
+      {{WINDOW_FROM}} to {{WINDOW_TO}}.</div>
+  </div>
+
+  <h2>The incidents</h2>
+  <table>
+    <thead><tr><th style="width:104px">Date</th><th>What happened</th><th class="n" style="width:52px">Points</th></tr></thead>
+    <tbody>
+      {{INCIDENT_ROWS}}
+    </tbody>
+    <tfoot><tr><td colspan="2">Total lost in this period</td><td class="n">{{POINTS_LOST_SIGNED}}</td></tr></tfoot>
+  </table>
+
+  <h2>The standard that was not met</h2>
+  <div class="value">
+    <p><b>{{VALUE_NAME}}</b> &mdash; {{VALUE_TEXT}}</p>
+  </div>
+  <p class="muted" style="font-size:9pt;margin-top:6px">Each item above is listed on the
+     Performance Points sheet posted in the break room.</p>
+
+  <h2>Impact on the business, the crew or our customers</h2>
+  <div class="lines {{IMPACT_CLS}}">{{IMPACT}}</div>
+
+  <div class="pagefoot">
+    <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 1 of 3</span>
+  </div>
+</section>
+
+<!-- ===================== PAGE 2 — what happens next ====================== -->
+<section class="page">
+
+  <div class="mast">
+    <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
+    <div class="doc">Disciplinary Action Notice</div>
+  </div>
+
+  <h2>Previous discussions or warnings on this subject</h2>
+  <div class="lines {{PRIOR_CLS}}">{{PRIOR}}</div>
+
+  <h2>What must change</h2>
+  <div class="lines tall {{REQUIRED_CLS}}">{{REQUIRED}}</div>
+
+  <div class="legal">
+    <p>Failure to show immediate and sustained improvement will result in further
+       disciplinary action up to and including termination.</p>
+    <p>Nothing in this notice creates any guarantee of employment for a specific
+       period of time or in any way modifies your at-will employment relationship.</p>
+  </div>
+
+  <h2>Additional comments &mdash; supervisor</h2>
+  <div class="lines {{COMMENTS_CLS}}">{{SUPERVISOR_COMMENTS}}</div>
+
+  <h2>Employee comments</h2>
+  <div class="lines tall"></div>
+
+  <h2>Acknowledgement</h2>
+  <p style="font-size:9.4pt">I acknowledge that my supervisor has discussed the items in
+     this warning notice with me and I have a right to respond in writing to the issues
+     outlined above. I have read and understand this warning and acknowledge that I have
+     received a copy of it. I understand that I remain an employee-at-will.</p>
+
+  <div class="sigs">
+    <div><div class="sig"></div><div class="sigk">Employee signature</div></div>
+    <div><div class="sig"></div><div class="sigk">Date</div></div>
+    <div><div class="sig"></div><div class="sigk">Supervisor signature</div></div>
+    <div><div class="sig"></div><div class="sigk">Date</div></div>
+  </div>
+
+  <div class="pagefoot">
+    <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 2 of 3</span>
+  </div>
+</section>
+
+<!-- ===================== PAGE 3 — the copy they keep ===================== -->
+<section class="page">
+
+  <div class="mast">
+    <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
+    <div class="doc">Our Core Values</div>
+  </div>
+
+  <p class="cv-intro">These are the standards we hold ourselves to, on every job and with
+     every customer. This page is yours to keep.</p>
+
+  <div class="cv"><h3>Integrity</h3>
+    <p>We do the right thing, even when no one is watching. We maintain honesty,
+       professionalism, and <em>the right attitude</em> in everything we do.</p></div>
+
+  <div class="cv"><h3>Accountability</h3>
+    <p>We take ownership of every relocation project assigned to us and accept
+       responsibility for our actions and decisions. When we make a mistake,
+       <em>we own it, make it right, and learn from it</em>.</p></div>
+
+  <div class="cv"><h3>Boldness</h3>
+    <p>We face challenges and obstacles with <em>courage, confidence, and determination</em>.
+       We are not afraid to take initiative, solve problems, or make difficult decisions
+       when necessary.</p></div>
+
+  <div class="cv"><h3>Loyalty</h3>
+    <p>We value <em>trust, commitment, and dedication</em> in our relationships with our
+       team, customers, and company. We work to create security, solidarity, and lasting
+       connections.</p></div>
+
+  <div class="cv"><h3>Teamwork</h3>
+    <p>We value <em>cooperation, communication, and unity</em>. We support one another and
+       recognize that our collective effort is stronger than any one individual.
+       <em>We achieve more together.</em></p></div>
+
+  <div class="cv"><h3>Excellence</h3>
+    <p>We strive to do our best on every job, every day. We maintain <em>high standards,
+       continue to improve, and look for ways to become better</em> at what we do.</p></div>
+
+  <div class="pagefoot">
+    <span>Immediate Movers &amp; Storage &middot; immediatemoversnwi.com</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 3 of 3</span>
+  </div>
+</section>
+
+</body>
+</html>
