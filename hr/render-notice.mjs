@@ -71,74 +71,63 @@ export function valueFor(incidents) {
   return ruleValue(bad.find(i => i.delta === worst).reason);
 }
 
-/* What kind of thing went wrong. Drives the impact wording below. */
-const CATEGORY = [
-  [/no call no show|call off/i,                        "absence"],
-  [/claim|complaint/i,                                 "customer"],
-  [/late|not out by shop|truck not out/i,              "lateness"],
-  [/vap|smok|policy violation/i,                       "conduct"],
-  [/restock|cleanliness|pads|equipment|walkthrough|material|fuel|inspection/i, "truck"]
+/* Why each violation matters, in operational terms.
+ *
+ * Andrew's own wording, from the planning thread he sent on 6 October, lightly
+ * trimmed to fit a form. Keeping his words matters: this is the paragraph the
+ * employee reads, and he is the one who has to stand behind it.
+ *
+ * Keyed to the Performance Points sheet. First match wins, so the specific
+ * patterns sit above the general ones.
+ */
+export const IMPACT_LIBRARY = [
+  [/no call no show/i, "No call no show creates one of the greatest scheduling disruptions, because management cannot plan around an absence they do not know about. Dispatch waits, tries to make contact, then has to reorganise crews on the spot. The uncertainty affects coworkers, customers, labour cost and management time all at once."],
+  [/same.?day call off/i, "A same-day absence leaves almost no opportunity to replace you. Crews go out understaffed, jobs take longer, coworkers are asked to work harder or later, and customers wait. It can also mean overtime, or pulling someone off another assignment."],
+  [/call off/i, "Calling off without notice leaves the day short-handed. Jobs take longer, coworkers carry the heavier end, and management has to rearrange crews that were built around expected staffing."],
+  [/61\+|61 ?\+|61 or more/i, "At this point management may have to restructure the day entirely. Trucks, crews and customers are scheduled around expected staffing, so an extended absence affects numerous employees and customers rather than only the person who is late."],
+  [/31 to 60/i, "A delay of this length can require dispatch to hold an entire crew, replace you, rearrange assignments or call the customer about a late arrival. It increases payroll expense while reducing productive hours, and can put later jobs on the schedule at risk."],
+  [/up to 30 mins late|late —|late -/i, "Even a short delay can stop a crew leaving the shop on time. Movers work as a team, so one person being late leaves several people waiting while the customer's arrival window keeps running. That delay carries into every job scheduled afterwards and creates extra labour cost, rushed conditions and customer dissatisfaction."],
+  [/not out by shop|truck not out/i, "The scheduled departure time exists so the crew can reach the customer inside the promised window. Delaying departure affects not only the first customer but potentially every customer that truck is booked to see that day."],
+  [/fuel/i, "Fuelling is part of vehicle readiness. An avoidable stop with adequate fuel already in the tank delays the whole crew, and the company is paying several people while the truck is not moving towards a job that earns anything."],
+  [/restock/i, "The next crew may not discover missing materials until they are ready to leave, or worse, until they arrive at the job. That means unnecessary trips, delays, an inability to protect the customer's belongings properly, and friction between crews."],
+  [/pads|equipment\/pads|organiz/i, "Poor organisation wastes time at the start of every job, makes equipment harder to account for, increases the chance of something going missing, and puts the work onto whoever uses the truck next."],
+  [/cleanliness/i, "The truck is part of the customer's impression of this company. A dirty or poorly kept truck undermines their confidence before the move has even started, and forces somebody else to put right what should already have been done."],
+  [/material|not removed from truck/i, "Equipment that is not returned properly is unavailable to another truck or crew. People end up searching for supplies, buying replacements, or going out to a job inadequately equipped."],
+  [/walkthrough|inspection/i, "The walkthrough protects the customer, you, and the company. Missing existing damage, access problems, difficult items or floor and wall conditions is what creates arguments later about who was responsible, and it increases our exposure to claims."],
+  [/vap|smok/i, "Customers are judging professionalism for the whole move. Smoking or vaping where a customer can see it affects their opinion of you and of the whole company, and can lead to complaints, poor reviews, lost referrals, or worry about smoke near their belongings."],
+  [/specifically names you/i, "When a customer names an individual, their concern was tied directly to that person's conduct or performance. A complaint takes management time to investigate and resolve, and can end in discounts, refunds, lost referrals, negative reviews or a claim."],
+  [/complaint/i, "A complaint takes management time to investigate and resolve, and can end in discounts, refunds, lost referrals, negative reviews, chargebacks or claims."],
+  [/claim/i, "Damage has direct financial consequences through repair, replacement, claims administration, insurance exposure and management time. It also affects how far the customer trusts us, and whether they recommend us or come back."],
+  [/policy violation/i, "Policies set consistent expectations for safety, service, accountability and fairness. When they are disregarded it creates inconsistency, and it tells coworkers that the standards are optional."]
 ];
-const categoriesOf = incidents => new Set(incidents
-  .filter(i => i.delta < 0)
-  .map(i => (CATEGORY.find(([re]) => re.test(i.reason)) ?? [, "truck"])[1]));
+
+const impactFor = reason => (IMPACT_LIBRARY.find(([re]) => re.test(reason)) ?? [, null])[1];
 
 /**
- * The impact section, built from what actually happened.
+ * The impact section.
  *
- * Andrew, 2 October: "I don't feel like it explains the true depth. Financially,
- * Company Culture, Customer impression, Scheduling... one's actions can cause a
- * domino effect across the whole day."
+ * Two halves, and the split is the whole point. Andrew, 6 October: "I wouldn't
+ * have AI automatically tell an employee 'you cost the company $500' unless
+ * that is actually documented."
  *
- * So it is four named dimensions rather than one vague line, and the wording
- * follows the incidents: a letter about truck condition should not lecture
- * somebody about missed shifts. Matthew can still edit any of it before he
- * sits down with the person — these are a starting point, not the last word.
- *
- * The financial line for a claim is the literal mechanism, not a figure of
- * speech: claims are deducted from the pool before it is divided, so they come
- * out of what every mover on the board is paid. September carried two, worth
- * $690.40 off the pool.
+ * So the system writes only the part it can stand behind — why this kind of
+ * thing matters, in general, which is teaching rather than accusation. What
+ * actually happened on the day is left for Matthew to fill in, because he is
+ * the one who knows whether the truck left thirty minutes late and who was
+ * stood waiting for it. A form that invented those details would be worse
+ * than one that left them blank.
  */
-export function impactRows(incidents) {
-  const c = categoriesOf(incidents);
-  const rows = [];
-  const add = (k, p) => rows.push([k, p]);
-
-  if (c.has("lateness") || c.has("absence")) {
-    add("Scheduling", "A crew cannot leave the shop until everyone is there. One late start "
-      + "pushes the first job back and every job behind it moves with it, so a delay at "
-      + "seven in the morning is still being felt at the last job of the day.");
-  } else if (c.has("truck")) {
-    add("Scheduling", "A truck that has to be restocked, cleaned or sorted before it can "
-      + "leave holds the whole crew at the shop, and that time comes out of the job.");
+export function impactNarrative(incidents, limit = 4) {
+  const bad = incidents.filter(i => i.delta < 0)
+    .sort((a, b) => a.delta - b.delta);          // worst first
+  const seen = new Set(), rows = [];
+  for (const i of bad) {
+    const text = impactFor(i.reason);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    rows.push([i.reason, text]);
+    if (rows.length >= limit) break;
   }
-
-  if (c.has("customer")) {
-    add("Customers", "Customers tell each other and they tell Google. A complaint or a claim "
-      + "costs us the review, the repeat booking and the referrals that would have followed "
-      + "it, long after the job itself is forgotten.");
-  } else if (c.has("conduct")) {
-    add("Customers", "What a customer sees in their driveway is who we are to them. Anything "
-      + "unprofessional in front of them undoes the work the rest of the crew has just done.");
-  } else {
-    add("Customers", "A customer who was given a window and is still waiting has already "
-      + "formed an opinion of us before the first box is carried.");
-  }
-
-  add("The crew", c.has("absence")
-    ? "When someone does not turn up the work does not disappear, it lands on the people who "
-      + "did. They carry the heavier end all day, and they notice who left them to it."
-    : "Standards hold because everyone keeps them. Every exception asks the people who did it "
-      + "properly why they bothered, and that is how a good crew stops being one.");
-
-  add("Financial", c.has("customer")
-    ? "Claims are deducted from the revenue share pool before it is divided, so this does not "
-      + "only cost the company. It comes out of what every mover on the board is paid that "
-      + "month, including the people who had nothing to do with it."
-    : "Hours spent waiting at the shop or putting right what should already have been right "
-      + "are paid for and earn nothing. That is money the pool never sees.");
-
   return rows;
 }
 
@@ -195,8 +184,10 @@ export function fill(data) {
     LVL_SUSPENSION:  level === "suspension"  ? "on" : "",
     LVL_TERMINATION: level === "termination" ? "on" : "",
     NEXT_ACTION: nextActionText(level),
-    IMPACT_ROWS: impactRows(data.incidents).map(([k, t]) =>
-      `    <div class="imp"><span class="ik">${k}</span><p>${esc(t)}</p></div>`).join("\n"),
+    IMPACT_ROWS: impactNarrative(data.incidents).map(([reason, text]) =>
+      `    <div class="imp"><span class="ik">${esc(reason)}</span><p>${esc(text)}</p></div>`).join("\n"),
+    ACTUAL: esc(data.actual ?? ""),
+    ACTUAL_CLS: data.actual ? "prefill" : "",
     POINTS_LOST: String(Math.abs(lost)),
     POINTS_LOST_SIGNED: "−" + String(Math.abs(lost)),
     /* When a threshold has been crossed the box names that one, not the one
