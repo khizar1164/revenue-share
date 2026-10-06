@@ -30,37 +30,37 @@
   @page{ size:Letter; margin:14mm 14mm 12mm; }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff;color:var(--ink);
-    font-family:var(--body);font-size:10.4pt;line-height:1.45}
+    font-family:var(--body);font-size:11pt;line-height:1.5}
 
   .page{page-break-after:always}
   .page:last-child{page-break-after:auto}
 
   /* masthead */
   .mast{display:flex;justify-content:space-between;align-items:flex-end;
-    border-bottom:3px solid var(--brand);padding-bottom:6px;margin-bottom:10px}
+    border-bottom:3px solid var(--brand);padding-bottom:8px;margin-bottom:16px}
   .co{font-family:var(--head);font-weight:700;font-size:13pt;letter-spacing:.02em;
     text-transform:uppercase}
   .co em{color:var(--brand);font-style:normal}
   .doc{font-family:var(--head);font-weight:600;font-size:10pt;letter-spacing:.14em;
     text-transform:uppercase;color:var(--grey)}
 
-  h2{font-family:var(--head);font-weight:700;font-size:9.5pt;letter-spacing:.11em;
-    text-transform:uppercase;color:var(--brand);margin:8px 0 4px;
+  h2{font-family:var(--head);font-weight:700;font-size:10.2pt;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--brand);margin:17px 0 7px;
     border-bottom:1px solid var(--rule);padding-bottom:3px}
-  p{margin:0 0 5px}
+  p{margin:0 0 8px}
   .muted{color:var(--grey)}
 
   /* the who / when strip */
   .who{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--rule)}
-  .who div{padding:5px 9px;border-right:1px solid var(--rule)}
+  .who div{padding:9px 11px;border-right:1px solid var(--rule)}
   .who div:last-child{border-right:0}
   .who .k{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);display:block;margin-bottom:1px}
-  .who .v{font-size:11pt;font-weight:500}
+  .who .v{font-size:11.6pt;font-weight:500}
 
   /* level of action */
-  .levels{display:flex;gap:10px;margin:8px 0 3px}
-  .lvl{flex:1;border:1px solid var(--rule);padding:5px 9px;display:flex;
+  .levels{display:flex;gap:11px;margin:11px 0 6px}
+  .lvl{flex:1;border:1px solid var(--rule);padding:9px 11px;display:flex;
     align-items:center;gap:8px}
   .lvl.on{border-color:var(--brand);background:#fff6f1;border-width:2px;padding:6px 8px}
   .box{width:12px;height:12px;border:1.6px solid var(--grey);flex:0 0 auto;
@@ -74,7 +74,7 @@
   /* the points box — the objective trigger, stated plainly */
   .points{display:grid;grid-template-columns:auto auto auto 1fr;gap:0;
     border:1px solid var(--rule);background:var(--wash);margin-top:4px}
-  .points div{padding:5px 12px;border-right:1px solid var(--rule)}
+  .points div{padding:9px 14px;border-right:1px solid var(--rule)}
   .points div:last-child{border-right:0}
   .points .k{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);display:block}
@@ -84,56 +84,57 @@
 
   /* what happens next — Andrew, 2 October: the notice has to say where this
      goes if nothing changes, in words, not just a points count */
-  .next{border:2px solid var(--brand);background:#fff6f1;padding:6px 11px;margin-top:6px}
+  .next{border:2px solid var(--brand);background:#fff6f1;padding:10px 13px;margin-top:10px}
   .next .k{font-family:var(--head);font-weight:700;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--brand);display:block;margin-bottom:2px}
-  .next p{margin:0;font-size:10pt}
+  .next p{margin:0;font-size:10.4pt;line-height:1.45}
 
   /* impact, broken out so the real cost is visible rather than one vague line */
   .impact{border:1px solid var(--rule)}
-  .imp{border-top:1px solid var(--rule);padding:6px 10px}
+  .imp{border-top:1px solid var(--rule);padding:10px 13px}
   .imp:first-child{border-top:0}
   .ik{font-family:var(--head);font-weight:700;font-size:8.6pt;color:var(--ink);
     display:block;margin-bottom:1px}
-  .imp p{margin:0;font-size:9.4pt;line-height:1.36;color:#1a1a1a}
+  .imp p{margin:0;font-size:10pt;line-height:1.5;color:#1a1a1a}
   .lede{font-size:9.8pt;margin-bottom:6px}
   .hint{font-size:8.4pt;color:var(--grey);margin:-2px 0 4px}
   .record{margin:0 0 4px;padding-left:17px}
-  .record li{font-size:9.8pt;line-height:1.4;margin-bottom:1px}
+  .record li{font-size:10.4pt;line-height:1.5;margin-bottom:4px}
 
   /* incident table */
   table{width:100%;border-collapse:collapse;margin-top:3px}
-  th{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
+  th{font-family:var(--head);font-weight:600;font-size:7.8pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);text-align:left;
-    border-bottom:1.5px solid var(--rule);padding:4px 6px}
-  td{padding:2px 6px;border-bottom:1px solid var(--rule);vertical-align:top}
+    border-bottom:1.5px solid var(--rule);padding:6px 7px}
+  td{padding:6px 7px;border-bottom:1px solid var(--rule);vertical-align:top}
+  td:first-child{white-space:nowrap}
   td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   td.pts{font-weight:700}
   tfoot td{border-bottom:0;border-top:1.5px solid var(--ink);font-weight:700}
 
   /* value callout */
   .value{border-left:3px solid var(--brand);background:var(--wash);
-    padding:6px 11px;margin-top:4px}
+    padding:10px 13px;margin-top:6px}
   .value b{font-family:var(--head);font-weight:700}
-  .policy{border-left:3px solid var(--grey);background:var(--wash);padding:5px 11px;margin-top:4px}
+  .policy{border-left:3px solid var(--grey);background:var(--wash);padding:10px 13px;margin-top:6px}
   .policy .k{font-family:var(--head);font-weight:700;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);display:block;margin-bottom:1px}
   .policy p{margin:0;font-size:9.6pt}
-  .polq{color:#2a2a2a;font-size:8.6pt;line-height:1.32;margin-top:2px!important}
+  .polq{color:#2a2a2a;font-size:9.6pt;line-height:1.45;margin-top:5px!important}
 
   /* write-in areas */
-  .lines{border:1px solid var(--rule);padding:5px 10px;min-height:30px;
+  .lines{border:1px solid var(--rule);padding:9px 12px;min-height:46px;
     background:repeating-linear-gradient(transparent,transparent 21px,var(--rule) 21px,var(--rule) 22px)}
-  .lines.tall{min-height:48px}
-  .lines.three{min-height:68px}
+  .lines.tall{min-height:70px}
+  .lines.three{min-height:86px}
   .lines.prefill{background:none;min-height:0;padding:7px 10px}
 
-  .legal{font-size:8.8pt;color:#222;margin-top:7px}
-  .legal p{margin:0 0 5px}
+  .legal{font-size:9.6pt;color:#222;margin-top:12px;line-height:1.45}
+  .legal p{margin:0 0 8px}
 
   /* signatures */
-  .sigs{display:grid;grid-template-columns:1fr 150px;gap:12px 22px;margin-top:11px}
-  .sig{border-bottom:1px solid var(--ink);height:24px}
+  .sigs{display:grid;grid-template-columns:1fr 150px;gap:20px 24px;margin-top:20px}
+  .sig{border-bottom:1px solid var(--ink);height:32px}
   .sigk{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);margin-top:3px}
 
@@ -147,7 +148,7 @@
   .cv p em{font-style:normal;font-weight:700;color:var(--ink)}
 
   .foot{position:running(foot);}
-  .pagefoot{margin-top:9px;border-top:1px solid var(--rule);padding-top:5px;
+  .pagefoot{margin-top:16px;border-top:1px solid var(--rule);padding-top:7px;
     display:flex;justify-content:space-between;font-size:8pt;color:var(--grey)}
 </style>
 </head>
@@ -197,7 +198,7 @@
 
   <h2>The incidents</h2>
   <table>
-    <thead><tr><th style="width:104px">Date</th><th>What happened</th><th class="n" style="width:52px">Points</th></tr></thead>
+    <thead><tr><th style="width:124px">Date</th><th>What happened</th><th class="n" style="width:52px">Points</th></tr></thead>
     <tbody>
       {{INCIDENT_ROWS}}
     </tbody>
