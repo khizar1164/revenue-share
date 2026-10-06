@@ -117,7 +117,7 @@ const impactFor = reason => (IMPACT_LIBRARY.find(([re]) => re.test(reason)) ?? [
  * stood waiting for it. A form that invented those details would be worse
  * than one that left them blank.
  */
-export function impactNarrative(incidents, limit = 4) {
+export function impactNarrative(incidents, limit = 3) {
   const bad = incidents.filter(i => i.delta < 0)
     .sort((a, b) => a.delta - b.delta);          // worst first
   const seen = new Set(), rows = [];
@@ -262,6 +262,37 @@ const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&
 const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
   { month: "short", day: "numeric", year: "numeric" });
 
+/**
+ * The incidents table.
+ *
+ * Fifteen dated lines is a page on its own, which is what pushed Jayson's
+ * notice to five. Past six incidents the rows run in two columns instead, so
+ * the list takes half the height at the same type size. Below that it stays a
+ * single column, where splitting would just look like padding.
+ *
+ * Six, not ten: nine rows in one column turned out to be taller than fifteen
+ * in two, which is how an eight-incident notice ran longer than Jayson's.
+ */
+function incidentTable(incidents, lostSigned) {
+  const row = i =>
+    `<tr><td>${day(i.date)}</td><td>${esc(i.reason)}</td>` +
+    `<td class="n pts">${i.delta > 0 ? "+" : "−"}${Math.abs(i.delta)}</td></tr>`;
+  const head = '<thead><tr><th style="width:110px">Date</th><th>What happened</th>' +
+               '<th class="n" style="width:46px">Pts</th></tr></thead>';
+  const table = rows => `<table>${head}<tbody>${rows.map(row).join("")}</tbody></table>`;
+
+  if (incidents.length <= 6) {
+    return "  " + table(incidents).replace("</table>",
+      `<tfoot><tr><td colspan="2">Total lost in this period</td>` +
+      `<td class="n">${lostSigned}</td></tr></tfoot></table>`);
+  }
+  const half = Math.ceil(incidents.length / 2);
+  return `  <div class="cols2">${table(incidents.slice(0, half))}` +
+         `${table(incidents.slice(half))}</div>
+` +
+         `  <div class="ttot"><span>Total lost in this period</span><span>${lostSigned}</span></div>`;
+}
+
 export function fill(data) {
   const html = readFileSync(TEMPLATE, "utf8");
   const [vName, vText] = VALUES[data.value] ?? VALUES.accountability;
@@ -315,7 +346,7 @@ export function fill(data) {
     POINTS_NOW: String(data.pointsNow),
     WINDOW_FROM: day(data.windowFrom),
     WINDOW_TO: day(data.windowTo),
-    INCIDENT_ROWS: rows,
+    INCIDENT_TABLE: incidentTable(data.incidents, "−" + String(Math.abs(lost))),
     POLICY_REF: esc(policyFor(data.incidents)[0]),
     POLICY_TEXT: policyFor(data.incidents)[1]
       ? `<p class="polq">${esc(policyFor(data.incidents)[1])}</p>` : "",

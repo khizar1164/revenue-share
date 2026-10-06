@@ -112,6 +112,15 @@
   td.pts{font-weight:700}
   tfoot td{border-bottom:0;border-top:1.5px solid var(--ink);font-weight:700}
 
+  /* A long list of near-identical rows eats a whole page on its own. Past ten
+     incidents the table runs in two columns, which halves its height without
+     touching the type size. Short lists stay single column, where splitting
+     would look like padding. */
+  .cols2{display:flex;gap:26px;align-items:flex-start}
+  .cols2 > table{flex:1 1 0;min-width:0}
+  .ttot{display:flex;justify-content:space-between;border-top:1.5px solid var(--ink);
+    padding:6px 7px 0;margin-top:0;font-weight:700}
+
   /* value callout */
   .value{border-left:3px solid var(--brand);background:var(--wash);
     padding:10px 13px;margin-top:6px}
@@ -197,20 +206,8 @@
   </div>
 
   <h2>The incidents</h2>
-  <table>
-    <thead><tr><th style="width:124px">Date</th><th>What happened</th><th class="n" style="width:52px">Points</th></tr></thead>
-    <tbody>
-      {{INCIDENT_ROWS}}
-    </tbody>
-    <tfoot><tr><td colspan="2">Total lost in this period</td><td class="n">{{POINTS_LOST_SIGNED}}</td></tr></tfoot>
-  </table>
+{{INCIDENT_TABLE}}
 
-  <h2>The standard that was not met</h2>
-  <div class="value">
-    <p><b>{{VALUE_NAME}}</b> &mdash; {{VALUE_TEXT}}</p>
-  </div>
-  <p class="muted" style="font-size:9pt;margin-top:6px">Each item above is listed on the
-     Performance Points sheet posted in the break room.</p>
 
 
   <div class="pagefoot">
@@ -225,6 +222,11 @@
   <div class="mast">
     <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
     <div class="doc">Disciplinary Action Notice</div>
+  </div>
+
+  <h2>The standard that was not met</h2>
+  <div class="value">
+    <p><b>{{VALUE_NAME}}</b> &mdash; {{VALUE_TEXT}}</p>
   </div>
 
   <h2>Why this matters</h2>
