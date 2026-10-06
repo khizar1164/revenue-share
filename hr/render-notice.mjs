@@ -186,6 +186,33 @@ export function recordShows(incidents) {
   return out;
 }
 
+/* The handbook section each violation sits under. Employee Handbook, updated
+   7 October 2026. The old form asked "what was the rule, policy, law, standard
+   or regulation that was violated?" and the first redesign answered it with a
+   core value, which is the spirit but not the rule. Both belong on the page.
+
+   Andrew's note when he sent it: section 7.2 is out of date, so nothing here
+   points at it. */
+export const POLICY_LIBRARY = [
+  [/late|not out by shop|truck not out|call off|no call no show/i,
+   ["7.1 Attendance & Punctuality",
+    "Employees are expected to be in the workplace, ready to work, at their scheduled start time and to complete their entire shift. Time off must be requested in writing, in advance, and anyone unexpectedly unable to report must notify their supervisor directly and as early as possible. A voicemail, text or email is not acceptable except in an extreme emergency."]],
+  [/vap|smok/i,
+   ["6.12 Smoking, with 6.1 Standards of Conduct", null]],
+  [/restock|cleanliness|pads|equipment|material|not removed from truck|fuel/i,
+   ["6.10 Use of Company Property, with 6.15 Company Supplies", null]],
+  [/claim|complaint|walkthrough|inspection|policy violation/i,
+   ["6.1 Standards of Conduct", null]]
+];
+
+export function policyFor(incidents) {
+  const bad = incidents.filter(i => i.delta < 0);
+  if (!bad.length) return ["6.1 Standards of Conduct", null];
+  const worst = Math.min(...bad.map(i => i.delta));
+  const reason = bad.find(i => i.delta === worst).reason;
+  return (POLICY_LIBRARY.find(([re]) => re.test(reason)) ?? [, ["6.1 Standards of Conduct", null]])[1];
+}
+
 /** Points lost decides the level, so the document cannot contradict its own figures. */
 export const levelFor = lost =>
   lost >= 45 ? "termination" : lost >= 30 ? "suspension" : "warning";
@@ -257,6 +284,9 @@ export function fill(data) {
     WINDOW_FROM: day(data.windowFrom),
     WINDOW_TO: day(data.windowTo),
     INCIDENT_ROWS: rows,
+    POLICY_REF: esc(policyFor(data.incidents)[0]),
+    POLICY_TEXT: policyFor(data.incidents)[1]
+      ? `<p class="polq">${esc(policyFor(data.incidents)[1])}</p>` : "",
     VALUE_NAME: vName,
     VALUE_TEXT: esc(vText),
     PRIOR: esc(data.prior ?? ""),
