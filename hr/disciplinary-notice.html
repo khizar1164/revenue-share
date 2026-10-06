@@ -125,6 +125,7 @@
   .lines{border:1px solid var(--rule);padding:5px 10px;min-height:30px;
     background:repeating-linear-gradient(transparent,transparent 21px,var(--rule) 21px,var(--rule) 22px)}
   .lines.tall{min-height:48px}
+  .lines.three{min-height:68px}
   .lines.prefill{background:none;min-height:0;padding:7px 10px}
 
   .legal{font-size:8.8pt;color:#222;margin-top:7px}
@@ -213,7 +214,7 @@
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 1 of 4</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
   </div>
 </section>
 
@@ -246,14 +247,10 @@
 {{RECORD_ROWS}}
   </ul>
 
-  <h2>What actually happened on the day</h2>
-  <p class="hint">To be completed by the supervisor. Record only what is known:
-     who was affected, how long was lost, what the customer was told.</p>
-  <div class="lines tall {{ACTUAL_CLS}}">{{ACTUAL}}</div>
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 2 of 4</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
   </div>
 </section>
 
@@ -279,7 +276,7 @@
   </div>
 
   <h2>Additional comments &mdash; supervisor</h2>
-  <div class="lines {{COMMENTS_CLS}}">{{SUPERVISOR_COMMENTS}}</div>
+  <div class="lines three {{COMMENTS_CLS}}">{{SUPERVISOR_COMMENTS}}</div>
 
   <h2>Employee comments</h2>
   <div class="lines tall"></div>
@@ -299,7 +296,7 @@
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 3 of 4</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
   </div>
 </section>
 
@@ -344,7 +341,7 @@
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; immediatemoversnwi.com</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}} &middot; Page 4 of 4</span>
+    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
   </div>
 </section>
 
