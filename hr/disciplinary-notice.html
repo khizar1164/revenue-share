@@ -45,7 +45,7 @@
     text-transform:uppercase;color:var(--grey)}
 
   h2{font-family:var(--head);font-weight:700;font-size:9.5pt;letter-spacing:.11em;
-    text-transform:uppercase;color:var(--brand);margin:15px 0 6px;
+    text-transform:uppercase;color:var(--brand);margin:11px 0 5px;
     border-bottom:1px solid var(--rule);padding-bottom:3px}
   p{margin:0 0 7px}
   .muted{color:var(--grey)}
@@ -59,7 +59,7 @@
   .who .v{font-size:11pt;font-weight:500}
 
   /* level of action */
-  .levels{display:flex;gap:10px;margin:10px 0 4px}
+  .levels{display:flex;gap:10px;margin:8px 0 3px}
   .lvl{flex:1;border:1px solid var(--rule);padding:7px 9px;display:flex;
     align-items:center;gap:8px}
   .lvl.on{border-color:var(--brand);background:#fff6f1;border-width:2px;padding:6px 8px}
@@ -87,7 +87,7 @@
   th{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);text-align:left;
     border-bottom:1.5px solid var(--rule);padding:4px 6px}
-  td{padding:4px 6px;border-bottom:1px solid var(--rule);vertical-align:top}
+  td{padding:3px 6px;border-bottom:1px solid var(--rule);vertical-align:top}
   td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   td.pts{font-weight:700}
   tfoot td{border-bottom:0;border-top:1.5px solid var(--ink);font-weight:700}
@@ -98,7 +98,7 @@
   .value b{font-family:var(--head);font-weight:700}
 
   /* write-in areas */
-  .lines{border:1px solid var(--rule);padding:8px 10px;min-height:52px;
+  .lines{border:1px solid var(--rule);padding:7px 10px;min-height:46px;
     background:repeating-linear-gradient(transparent,transparent 21px,var(--rule) 21px,var(--rule) 22px)}
   .lines.tall{min-height:96px}
   .lines.prefill{background:none;min-height:0;padding:7px 10px}
@@ -122,7 +122,7 @@
   .cv p em{font-style:normal;font-weight:700;color:var(--ink)}
 
   .foot{position:running(foot);}
-  .pagefoot{margin-top:14px;border-top:1px solid var(--rule);padding-top:6px;
+  .pagefoot{margin-top:9px;border-top:1px solid var(--rule);padding-top:5px;
     display:flex;justify-content:space-between;font-size:8pt;color:var(--grey)}
 </style>
 </head>
@@ -158,11 +158,11 @@
   <h2>Where this stands</h2>
   <div class="points">
     <div><span class="k">Points lost</span><span class="n bad">{{POINTS_LOST}}</span></div>
-    <div><span class="k">Threshold</span><span class="n">{{THRESHOLD}}</span></div>
+    <div><span class="k">{{THRESHOLD_LABEL}}</span><span class="n">{{THRESHOLD}}</span></div>
     <div><span class="k">Points now</span><span class="n">{{POINTS_NOW}}</span></div>
     <div class="note">Everyone starts each month on 15 points. Discipline is measured
       on a rolling 60 days, not the calendar month, so this covers
-      {{WINDOW_FROM}} to {{WINDOW_TO}}.</div>
+      {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}</div>
   </div>
 
   <h2>The incidents</h2>
