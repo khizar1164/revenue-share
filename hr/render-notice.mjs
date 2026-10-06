@@ -71,6 +71,90 @@ export function valueFor(incidents) {
   return ruleValue(bad.find(i => i.delta === worst).reason);
 }
 
+/* What kind of thing went wrong. Drives the impact wording below. */
+const CATEGORY = [
+  [/no call no show|call off/i,                        "absence"],
+  [/claim|complaint/i,                                 "customer"],
+  [/late|not out by shop|truck not out/i,              "lateness"],
+  [/vap|smok|policy violation/i,                       "conduct"],
+  [/restock|cleanliness|pads|equipment|walkthrough|material|fuel|inspection/i, "truck"]
+];
+const categoriesOf = incidents => new Set(incidents
+  .filter(i => i.delta < 0)
+  .map(i => (CATEGORY.find(([re]) => re.test(i.reason)) ?? [, "truck"])[1]));
+
+/**
+ * The impact section, built from what actually happened.
+ *
+ * Andrew, 2 October: "I don't feel like it explains the true depth. Financially,
+ * Company Culture, Customer impression, Scheduling... one's actions can cause a
+ * domino effect across the whole day."
+ *
+ * So it is four named dimensions rather than one vague line, and the wording
+ * follows the incidents: a letter about truck condition should not lecture
+ * somebody about missed shifts. Matthew can still edit any of it before he
+ * sits down with the person — these are a starting point, not the last word.
+ *
+ * The financial line for a claim is the literal mechanism, not a figure of
+ * speech: claims are deducted from the pool before it is divided, so they come
+ * out of what every mover on the board is paid. September carried two, worth
+ * $690.40 off the pool.
+ */
+export function impactRows(incidents) {
+  const c = categoriesOf(incidents);
+  const rows = [];
+  const add = (k, p) => rows.push([k, p]);
+
+  if (c.has("lateness") || c.has("absence")) {
+    add("Scheduling", "A crew cannot leave the shop until everyone is there. One late start "
+      + "pushes the first job back and every job behind it moves with it, so a delay at "
+      + "seven in the morning is still being felt at the last job of the day.");
+  } else if (c.has("truck")) {
+    add("Scheduling", "A truck that has to be restocked, cleaned or sorted before it can "
+      + "leave holds the whole crew at the shop, and that time comes out of the job.");
+  }
+
+  if (c.has("customer")) {
+    add("Customers", "Customers tell each other and they tell Google. A complaint or a claim "
+      + "costs us the review, the repeat booking and the referrals that would have followed "
+      + "it, long after the job itself is forgotten.");
+  } else if (c.has("conduct")) {
+    add("Customers", "What a customer sees in their driveway is who we are to them. Anything "
+      + "unprofessional in front of them undoes the work the rest of the crew has just done.");
+  } else {
+    add("Customers", "A customer who was given a window and is still waiting has already "
+      + "formed an opinion of us before the first box is carried.");
+  }
+
+  add("The crew", c.has("absence")
+    ? "When someone does not turn up the work does not disappear, it lands on the people who "
+      + "did. They carry the heavier end all day, and they notice who left them to it."
+    : "Standards hold because everyone keeps them. Every exception asks the people who did it "
+      + "properly why they bothered, and that is how a good crew stops being one.");
+
+  add("Financial", c.has("customer")
+    ? "Claims are deducted from the revenue share pool before it is divided, so this does not "
+      + "only cost the company. It comes out of what every mover on the board is paid that "
+      + "month, including the people who had nothing to do with it."
+    : "Hours spent waiting at the shop or putting right what should already have been right "
+      + "are paid for and earn nothing. That is money the pool never sees.");
+
+  return rows;
+}
+
+/** Points lost decides the level, so the document cannot contradict its own figures. */
+export const levelFor = lost =>
+  lost >= 45 ? "termination" : lost >= 30 ? "suspension" : "warning";
+
+export const nextActionText = level =>
+  level === "termination"
+    ? "This is a termination."
+  : level === "suspension"
+    ? "This is a seven-day unpaid suspension. If 45 points are lost in a rolling 60-day "
+      + "period, the next step is termination."
+  : "This is a written warning. If 30 points are lost in a rolling 60-day period, the next "
+    + "step is a seven-day unpaid suspension without pay. At 45 points it is termination.";
+
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
   { month: "short", day: "numeric", year: "numeric" });
@@ -101,13 +185,18 @@ export function fill(data) {
     ? `${next[0] - down} more point${next[0] - down === 1 ? "" : "s"} lost in this window reaches ${next[1]}.`
     : "This is at or past the termination threshold.";
 
+  const level = levelFor(down);
+
   const map = {
     EMPLOYEE_NAME: esc(data.employee),
     SUPERVISOR: esc(data.supervisor),
     DATE_ISSUED: day(data.issued),
-    LVL_WARNING:     data.level === "warning"     ? "on" : "",
-    LVL_SUSPENSION:  data.level === "suspension"  ? "on" : "",
-    LVL_TERMINATION: data.level === "termination" ? "on" : "",
+    LVL_WARNING:     level === "warning"     ? "on" : "",
+    LVL_SUSPENSION:  level === "suspension"  ? "on" : "",
+    LVL_TERMINATION: level === "termination" ? "on" : "",
+    NEXT_ACTION: nextActionText(level),
+    IMPACT_ROWS: impactRows(data.incidents).map(([k, t]) =>
+      `    <div class="imp"><span class="ik">${k}</span><p>${esc(t)}</p></div>`).join("\n"),
     POINTS_LOST: String(Math.abs(lost)),
     POINTS_LOST_SIGNED: "−" + String(Math.abs(lost)),
     /* When a threshold has been crossed the box names that one, not the one
@@ -122,14 +211,12 @@ export function fill(data) {
     INCIDENT_ROWS: rows,
     VALUE_NAME: vName,
     VALUE_TEXT: esc(vText),
-    IMPACT: esc(data.impact ?? ""),
     PRIOR: esc(data.prior ?? ""),
     REQUIRED: esc(data.required ?? ""),
     SUPERVISOR_COMMENTS: esc(data.comments ?? ""),
     /* The ruled background is there to be written on. Where the system has
        already filled the box the rules run straight through the words, so
        they come off and the box is just a box. */
-    IMPACT_CLS:   data.impact   ? "prefill" : "",
     PRIOR_CLS:    data.prior    ? "prefill" : "",
     REQUIRED_CLS: data.required ? "prefill" : "",
     COMMENTS_CLS: data.comments ? "prefill" : ""
@@ -149,32 +236,10 @@ export function fill(data) {
    it under 15 points. Then another between 15 and 30." Both run from here so
    he can ask for a third without anyone hand-building one. */
 const EXAMPLES = {
-  under15: {
-    file: "example-under-15.html",
+  warning: {
+    file: "example-written-warning.html",
     employee: "Example Employee A", supervisor: "Matthew Brown",
-    issued: "2026-10-06", level: "warning", pointsNow: 5,
-    windowFrom: "2026-08-07", windowTo: "2026-10-06",
-    incidents: [
-      { date: "2026-08-19", delta: -1, reason: "Truck not restocked" },
-      { date: "2026-08-26", delta: -1, reason: "Truck cleanliness not acceptable" },
-      { date: "2026-09-03", delta: -1, reason: "Up to 30 mins late" },
-      { date: "2026-09-09", delta: -1, reason: "Equipment/pads not neatly organized on truck" },
-      { date: "2026-09-17", delta: -2, reason: "Stopped before first job without need for fuel (15-20% or less)" },
-      { date: "2026-09-24", delta: -1, reason: "Failure to perform pre-inspection walkthrough properly" },
-      { date: "2026-10-01", delta: -1, reason: "Applicable material/equipment not removed from truck" },
-      { date: "2026-10-05", delta: -2, reason: "Customer complaint — vaping/smoking in sight of customer" }
-    ],
-    impact: "Trucks going out unstocked and untidy costs the crew time on site and "
-      + "it is the first thing a customer sees when the doors open.",
-    prior: "Spoken to on 26 August and again on 17 September about truck condition.",
-    required: "Restock and check the truck at the end of every shift, and complete the "
-      + "pre-inspection walkthrough properly before leaving the shop. No vaping or "
-      + "smoking anywhere a customer can see you."
-  },
-  mid: {
-    file: "example-15-to-30.html",
-    employee: "Example Employee B", supervisor: "Matthew Brown",
-    issued: "2026-10-06", level: "warning", pointsNow: 0,
+    issued: "2026-10-06", pointsNow: 0,
     windowFrom: "2026-08-07", windowTo: "2026-10-06",
     incidents: [
       { date: "2026-08-14", delta: -1, reason: "Policy violation" },
@@ -186,13 +251,32 @@ const EXAMPLES = {
       { date: "2026-10-02", delta: -1, reason: "Truck not restocked" },
       { date: "2026-10-05", delta: -5, reason: "Customer complaint — specifically names you" }
     ],
-    impact: "Three late starts held crews at the shop and moved every job behind them. "
-      + "The claim and the complaint both reached Andrew, which is money off the pool "
-      + "and a customer we may not get back.",
     prior: "Verbal 28 August about timekeeping. Verbal 19 September after the hour-late start.",
     required: "Be at the shop and ready to work at your scheduled start time, every shift. "
-      + "If something goes wrong on a job, tell Matthew the same day rather than "
-      + "letting the customer be the one who raises it."
+      + "If something goes wrong on a job, tell Matthew the same day rather than letting "
+      + "the customer be the one who raises it."
+  },
+  suspension: {
+    file: "example-suspension.html",
+    employee: "Example Employee B", supervisor: "Matthew Brown",
+    issued: "2026-10-06", pointsNow: 0,
+    windowFrom: "2026-08-07", windowTo: "2026-10-06",
+    incidents: [
+      { date: "2026-08-12", delta: -1,  reason: "Policy violation" },
+      { date: "2026-08-21", delta: -2,  reason: "31 to 60 mins late" },
+      { date: "2026-09-02", delta: -2,  reason: "Call off — time off not requested in advance" },
+      { date: "2026-09-08", delta: -3,  reason: "61+ mins late" },
+      { date: "2026-09-15", delta: -2,  reason: "Customer complaint — vaping/smoking in sight of customer" },
+      { date: "2026-09-21", delta: -3,  reason: "Same day call off" },
+      { date: "2026-09-30", delta: -3,  reason: "Claim" },
+      { date: "2026-10-03", delta: -5,  reason: "Customer complaint — specifically names you" },
+      { date: "2026-10-06", delta: -10, reason: "No call no show (tardy log)" }
+    ],
+    prior: "Written warning issued 19 September 2026 after reaching 15 points. "
+      + "Verbal 2 September about calling off without notice.",
+    required: "Return from suspension able to be relied on: at the shop on time, every "
+      + "shift, and a phone call to Matthew before the start of any shift you cannot make. "
+      + "Nothing about a customer job is to reach Andrew before it reaches Matthew."
   }
 };
 

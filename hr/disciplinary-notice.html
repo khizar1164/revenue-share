@@ -82,6 +82,22 @@
   .points .n.bad{color:var(--brand)}
   .points .note{font-size:8.6pt;color:var(--grey);line-height:1.35;padding-top:9px}
 
+  /* what happens next — Andrew, 2 October: the notice has to say where this
+     goes if nothing changes, in words, not just a points count */
+  .next{border:2px solid var(--brand);background:#fff6f1;padding:8px 11px;margin-top:8px}
+  .next .k{font-family:var(--head);font-weight:700;font-size:7.3pt;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--brand);display:block;margin-bottom:2px}
+  .next p{margin:0;font-size:10pt}
+
+  /* impact, broken out so the real cost is visible rather than one vague line */
+  .impact{border:1px solid var(--rule)}
+  .imp{display:grid;grid-template-columns:110px 1fr;gap:10px;
+    border-top:1px solid var(--rule);padding:4px 10px}
+  .imp:first-child{border-top:0}
+  .ik{font-family:var(--head);font-weight:700;font-size:7.6pt;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--grey);padding-top:2px}
+  .imp p{margin:0;font-size:9.6pt;line-height:1.38}
+
   /* incident table */
   table{width:100%;border-collapse:collapse;margin-top:3px}
   th{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
@@ -98,17 +114,17 @@
   .value b{font-family:var(--head);font-weight:700}
 
   /* write-in areas */
-  .lines{border:1px solid var(--rule);padding:7px 10px;min-height:46px;
+  .lines{border:1px solid var(--rule);padding:5px 10px;min-height:30px;
     background:repeating-linear-gradient(transparent,transparent 21px,var(--rule) 21px,var(--rule) 22px)}
-  .lines.tall{min-height:96px}
+  .lines.tall{min-height:48px}
   .lines.prefill{background:none;min-height:0;padding:7px 10px}
 
-  .legal{font-size:9pt;color:#222;margin-top:9px}
+  .legal{font-size:8.8pt;color:#222;margin-top:7px}
   .legal p{margin:0 0 5px}
 
   /* signatures */
-  .sigs{display:grid;grid-template-columns:1fr 150px;gap:18px 22px;margin-top:16px}
-  .sig{border-bottom:1px solid var(--ink);height:30px}
+  .sigs{display:grid;grid-template-columns:1fr 150px;gap:12px 22px;margin-top:11px}
+  .sig{border-bottom:1px solid var(--ink);height:24px}
   .sigk{font-family:var(--head);font-weight:600;font-size:7.3pt;letter-spacing:.1em;
     text-transform:uppercase;color:var(--grey);margin-top:3px}
 
@@ -155,6 +171,11 @@
   <p>This is a warning notice being issued to address performance and/or conduct.
      You will have an opportunity to review, acknowledge, and correct the issues.</p>
 
+  <div class="next">
+    <span class="k">What happens next</span>
+    <p>{{NEXT_ACTION}}</p>
+  </div>
+
   <h2>Where this stands</h2>
   <div class="points">
     <div><span class="k">Points lost</span><span class="n bad">{{POINTS_LOST}}</span></div>
@@ -181,8 +202,6 @@
   <p class="muted" style="font-size:9pt;margin-top:6px">Each item above is listed on the
      Performance Points sheet posted in the break room.</p>
 
-  <h2>Impact on the business, the crew or our customers</h2>
-  <div class="lines {{IMPACT_CLS}}">{{IMPACT}}</div>
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
@@ -196,6 +215,11 @@
   <div class="mast">
     <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
     <div class="doc">Disciplinary Action Notice</div>
+  </div>
+
+  <h2>Impact on the business, the crew and our customers</h2>
+  <div class="impact">
+{{IMPACT_ROWS}}
   </div>
 
   <h2>Previous discussions or warnings on this subject</h2>
