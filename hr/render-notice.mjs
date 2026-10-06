@@ -131,6 +131,61 @@ export function impactNarrative(incidents, limit = 4) {
   return rows;
 }
 
+/**
+ * Facts the system can actually evidence, as opposed to ones it would be
+ * guessing at. Khizar, 7 October: "we can see tardies and claim and AI can put
+ * as I know?" — right, and the first draft was too timid about it.
+ *
+ * What is in the data: the minutes, because the tardy log records them and
+ * they are carried in the reason text; how many separate occasions; how many
+ * shifts were missed; how many incidents reached a customer.
+ *
+ * What is NOT in the data, and must never be written as though it were: the
+ * cost of a claim against a person. The claims table has an amount and a job
+ * number but no employee — claims come off the pool company-wide and are not
+ * attributed to anyone. So the notice can say a claim happened, and the points
+ * sheet says what it costs in points, but it cannot say "your claim cost $550"
+ * because the system does not know whose it was.
+ */
+export function recordShows(incidents) {
+  const bad = incidents.filter(i => i.delta < 0);
+  const out = [];
+
+  const lates = bad.filter(i => /late/i.test(i.reason) && !/truck not out/i.test(i.reason));
+  /* Only the tardy log records a real figure, in the form "Late - 23 min".
+     "Up to 30 mins late" is the name of a band on the points sheet, not a
+     measurement, and adding those up would invent a total nobody measured. */
+  let measured = 0, counted = 0;
+  for (const i of lates) {
+    const m = String(i.reason).match(/late\s*[—-]\s*(\d+)\s*min/i);
+    if (m) { measured += Number(m[1]); counted++; }
+  }
+  const mins = measured;
+  if (lates.length) {
+    out.push(`${lates.length} late arrival${lates.length === 1 ? "" : "s"}` +
+      (mins ? `, of which ${counted} ${counted === 1 ? "was" : "were"} timed at ` +
+              `${mins} minutes in total` : "") + ".");
+  }
+
+  const trucks = bad.filter(i => /truck not out/i.test(i.reason));
+  if (trucks.length) out.push(`${trucks.length} occasion${trucks.length === 1 ? "" : "s"} ` +
+    `where the truck did not leave the shop on time.`);
+
+  const missed = bad.filter(i => /call off|no call no show/i.test(i.reason));
+  const noShow = bad.filter(i => /no call no show/i.test(i.reason));
+  if (missed.length) {
+    out.push(`${missed.length} shift${missed.length === 1 ? "" : "s"} missed` +
+      (noShow.length ? `, ${noShow.length} of them without any notice at all` : " at short notice") + ".");
+  }
+
+  const reached = bad.filter(i => /claim|complaint/i.test(i.reason));
+  if (reached.length) {
+    out.push(`${reached.length} incident${reached.length === 1 ? "" : "s"} that reached a customer ` +
+      `as a complaint or a claim.`);
+  }
+  return out;
+}
+
 /** Points lost decides the level, so the document cannot contradict its own figures. */
 export const levelFor = lost =>
   lost >= 45 ? "termination" : lost >= 30 ? "suspension" : "warning";
@@ -186,6 +241,8 @@ export function fill(data) {
     NEXT_ACTION: nextActionText(level),
     IMPACT_ROWS: impactNarrative(data.incidents).map(([reason, text]) =>
       `    <div class="imp"><span class="ik">${esc(reason)}</span><p>${esc(text)}</p></div>`).join("\n"),
+    RECORD_ROWS: recordShows(data.incidents)
+      .map(t => `    <li>${esc(t)}</li>`).join("\n") || "    <li>No countable pattern in the record.</li>",
     ACTUAL: esc(data.actual ?? ""),
     ACTUAL_CLS: data.actual ? "prefill" : "",
     POINTS_LOST: String(Math.abs(lost)),

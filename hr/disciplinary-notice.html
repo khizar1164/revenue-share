@@ -98,6 +98,8 @@
   .imp p{margin:0;font-size:9.4pt;line-height:1.36;color:#1a1a1a}
   .lede{font-size:9.8pt;margin-bottom:6px}
   .hint{font-size:8.4pt;color:var(--grey);margin:-2px 0 4px}
+  .record{margin:0 0 4px;padding-left:17px}
+  .record li{font-size:9.8pt;line-height:1.4;margin-bottom:1px}
 
   /* incident table */
   table{width:100%;border-collapse:collapse;margin-top:3px}
@@ -225,6 +227,13 @@
   <div class="impact">
 {{IMPACT_ROWS}}
   </div>
+
+  <h2>What the record shows</h2>
+  <p class="hint">Counted from the points log. These are figures the system can
+     evidence; nothing here is an estimate.</p>
+  <ul class="record">
+{{RECORD_ROWS}}
+  </ul>
 
   <h2>What actually happened on the day</h2>
   <p class="hint">To be completed by the supervisor. Record only what is known:
