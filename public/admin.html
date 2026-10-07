@@ -735,9 +735,7 @@ Tyler Johnston  44.25"></textarea>
     /* Rebuilding a closed month is a deliberate act, so it says which one and
        waits for a yes. Reviews and tardies both replace the whole month from
        the sheet, so the wrong month here quietly rewrites the wrong figures. */
-    if (month && !confirm("Run " + name + " for " + month + "?
-
-This rebuilds that "
+    if (month && !confirm("Run " + name + " for " + month + "?\n\nThis rebuilds that "
         + "whole month from the sheet, replacing what is there now.")) {
       b.disabled = false; b.textContent = "Run now"; return;
     }
