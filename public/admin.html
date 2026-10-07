@@ -318,15 +318,10 @@ Tyler Johnston  44.25"></textarea>
 
     <div class="panel">
       <h2>Background jobs</h2>
-      <p class="dek">What runs on its own, and when it last did. These only ever
-         rebuild <b>the current month</b> by themselves. To correct a month that
-         has closed, fix it in the sheet first, then set the month here and run
-         the job.</p>
-      <div class="row" style="margin-bottom:10px">
-        <div><label>Run for month</label><input id="jobMonth" type="month"></div>
-        <div style="align-self:end;color:var(--ink-3);font-size:13px">
-          Leave blank for the current month.</div>
-      </div>
+      <p class="dek">What runs on its own, and when it last did. On their own these
+         only ever rebuild <b>the current month</b>. To correct a month that has
+         closed, fix it in the sheet, choose that month at the top of this page,
+         then run the job.</p>
       <div class="tblwrap"><table id="jobsTbl"></table></div>
     </div>
 
@@ -730,15 +725,18 @@ Tyler Johnston  44.25"></textarea>
   $("jobsTbl").addEventListener("click", function(e){
     var b = e.target.closest("button[data-runjob]"); if (!b) return;
     var name = b.getAttribute("data-runjob");
-    var month = ($("jobMonth") && $("jobMonth").value || "").trim();
-    b.disabled = true; b.textContent = "Running…";
-    /* Rebuilding a closed month is a deliberate act, so it says which one and
-       waits for a yes. Reviews and tardies both replace the whole month from
-       the sheet, so the wrong month here quietly rewrites the wrong figures. */
-    if (month && !confirm("Run " + name + " for " + month + "?\n\nThis rebuilds that "
+    /* The month this page is already showing. A second month box beside the
+       button was one control too many: the page has had a month picker at the
+       top of it all along. */
+    var month = STATE.month === thisMonth ? "" : STATE.month;
+    /* Rebuilding a closed month is a deliberate act, so it names the month and
+       waits for a yes. Reviews and tardies both replace that whole month from
+       the sheet, so running the wrong one quietly rewrites settled figures. */
+    if (month && !confirm("Run " + name + " for " + month + "? This rebuilds that "
         + "whole month from the sheet, replacing what is there now.")) {
-      b.disabled = false; b.textContent = "Run now"; return;
+      return;
     }
+    b.disabled = true; b.textContent = "Running…";
     api("/api/admin/jobs/" + encodeURIComponent(name) + "/run",
         { method:"POST", body: JSON.stringify(month ? { month: month } : {}) })
       .then(function(r){ toast(name + " (" + (r.month || "current") + "): "
