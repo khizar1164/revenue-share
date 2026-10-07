@@ -29,15 +29,18 @@ services:
       - key: RUN_SCHEDULER
         value: "on"
 
-      # Andrew has not approved sign-in emails to the crew yet. Nothing sends
-      # while this is anything other than "on".
+      # Andrew approved crew sign-in emails on 8 October 2026. Before that this
+      # was "off", and absent counts as off too — which is why nothing had ever
+      # reached a crew member by accident.
       - key: SEND_EMAILS
-        value: "off"
+        value: "on"
 
       # A second, independent stop: while this is set, only these addresses can
-      # receive anything at all. Clear it when the crew are meant to have access.
+      # receive anything at all. Emptied on 8 October so the crew can request
+      # their own sign-in links. Put an address back in it to shut sending down
+      # to one person again without touching SEND_EMAILS.
       - key: MAIL_ALLOWLIST
-        value: khizarh@immediatemoversnwi.com
+        value: ""
 
       # The report page must not let a URL decide who you are once it is public.
       - key: ALLOW_REPORT_PREVIEW
