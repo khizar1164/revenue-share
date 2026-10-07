@@ -26,7 +26,7 @@ import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
          setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
 import { handleReportEmail } from "./sync/report-hook.js";
-import { sendSignInLink, mailConfigured } from "./mail.js";
+import { sendSignInLink, sendInvite, sendingEnabled, mailStatus, mailConfigured } from "./mail.js";
 
 loadEnv();
 
@@ -364,6 +364,62 @@ app.get("/api/admin/reviews", wrap(async (req, res) => {
       group by r.id
       order by r.occurred_on desc, r.id desc`, [period]);
   res.json(r.rows);
+}));
+
+/* Send the crew their first sign-in links.
+ *
+ * This lives in the server rather than a script because the Resend key does.
+ * Running it from a laptop meant sending with whatever key happened to be in
+ * a local .env, which on 8 October was a stale one — so the only honest place
+ * for it is inside the deployment that holds the real credentials.
+ *
+ * Dry run unless asked. Sixteen people get told about their pay in one go, so
+ * it answers "who would this write to" before it answers anything else.
+ *
+ * Left out: anyone without an email, and anyone not active. Andrew, 8 October:
+ * not Aaron Schwark and not Blade Williams, who left without notice.
+ */
+app.post("/api/admin/invite", wrap(async (req, res) => {
+  const send = req.body?.send === true;
+  const only = Array.isArray(req.body?.only) ? new Set(req.body.only) : null;
+
+  const roster = await query(
+    `select full_name, email from employees
+      where is_mover and status = 'active' and coalesce(email,'') <> ''
+      order by full_name`);
+  const people = roster.rows.filter(p => !only || only.has(p.full_name));
+
+  const skipped = (await query(
+    `select full_name, status from employees
+      where is_mover and (status <> 'active' or coalesce(email,'') = '')
+      order by full_name`)).rows;
+
+  if (!send) {
+    return res.json({ dryRun: true, mail: mailStatus(), sending: sendingEnabled(),
+                      would_write_to: people, left_out: skipped });
+  }
+  if (!sendingEnabled()) {
+    return res.status(409).json({ error: "SEND_EMAILS is not 'on' — nothing would leave" });
+  }
+
+  const sent = [], failed = [];
+  for (const p of people) {
+    try {
+      const issued = await issueLoginToken(p.email);
+      if (!issued) { failed.push({ name: p.full_name, why: "no sign-in allowed for that address" }); continue; }
+      await sendInvite({
+        to: issued.employee.email,
+        name: issued.employee.full_name,
+        url: `${PUBLIC_URL}/auth/${issued.token}`,
+        minutes: issued.expiresInMinutes,
+        base: PUBLIC_URL
+      });
+      sent.push(p.full_name);
+    } catch (e) {
+      failed.push({ name: p.full_name, why: e.message });
+    }
+  }
+  res.json({ sent: sent.length, failed: failed.length, sent_to: sent, failures: failed });
 }));
 
 app.post("/api/admin/reviews", wrap(async (req, res) => {

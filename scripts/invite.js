@@ -10,9 +10,11 @@
  * something nobody meant to send. So it prints the list and stops unless asked
  * twice.
  *
- * It sends the same email the sign-in page sends, through the same function,
- * so there is one wording and one link format rather than a second copy that
- * drifts.
+ * It sends inviteEmail, not the sign-in reply. The sign-in one says "if you
+ * didn't ask for this, ignore it", which is true when somebody typed their
+ * address in thirty seconds earlier and nonsense when it arrives cold. The
+ * invite also says where to get a fresh link, because twenty minutes shared
+ * between sixteen people means most of them will open an expired one.
  *
  * Who is left out, and why:
  *   - anyone with no email, because there is nowhere to send it
@@ -23,7 +25,7 @@
  *   - anyone not a mover: the office is not on the programme.
  */
 import { issueLoginToken } from "../src/auth.js";
-import { sendSignInLink, sendingEnabled, mailStatus, allowedRecipients } from "../src/mail.js";
+import { sendInvite, sendingEnabled, mailStatus, allowedRecipients } from "../src/mail.js";
 import { query, close, loadEnv } from "../src/db.js";
 
 loadEnv();
@@ -87,11 +89,12 @@ try {
     try {
       const issued = await issueLoginToken(p.email);
       if (!issued) { console.log(`  SKIP ${p.full_name} — no sign-in allowed for that address`); continue; }
-      await sendSignInLink({
+      await sendInvite({
         to: issued.employee.email,
         name: issued.employee.full_name,
         url: `${PUBLIC_URL}/auth/${issued.token}`,
-        minutes: issued.expiresInMinutes
+        minutes: issued.expiresInMinutes,
+        base: PUBLIC_URL
       });
       sent++;
       console.log(`  sent ${p.full_name}`);

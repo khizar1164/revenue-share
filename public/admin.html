@@ -323,6 +323,12 @@ Tyler Johnston  44.25"></textarea>
          closed, fix it in the sheet, choose that month at the top of this page,
          then run the job.</p>
       <div class="tblwrap"><table id="jobsTbl"></table></div>
+
+      <h2 style="margin-top:22px">Crew access</h2>
+      <p class="dek">Emails every active mover a link to their own page. Anyone who
+         has left is left out. Links last 20 minutes and work once, and the email
+         tells them where to get a fresh one.</p>
+      <button id="inviteBtn">Send crew sign-in links</button>
     </div>
 
     <div class="panel">
@@ -720,6 +726,31 @@ Tyler Johnston  44.25"></textarea>
       $("revAmt").value = ""; $("revJobs").value = "";
       load();
     }).catch(function(e){ toast(e.message, true); });
+  });
+
+  /* Two steps on purpose. The first asks the server who it would write to and
+     shows the names, because "send sixteen emails about people's pay" is not a
+     thing to confirm from memory. */
+  $("inviteBtn").addEventListener("click", function(){
+    var b = this;
+    b.disabled = true; b.textContent = "Checking…";
+    api("/api/admin/invite", { method:"POST", body: JSON.stringify({}) })
+      .then(function(r){
+        b.disabled = false; b.textContent = "Send crew sign-in links";
+        var names = (r.would_write_to || []).map(function(p){ return p.full_name; });
+        if (!names.length) { toast("nobody to write to", true); return; }
+        if (!r.sending) { toast("SEND_EMAILS is not on — " + r.mail, true); return; }
+        if (!confirm("Email a sign-in link to " + names.length + " people?\n\n"
+            + names.join(", ") + "\n\nThis cannot be taken back.")) return;
+        b.disabled = true; b.textContent = "Sending…";
+        return api("/api/admin/invite", { method:"POST", body: JSON.stringify({ send:true }) })
+          .then(function(x){
+            toast(x.sent + " sent" + (x.failed ? ", " + x.failed + " failed" : ""), !!x.failed);
+            if (x.failed) console.warn("invite failures", x.failures);
+          });
+      })
+      .catch(function(e){ toast("invites — " + e.message, true); })
+      .finally(function(){ b.disabled = false; b.textContent = "Send crew sign-in links"; });
   });
 
   $("jobsTbl").addEventListener("click", function(e){
