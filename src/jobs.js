@@ -261,9 +261,9 @@ export async function syncWriteBack({ all = false } = {}) {
 
 export function registerJobs(scheduler) {
   const MIN = 60_000;
-  scheduler.add("smartmoving", () => syncSmartMoving(), {
+  scheduler.add("smartmoving", o => syncSmartMoving(o ?? {}), {
     everyMs: 4 * 60 * MIN, runAtStartAfterMs: 20_000 });
-  scheduler.add("hours", () => syncHours(), {
+  scheduler.add("hours", o => syncHours(o), {
     everyMs: 10 * MIN, runAtStartAfterMs: 45_000 });
   /* The report is ingested whenever its email arrives (via the Zap), so this
      is a watch, not a fetch. It runs under its own name: were it logged as
@@ -274,11 +274,11 @@ export function registerJobs(scheduler) {
   /* Matthew updates his log through the day; half-hourly keeps the board
      current without reading the sheet for no reason */
   if (process.env.TARDY_SHEET_ID) {
-    scheduler.add("tardies", () => syncTardies(), {
+    scheduler.add("tardies", o => syncTardies(o), {
       everyMs: 30 * MIN, runAtStartAfterMs: 75_000 });
   }
   if (process.env.REVIEW_SHEET_ID) {
-    scheduler.add("reviews", () => syncReviews(), {
+    scheduler.add("reviews", o => syncReviews(o), {
       everyMs: 30 * MIN, runAtStartAfterMs: 90_000 });
   }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });

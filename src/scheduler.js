@@ -65,7 +65,7 @@ export function createScheduler({ log = console.log } = {}) {
   const jobs = new Map();
   let stopped = false;
 
-  async function runOnce(job, trigger = "schedule") {
+  async function runOnce(job, trigger = "schedule", arg) {
     if (job.running) { log(`[${job.name}] still running, skipping this turn`); return null; }
     job.running = true;
     const started = Date.now();
@@ -80,7 +80,7 @@ export function createScheduler({ log = console.log } = {}) {
     }
 
     try {
-      const detail = await job.fn();
+      const detail = await job.fn(arg);
       const text = typeof detail === "string" ? detail : JSON.stringify(detail ?? {});
       job.lastOk = new Date();
       job.lastError = null;
@@ -143,10 +143,15 @@ export function createScheduler({ log = console.log } = {}) {
     },
 
     /** Kick a job by hand — the admin panel's "sync now". */
-    run(name) {
+    /* A manual run can be given a month. The scheduled one never is, so the
+       timer keeps doing the current month while someone correcting September
+       can say so. Without this the only way to rebuild a closed month was to
+       run a script by hand, which is what Andrew ran into on 7 October when
+       he fixed a review in the sheet and nothing moved. */
+    run(name, arg) {
       const job = jobs.get(name);
       if (!job) throw new Error(`no such job: ${name}`);
-      return runOnce(job, "manual");
+      return runOnce(job, "manual", arg);
     },
 
     status() {

@@ -392,7 +392,8 @@ app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
   /* the log is read back every half hour, so a removal here would not stick */
   if (row.recorded_by === "review-log" && process.env.REVIEW_SHEET_ID) {
     return res.status(409).json({ error: "this came from the Review Log sheet — " +
-      "remove the row there and the board updates within half an hour" });
+      "remove the row there, then run the reviews job for that month under " +
+      "Background jobs. Only the current month rebuilds on its own." });
   }
   await query(`delete from reviews where id = $1`, [req.params.id]);
   res.status(204).end();
@@ -604,7 +605,8 @@ app.delete("/api/admin/points/:id", wrap(async (req, res) => {
      half an hour — the correction belongs in Matthew's sheet */
   if (row.recorded_by === "tardy-log" && process.env.TARDY_SHEET_ID) {
     return res.status(409).json({ error: "this came from Matthew's tardy log — " +
-      "correct it in his sheet and the points update within half an hour" });
+      "correct it in his sheet, then run the tardies job for that month under " +
+      "Background jobs. Only the current month rebuilds on its own." });
   }
   await query(`delete from point_events where id = $1`, [id]);
   res.status(204).end();
@@ -653,11 +655,20 @@ app.get("/api/admin/jobs", (_req, res) => {
   res.json(scheduler ? scheduler.status() : []);
 });
 
+/* Optionally for a given month. The timer only ever does the current one, so
+   without this a correction to a closed month had nowhere to go: Andrew edited
+   a September review in the sheet on 7 October, pressed Run now, and watched it
+   rebuild October. */
 app.post("/api/admin/jobs/:name/run", wrap(async (req, res) => {
   if (!scheduler) return res.status(503).json({ error: "the scheduler is not running" });
+  const month = String(req.body?.month ?? "").trim();
+  if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: "month must look like 2026-09" });
+  }
   try {
-    const detail = await scheduler.run(req.params.name);
-    res.json({ ran: req.params.name, detail });
+    const detail = await scheduler.run(req.params.name,
+      month ? { period: `${month}-01` } : undefined);
+    res.json({ ran: req.params.name, month: month || "current", detail });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
