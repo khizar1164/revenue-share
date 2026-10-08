@@ -293,8 +293,23 @@ function incidentTable(incidents, lostSigned) {
          `  <div class="ttot"><span>Total lost in this period</span><span>${lostSigned}</span></div>`;
 }
 
-export function fill(data) {
+/* The supervisor's three boxes, as the generator worked them out. In a flat
+   PDF they are printed. In a fillable one they are the starting text of a
+   form field, which is the same words in a place Matthew can correct them. */
+export function fieldValues(data) {
+  return {
+    prior: data.prior ?? "",
+    required: data.required ?? "",
+    supervisor_comments: data.comments ?? "",
+    employee_comments: ""
+  };
+}
+
+export function fill(data, opts = {}) {
   const html = readFileSync(TEMPLATE, "utf8");
+  /* Fillable: the three boxes print empty, because their words arrive as form
+     field values instead. Printing them as well would show every line twice. */
+  const editable = opts.fillable === true;
   const [vName, vText] = VALUES[data.value] ?? VALUES.accountability;
 
   const rows = data.incidents.map(i =>
@@ -352,18 +367,19 @@ export function fill(data) {
       ? `<p class="polq">${esc(policyFor(data.incidents)[1])}</p>` : "",
     VALUE_NAME: vName,
     VALUE_TEXT: esc(vText),
-    PRIOR: esc(data.prior ?? ""),
-    REQUIRED: esc(data.required ?? ""),
-    SUPERVISOR_COMMENTS: esc(data.comments ?? ""),
+    PRIOR: editable ? "" : esc(data.prior ?? ""),
+    REQUIRED: editable ? "" : esc(data.required ?? ""),
+    SUPERVISOR_COMMENTS: editable ? "" : esc(data.comments ?? ""),
     /* The ruled background is there to be written on. Where the system has
        already filled the box the rules run straight through the words, so
-       they come off and the box is just a box. */
-    PRIOR_CLS:    data.prior    ? "prefill" : "",
-    REQUIRED_CLS: data.required ? "prefill" : "",
-    COMMENTS_CLS: data.comments ? "prefill" : ""
+       they come off and the box is just a box. A fillable box keeps its full
+       height whatever is in it, because somebody is about to type there. */
+    PRIOR_CLS:    !editable && data.prior    ? "prefill" : "",
+    REQUIRED_CLS: !editable && data.required ? "prefill" : "",
+    COMMENTS_CLS: !editable && data.comments ? "prefill" : ""
   };
 
-  let out = html;
+  let out = editable ? html.replace("<body>", '<body class="fillable">') : html;
   for (const [k, v] of Object.entries(map)) out = out.replaceAll(`{{${k}}}`, v);
 
   const missed = out.match(/\{\{[A-Z_]+\}\}/g);
@@ -427,14 +443,25 @@ const EXAMPLES = {
   }
 };
 
+/* --fillable writes the version whose supervisor boxes become PDF form
+   fields, alongside the words that belong in them. make-fillable.mjs reads
+   both. */
+const FILLABLE = process.argv.includes("--fillable");
+const nameFor = file => FILLABLE ? file.replace(/\.html$/, ".fillable.html") : file;
+
 for (const key of Object.keys(EXAMPLES)) {
   if (!process.argv.includes("--" + key) && !process.argv.includes("--examples")) continue;
   const e = EXAMPLES[key];
-  const html = fill({ ...e, value: valueFor(e.incidents) });
-  const out = join(here, e.file);
+  const data = { ...e, value: valueFor(e.incidents) };
+  const html = fill(data, { fillable: FILLABLE });
+  const out = join(here, nameFor(e.file));
   writeFileSync(out, html);
+  if (FILLABLE) {
+    writeFileSync(out.replace(/\.html$/, ".fields.json"),
+                  JSON.stringify(fieldValues(data), null, 2));
+  }
   const lost = Math.abs(e.incidents.reduce((a, i) => a + Math.min(0, i.delta), 0));
-  console.log(`${e.file}  ${e.incidents.length} incidents, ${lost} points lost, value: ${valueFor(e.incidents)}`);
+  console.log(`${nameFor(e.file)}  ${e.incidents.length} incidents, ${lost} points lost, value: ${valueFor(e.incidents)}`);
 }
 
 if (process.argv.includes("--sample")) {

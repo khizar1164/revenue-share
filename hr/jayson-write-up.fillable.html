@@ -137,11 +137,6 @@
   .lines.tall{min-height:70px}
   .lines.three{min-height:86px}
   .lines.prefill{background:none;min-height:0;padding:7px 10px}
-  /* The fillable build types into PDF form fields laid over these boxes,
-     so the ruled paper would show through the typing. Keep the frame,
-     drop the rules. The boxes also hold their full height whatever is in
-     them: a field that has to scroll to be read is no use on a printed
-     notice, so the room is given on the page instead. */
   body.fillable .lines{background:none}
   body.fillable .lines{min-height:58px}
   body.fillable .lines.tall{min-height:88px}
@@ -170,7 +165,7 @@
     display:flex;justify-content:space-between;font-size:8pt;color:var(--grey)}
 </style>
 </head>
-<body>
+<body class="fillable">
 
 <!-- ===================== PAGE 1 — the notice and the facts ================ -->
 <section class="page">
@@ -181,18 +176,18 @@
   </div>
 
   <div class="who">
-    <div><span class="k">Employee</span><span class="v">{{EMPLOYEE_NAME}}</span></div>
-    <div><span class="k">Supervisor</span><span class="v">{{SUPERVISOR}}</span></div>
-    <div><span class="k">Date issued</span><span class="v">{{DATE_ISSUED}}</span></div>
+    <div><span class="k">Employee</span><span class="v">Jayson Murphy</span></div>
+    <div><span class="k">Supervisor</span><span class="v">Matthew Brown</span></div>
+    <div><span class="k">Date issued</span><span class="v">Oct 1, 2026</span></div>
   </div>
 
   <h2>Level of action</h2>
   <div class="levels">
-    <div class="lvl {{LVL_WARNING}}"><span class="box"></span>
+    <div class="lvl on"><span class="box"></span>
       <div><b>Written Warning</b><br><span>15 points lost in 60 days</span></div></div>
-    <div class="lvl {{LVL_SUSPENSION}}"><span class="box"></span>
+    <div class="lvl "><span class="box"></span>
       <div><b>Suspension</b><br><span>30 points &middot; 7 days unpaid</span></div></div>
-    <div class="lvl {{LVL_TERMINATION}}"><span class="box"></span>
+    <div class="lvl "><span class="box"></span>
       <div><b>Termination</b><br><span>45 points lost in 60 days</span></div></div>
   </div>
 
@@ -201,27 +196,28 @@
 
   <div class="next">
     <span class="k">What happens next</span>
-    <p>{{NEXT_ACTION}}</p>
+    <p>This is a written warning. If 30 points are lost in a rolling 60-day period, the next step is a seven-day unpaid suspension without pay. At 45 points it is termination.</p>
   </div>
 
   <h2>Where this stands</h2>
   <div class="points">
-    <div><span class="k">Points lost</span><span class="n bad">{{POINTS_LOST}}</span></div>
-    <div><span class="k">{{THRESHOLD_LABEL}}</span><span class="n">{{THRESHOLD}}</span></div>
-    <div><span class="k">Points now</span><span class="n">{{POINTS_NOW}}</span></div>
+    <div><span class="k">Points lost</span><span class="n bad">15</span></div>
+    <div><span class="k">Threshold</span><span class="n">15</span></div>
+    <div><span class="k">Points now</span><span class="n">0</span></div>
     <div class="note">Everyone starts each month on 15 points. Discipline is measured
       on a rolling 60 days, not the calendar month, so this covers
-      {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}</div>
+      Aug 2, 2026 to Oct 1, 2026. 15 more points lost in this window reaches a seven-day unpaid suspension.</div>
   </div>
 
   <h2>The incidents</h2>
-{{INCIDENT_TABLE}}
+  <div class="cols2"><table><thead><tr><th style="width:110px">Date</th><th>What happened</th><th class="n" style="width:46px">Pts</th></tr></thead><tbody><tr><td>Sep 4, 2026</td><td>Late — 7 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 5, 2026</td><td>Late — 8 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 6, 2026</td><td>Late — 17 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 8, 2026</td><td>Late — 9 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 9, 2026</td><td>Late — 30 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 11, 2026</td><td>Late — 37 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 12, 2026</td><td>Late — 11 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 15, 2026</td><td>Late — 25 min (tardy log)</td><td class="n pts">−1</td></tr></tbody></table><table><thead><tr><th style="width:110px">Date</th><th>What happened</th><th class="n" style="width:46px">Pts</th></tr></thead><tbody><tr><td>Sep 18, 2026</td><td>Late — 23 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 22, 2026</td><td>Late — 10 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 26, 2026</td><td>Late — 4 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 27, 2026</td><td>Late — 12 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 28, 2026</td><td>Late — 5 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Sep 30, 2026</td><td>Late — 16 min (tardy log)</td><td class="n pts">−1</td></tr><tr><td>Oct 1, 2026</td><td>Late — 18 min (tardy log)</td><td class="n pts">−1</td></tr></tbody></table></div>
+  <div class="ttot"><span>Total lost in this period</span><span>−15</span></div>
 
 
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
+    <span>Jayson Murphy &middot; Oct 1, 2026</span>
   </div>
 </section>
 
@@ -235,34 +231,34 @@
 
   <h2>The standard that was not met</h2>
   <div class="value">
-    <p><b>{{VALUE_NAME}}</b> &mdash; {{VALUE_TEXT}}</p>
+    <p><b>Teamwork</b> &mdash; We value cooperation, communication, and unity. We support one another and recognize that our collective effort is stronger than any one individual. We achieve more together.</p>
   </div>
 
   <h2>Why this matters</h2>
   <div class="policy">
     <span class="k">Employee Handbook</span>
-    <p><b>{{POLICY_REF}}</b></p>
-    {{POLICY_TEXT}}
+    <p><b>7.1 Attendance &amp; Punctuality</b></p>
+    <p class="polq">Employees are expected to be in the workplace, ready to work, at their scheduled start time and to complete their entire shift. Time off must be requested in writing, in advance, and anyone unexpectedly unable to report must notify their supervisor directly and as early as possible. A voicemail, text or email is not acceptable except in an extreme emergency.</p>
   </div>
 
   <p class="lede">Moving work only holds together while people, trucks, equipment,
      arrival windows and the jobs behind them all stay coordinated. One person's
      decision carries down the rest of the day.</p>
   <div class="impact">
-{{IMPACT_ROWS}}
+    <div class="imp"><span class="ik">Late — 7 min (tardy log)</span><p>Even a short delay can stop a crew leaving the shop on time. Movers work as a team, so one person being late leaves several people waiting while the customer's arrival window keeps running. That delay carries into every job scheduled afterwards and creates extra labour cost, rushed conditions and customer dissatisfaction.</p></div>
   </div>
 
   <h2>What the record shows</h2>
   <p class="hint">Counted from the points log. These are figures the system can
      evidence; nothing here is an estimate.</p>
   <ul class="record">
-{{RECORD_ROWS}}
+    <li>15 late arrivals, of which 15 were timed at 232 minutes in total.</li>
   </ul>
 
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
+    <span>Jayson Murphy &middot; Oct 1, 2026</span>
   </div>
 </section>
 
@@ -275,10 +271,10 @@
   </div>
 
   <h2>Previous discussions or warnings on this subject</h2>
-  <div class="lines {{PRIOR_CLS}}" data-field="prior">{{PRIOR}}</div>
+  <div class="lines " data-field="prior"></div>
 
   <h2>What must change</h2>
-  <div class="lines tall {{REQUIRED_CLS}}" data-field="required">{{REQUIRED}}</div>
+  <div class="lines tall " data-field="required"></div>
 
   <div class="legal">
     <p>Failure to show immediate and sustained improvement will result in further
@@ -288,7 +284,7 @@
   </div>
 
   <h2>Additional comments &mdash; supervisor</h2>
-  <div class="lines three {{COMMENTS_CLS}}" data-field="supervisor_comments">{{SUPERVISOR_COMMENTS}}</div>
+  <div class="lines three " data-field="supervisor_comments"></div>
 
   <h2>Employee comments</h2>
   <div class="lines tall" data-field="employee_comments"></div>
@@ -308,7 +304,7 @@
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
+    <span>Jayson Murphy &middot; Oct 1, 2026</span>
   </div>
 </section>
 
@@ -353,7 +349,7 @@
 
   <div class="pagefoot">
     <span>Immediate Movers &amp; Storage &middot; immediatemoversnwi.com</span>
-    <span>{{EMPLOYEE_NAME}} &middot; {{DATE_ISSUED}}</span>
+    <span>Jayson Murphy &middot; Oct 1, 2026</span>
   </div>
 </section>
 

@@ -9,7 +9,7 @@
     "seed": "node scripts/seed.js",
     "verify": "node scripts/verify.js",
     "calc": "node scripts/calc-check.js",
-    "test": "node scripts/calc-test.js && node scripts/tardy-check.js && node scripts/reviews-check.js && node scripts/scheduler-check.js && node scripts/pages-check.js",
+    "test": "node scripts/calc-test.js && node scripts/tardy-check.js && node scripts/reviews-check.js && node scripts/scheduler-check.js && node scripts/pages-check.js && node scripts/notice-check.js",
     "test:db": "node scripts/gate-check.js && node scripts/ytd-check.js && node scripts/log-check.js",
     "test:live": "node scripts/admin-check.js && node scripts/report-check.js",
     "sync": "node scripts/sync.js"
@@ -20,5 +20,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "pdf-lib": "^1.17.1"
   }
 }
