@@ -320,8 +320,12 @@ Tyler Johnston  44.25"></textarea>
       <h2>Background jobs</h2>
       <p class="dek">What runs on its own, and when it last did. On their own these
          only ever rebuild <b>the current month</b>. To correct a month that has
-         closed, fix it in the sheet, choose that month at the top of this page,
+         closed, fix it in the sheet, pick that month at the top of this page,
          then run the job.</p>
+      <!-- Which month Run now would actually use. The picker is in the header
+           and the header scrolls away, so by the time you are down here there
+           was nothing on screen saying what you were about to rebuild. -->
+      <div id="jobMonthNote"></div>
       <div class="tblwrap"><table id="jobsTbl"></table></div>
     </div>
 
@@ -600,6 +604,21 @@ Tyler Johnston  44.25"></textarea>
   }
 
   function renderJobs(jobs){
+    /* The month picker lives in the header and the header scrolls away, so by
+       the time somebody is down here deciding whether to press Run now, there
+       was nothing on screen saying which month they were about to rebuild.
+       Khizar, 8 October: "last month setting is not appearing". It was there,
+       four panels up and out of sight. */
+    var past = STATE.month && STATE.month !== thisMonth;
+    $("jobMonthNote").innerHTML = !STATE.month ? "" : past
+      ? '<div class="note"><b>Run now rebuilds ' + esc(monthName(STATE.month + "-01"))
+        + '</b>, not this month, because that is the month picked at the top of '
+        + 'this page. Reviews and tardies replace that whole month from the sheet. '
+        + 'Pick ' + esc(monthName(thisMonth + "-01")) + ' again to go back to normal.</div>'
+      : '<div class="note ok">Run now rebuilds <b>' + esc(monthName(STATE.month + "-01"))
+        + '</b>, the month this page is showing. To correct a month that has closed, '
+        + 'pick it at the top of this page first.</div>';
+
     if (!jobs || !jobs.length){
       $("jobsTbl").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">'
         + 'Not running here — the background jobs start with the deployed service.</td></tr></tbody>';
@@ -617,7 +636,9 @@ Tyler Johnston  44.25"></textarea>
             + '<td>'+state+(bad ? '<div style="font-size:12px;color:var(--crit)">'+esc(j.last_error)+'</div>' : '')
             + (j.last_detail && !bad ? '<div style="font-size:12px;color:var(--ink-3)">'+esc(String(j.last_detail).slice(0,70))+'</div>' : '')
             + '</td>'
-            + '<td class="n"><button class="sm" data-runjob="'+esc(j.name)+'">Run now</button></td></tr>';
+            + '<td class="n"><button class="sm" data-runjob="'+esc(j.name)+'">'
+            + (past ? 'Run for ' + esc(MON3[+STATE.month.slice(5,7)-1]) : 'Run now')
+            + '</button></td></tr>';
         }).join("") + "</tbody>";
   }
 
@@ -795,19 +816,19 @@ Tyler Johnston  44.25"></textarea>
   });
 
   /* ------------------------------------------------------ month picker --- */
-  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  var FULL = ["January","February","March","April","May","June","July","August",
-              "September","October","November","December"];
+  /* MONTHS (long) is declared once, further up. These are the picker's grid
+     labels, and they are short because twelve of them share a row. */
+  var MON3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var mpYear = now.getFullYear();
 
   function setMonth(m){
     STATE.month = m;
-    $("monthBtn").textContent = FULL[+m.slice(5,7)-1] + " " + m.slice(0,4);
+    $("monthBtn").textContent = MONTHS[+m.slice(5,7)-1] + " " + m.slice(0,4);
   }
   function drawMonths(){
     $("mpYear").textContent = mpYear;
     $("mpNext").disabled = mpYear >= now.getFullYear();
-    $("mpGrid").innerHTML = MONTHS.map(function(name, i){
+    $("mpGrid").innerHTML = MON3.map(function(name, i){
       var v = mpYear + "-" + pad2(i+1);
       return '<button type="button" data-m="'+v+'"'
         + (v === STATE.month ? ' aria-current="true"' : '')
