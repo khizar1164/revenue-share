@@ -26,6 +26,7 @@ Monthly revenue × 2%, less claims, is the pool. It splits **50% on performance 
 | Hours | Connecteam → the `Hours` tabs in the Movers Dashboard sheet | every 10 minutes |
 | Reviews, claims, points, bonuses, deductions | typed into `/admin` | instantly |
 | Day-end summary and a backup of everything typed | written out to the sheet | nightly |
+| Who has crossed 15, 30 or 45 lost points in 60 days | the points themselves | every 30 minutes |
 
 Revenue is **not** derived from the API. That was tried: summing payments matched August to 0.11% but was 6–7% out on June and July, because payments include tips and an opportunity spanning two months counts into both. The report already holds the exact figure, so we read that.
 

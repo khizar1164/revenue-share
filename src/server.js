@@ -21,6 +21,11 @@ import { query, loadEnv, safeTarget } from "./db.js";
 import { matchableRoster } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
+import {
+  configured as ctConfigured, writingEnabled as ctWriting, status as ctStatus,
+  taskLevels as ctLevels, listBoards as ctBoards, findUser as ctFindUser
+} from "./connecteam.js";
+import { syncDiscipline } from "./sync/discipline.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
@@ -715,6 +720,50 @@ app.get("/api/admin/jobs", (_req, res) => {
    without this a correction to a closed month had nowhere to go: Andrew edited
    a September review in the sheet on 7 October, pressed Run now, and watched it
    rebuild October. */
+/* What Connecteam looks like from here, and who would be written to.
+ *
+ * Read-only on purpose. Before anybody switches task creation on, the two
+ * things that have to be right are the board and the assignee, and both are
+ * names typed into an environment variable. This asks Connecteam whether they
+ * exist rather than finding out at the moment a write-up is due.
+ *
+ * It also runs the discipline check as a dry run, so the answer to "what would
+ * this have done" is a list of names rather than a promise. */
+app.get("/api/admin/connecteam", wrap(async (req, res) => {
+  const out = {
+    configured: ctConfigured(),
+    writing: ctWriting(),
+    why: ctStatus(),
+    levels: [...ctLevels()],
+    board_wanted: process.env.CONNECTEAM_BOARD || "Payroll",
+    assignee_wanted: process.env.CONNECTEAM_ASSIGNEE_EMAIL
+      || process.env.CONNECTEAM_ASSIGNEE || "Matthew Brown"
+  };
+
+  if (out.configured) {
+    try {
+      const boards = await ctBoards();
+      out.boards = boards.map(b => ({ id: b.id ?? b.taskBoardId, name: b.name ?? b.title }));
+      out.board = out.boards.find(b =>
+        String(b.name).toLowerCase() === out.board_wanted.toLowerCase()) ?? null;
+      const who = await ctFindUser({
+        email: process.env.CONNECTEAM_ASSIGNEE_EMAIL,
+        name: process.env.CONNECTEAM_ASSIGNEE || "Matthew Brown"
+      });
+      out.assignee = who ? { userId: who.userId, name: `${who.firstName} ${who.lastName}`, email: who.email } : null;
+    } catch (e) {
+      out.error = e.message;
+    }
+  }
+
+  try {
+    out.would_do = await syncDiscipline({ dryRun: true });
+  } catch (e) {
+    out.would_do_error = e.message;
+  }
+  res.json(out);
+}));
+
 app.post("/api/admin/jobs/:name/run", wrap(async (req, res) => {
   if (!scheduler) return res.status(503).json({ error: "the scheduler is not running" });
   const month = String(req.body?.month ?? "").trim();

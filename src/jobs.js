@@ -30,6 +30,7 @@ import { parseReportFile } from "./sync/revenue-report.js";
 import { reportFreshness } from "./sync/report-hook.js";
 import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
+import { syncDiscipline } from "./sync/discipline.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -281,6 +282,15 @@ export function registerJobs(scheduler) {
     scheduler.add("reviews", o => syncReviews(o), {
       everyMs: 30 * MIN, runAtStartAfterMs: 90_000 });
   }
+  /* Who crossed 15, 30 or 45 lost points in the last 60 days, and a task for
+     Matthew when somebody does. Half-hourly matches the tardy log it mostly
+     reacts to; the notice table means being asked often costs nothing.
+
+     It runs whether or not Connecteam is switched on, because the crossing is
+     worth recording either way — turning the integration on later should not
+     mean the weeks before it went unwatched. */
+  scheduler.add("discipline", o => syncDiscipline(o ?? {}), {
+    everyMs: 30 * MIN, runAtStartAfterMs: 105_000 });
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }

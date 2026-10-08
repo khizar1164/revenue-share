@@ -46,6 +46,18 @@ services:
       - key: ALLOW_REPORT_PREVIEW
         value: "off"
 
+      # Connecteam raises a task for Matthew when somebody crosses 15, 30 or 45
+      # lost points. Off until Andrew confirms the board and the assignee, and
+      # the key is still to come: the API needs the Expert tier. The discipline
+      # check itself runs regardless and records every crossing, so switching
+      # this on later does not mean the weeks before it went unwatched.
+      - key: CONNECTEAM_TASKS
+        value: "off"
+      - key: CONNECTEAM_BOARD
+        value: Payroll
+      - key: CONNECTEAM_ASSIGNEE
+        value: Matthew Brown
+
       - key: TIMEZONE
         value: America/Chicago     # La Porte is Central, unlike most of Indiana
 
@@ -73,4 +85,6 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: CONNECTEAM_API_KEY
         sync: false
