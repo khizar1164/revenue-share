@@ -802,7 +802,7 @@ app.get("/api/admin/sign-ins", wrap(async (req, res) => {
       order by s.last_at desc nulls last, e.full_name`);
 
   const recent = await query(
-    `select s.at, e.full_name, e.code_name, s.user_agent
+    `select s.at, e.full_name, e.code_name, e.status, s.user_agent
        from sign_ins s
        join employees e on e.id = s.employee_id
       order by s.at desc

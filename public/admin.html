@@ -870,8 +870,17 @@ Tyler Johnston  44.25"></textarea>
       '<thead><tr><th>When</th><th>Who</th><th>On</th></tr></thead><tbody>'
       + (recent.length
           ? recent.map(function(r){
-              return '<tr><td title="'+esc(whenFull(r.at))+'">'+esc(ago(r.at))+'</td>'
-                + '<td>'+esc(r.full_name)+'</td>'
+              /* The feed is history and keeps everybody in it, including
+                 people who have since left. Saying so is the difference
+                 between a record and a puzzle: the one row in this list from
+                 before the crew rollout belongs to somebody who no longer
+                 works here, and without the label it reads as a mistake. */
+              var gone = r.status && r.status !== "active";
+              return '<tr' + (gone ? ' style="color:var(--ink-3)"' : '') + '>'
+                + '<td title="'+esc(whenFull(r.at))+'">'+esc(ago(r.at))+'</td>'
+                + '<td>'+esc(r.full_name)
+                + (gone ? ' <span style="font-size:11px;color:var(--ink-3)">· left</span>' : '')
+                + '</td>'
                 + '<td style="color:var(--ink-3)">'+esc(device(r.user_agent))+'</td></tr>';
             }).join("")
           : '<tr><td colspan="3" style="color:var(--ink-3)">No sign-ins recorded yet.</td></tr>')
