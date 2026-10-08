@@ -67,6 +67,13 @@ const LABELS = {
   supervisor_date: "Date — supervisor"
 };
 
+/** Where Chrome is, or null. For a health check that can say whether this
+    server is able to build a write-up at all, rather than finding out when
+    somebody presses the button. */
+export function chromePath() {
+  try { return chrome(); } catch { return null; }
+}
+
 function chrome() {
   /* Set deliberately, so a wrong value is a mistake to report rather than a
      reason to quietly use a different browser than the one asked for. */

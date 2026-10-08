@@ -28,6 +28,7 @@ import {
 } from "./connecteam.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
+import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
@@ -920,6 +921,12 @@ app.get("/healthz", async (_req, res) => {
      environment it was given is otherwise unanswerable from outside, and the
      alternative is waiting for somebody to cross 15 points to find out. */
   out.connecteam = { configured: ctConfigured(), writing: ctWriting() };
+
+  /* Whether this server can build a write-up, which is really asking whether
+     the deploy is the Docker image or the plain Node runtime. Worth saying out
+     loud: the two look identical from outside until Matthew presses the button
+     and nothing comes back. No path, just yes or no. */
+  out.writeups = { browser: Boolean(chromePath()) };
 
   out.ok = out.database.reachable === true && (out.database.tables ?? 0) > 0;
   res.status(out.ok ? 200 : 503).json(out);
