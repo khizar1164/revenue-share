@@ -28,11 +28,14 @@
  * changes, which hand-placed coordinates would not.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { PDFDocument, StandardFonts, rgb, PDFName, PDFString } from "pdf-lib";
+
+const run = promisify(execFile);
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -65,10 +68,17 @@ const LABELS = {
 };
 
 function chrome() {
+  /* Set deliberately, so a wrong value is a mistake to report rather than a
+     reason to quietly use a different browser than the one asked for. */
+  if (process.env.CHROME) {
+    if (existsSync(process.env.CHROME)) return process.env.CHROME;
+    throw new Error(`no Chrome found at CHROME=${process.env.CHROME}`);
+  }
   const guesses = [
-    process.env.CHROME,
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
     "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   ].filter(Boolean);
@@ -86,7 +96,7 @@ function scratch() {
 }
 
 /* Step one: where is every field box, in pixels, relative to its page. */
-function measure(html, work) {
+async function measure(html, work) {
   const probe = `
 <style>html,body{width:${CONTENT_W_PX}px!important;margin:0!important}</style>
 <script>
@@ -119,12 +129,17 @@ function measure(html, work) {
   const probePath = join(work, "measure.html");
   writeFileSync(probePath, html.replace("</head>", probe + "\n</head>"));
 
-  const dom = execFileSync(chrome(), [
-    "--headless", "--disable-gpu", "--no-sandbox",
+  const { stdout: dom } = await run(chrome(), [
+    "--headless", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
     "--user-data-dir=" + join(work, "profile"),
-    "--virtual-time-budget=15000",
+    /* Five seconds is generous. Measured across 15s, 8s, 4s, 2s and 1s the
+       boxes land in exactly the same place and the run takes the same four
+       seconds either way, because the cost is starting Chrome rather than
+       waiting for anything. The budget is only here so that a stalled webfont
+       cannot hang somebody's request. */
+    "--virtual-time-budget=5000",
     "--dump-dom", "file:///" + probePath.replace(/\\/g, "/")
-  ], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+  ], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
   const m = dom.match(/<div id="__rects" data-pages="(\d+)">([^<]*)<\/div>/);
   if (!m) throw new Error("the measuring pass produced nothing. Did Chrome reach the webfonts?");
@@ -132,16 +147,16 @@ function measure(html, work) {
 }
 
 /* Step two: the PDF itself, exactly as it is produced today. */
-function print(htmlPath, work) {
+async function print(htmlPath, work) {
   const out = join(work, "flat.pdf");
-  execFileSync(chrome(), [
-    "--headless", "--disable-gpu", "--no-sandbox",
+  await run(chrome(), [
+    "--headless", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
     "--user-data-dir=" + join(work, "profile2"),
-    "--virtual-time-budget=15000",
+    "--virtual-time-budget=5000",
     "--no-pdf-header-footer",
     "--print-to-pdf=" + out,
     "file:///" + htmlPath.replace(/\\/g, "/")
-  ], { stdio: "ignore" });
+  ]);
   return readFileSync(out);
 }
 
@@ -152,10 +167,31 @@ export async function makeFillable({ htmlPath, outPath, values = {} }) {
   }
 
   const work = scratch();
-  const { sections, rects } = measure(html, work);
+
+  /* Both passes read the same file and neither needs the other's answer, so
+     they could run at once — Chrome takes about four seconds to start whatever
+     it is asked to do, and doing that twice in a row is four seconds somebody
+     spends watching a button.
+     
+     They do not, by default. The service runs on a 512MB instance and a
+     headless Chromium printing this document wants a couple of hundred of
+     those. Two at once plus Node is close enough to the ceiling that a write-up
+     could take the dashboard and the break-room board down with it, and saving
+     four seconds on a once-a-month button is not worth that. NOTICE_PARALLEL=on
+     turns it on where there is memory to spare. */
+  let sections, rects, flat;
+  if (process.env.NOTICE_PARALLEL === "on") {
+    [{ sections, rects }, flat] = await Promise.all([
+      measure(html, work),
+      print(htmlPath, work)
+    ]);
+  } else {
+    ({ sections, rects } = await measure(html, work));
+    flat = await print(htmlPath, work);
+  }
   if (!rects.length) throw new Error("no field boxes were found on the page");
 
-  const pdf = await PDFDocument.load(print(htmlPath, work));
+  const pdf = await PDFDocument.load(flat);
   const pages = pdf.getPages();
 
   /* The page a field lands on is taken from which section it sits in, which
@@ -217,8 +253,13 @@ export async function makeFillable({ htmlPath, outPath, values = {} }) {
 
 /* ------------------------------------------------------------------------- */
 
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` ||
-    process.argv[1]?.endsWith("make-fillable.mjs")) {
+/* Only when somebody ran this file. The server imports it, and under `node -e`
+   there is no argv[1] at all, which the previous version read straight off the
+   end of. */
+const ranDirectly = typeof process.argv[1] === "string" &&
+  process.argv[1].replace(/\\/g, "/").endsWith("/make-fillable.mjs");
+
+if (ranDirectly) {
   const args = process.argv.slice(2);
   const htmlArg = args.find(a => !a.startsWith("--"));
   if (!htmlArg) {

@@ -55,6 +55,31 @@ console.log("\n4. THE FILLABLE BUILD STILL TURNS THE RULES OFF");
 check("body.fillable .lines drops the background",
   /body\.fillable \.lines\{background:none\}/.test(html));
 
+/* The image installs with --omit=dev, so anything the running server imports
+   has to be a real dependency. pdf-lib was a devDependency while the write-up
+   was something I ran on my own machine; the moment the server started building
+   them, that became a container that boots and then fails on the first press of
+   the button, which is the worst time to find out. */
+console.log("\n5. WHAT THE SERVER IMPORTS IS INSTALLED IN THE IMAGE");
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const docker = readFileSync(join(root, "Dockerfile"), "utf8");
+const omitsDev = /npm ci[^\n]*--omit=dev/.test(docker);
+check("the image installs without dev dependencies", omitsDev);
+if (omitsDev) {
+  check("pdf-lib is a runtime dependency",
+    Boolean(pkg.dependencies?.["pdf-lib"]) && !pkg.devDependencies?.["pdf-lib"]);
+}
+check("and the image is told where Chrome is", /ENV CHROME=/.test(docker));
+check("with a browser installed to be there", /chromium/.test(docker));
+
+/* .dockerignore is easy to make too greedy. The template is not optional. */
+const ignore = readFileSync(join(root, ".dockerignore"), "utf8")
+  .split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+for (const needed of ["hr/disciplinary-notice.html", "hr/render-notice.mjs", "hr/make-fillable.mjs"]) {
+  check(`${needed} reaches the image`,
+    !ignore.some(pat => pat === needed || pat === "hr/" || pat === "hr"));
+}
+
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);
 console.log("=".repeat(58));

@@ -27,6 +27,7 @@ import {
   listLabels as ctLabels, findLabel as ctFindLabel
 } from "./connecteam.js";
 import { syncDiscipline } from "./sync/discipline.js";
+import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
@@ -770,6 +771,69 @@ app.get("/api/admin/connecteam", wrap(async (req, res) => {
     out.would_do_error = e.message;
   }
   res.json(out);
+}));
+
+/* The write-up, as a PDF Matthew can type into.
+ *
+ * Andrew, 9 October: Matthew should pick a name and get the document, rather
+ * than asking somebody for one. Rendering takes a few seconds because Chrome
+ * lays the thing out twice, once to find where the supervisor's boxes landed
+ * and once to print, so the button says so.
+ *
+ * ?preview=1 returns what it would say without rendering anything, which is
+ * how the panel knows whether there is anything to write up before it spends
+ * ten seconds finding out.
+ */
+app.get("/api/admin/writeup/:id", wrap(async (req, res) => {
+  const id = String(req.params.id);
+  const issued = String(req.query.issued ?? "").trim() || undefined;
+  if (issued && !/^\d{4}-\d{2}-\d{2}$/.test(issued)) {
+    return res.status(400).json({ error: "issued must look like 2026-10-09" });
+  }
+
+  if (req.query.preview) {
+    const d = await noticeData(id, { issued });
+    const lost = d.incidents.reduce((a, i) => a + i.delta, 0);
+    return res.json({
+      employee: d.employee, issued: d.issued,
+      window: [d.windowFrom, d.windowTo],
+      incidents: d.incidents.length, lost: Math.abs(lost), claims: d.claims.length,
+      value: d.value
+    });
+  }
+
+  /* wrap() turns anything thrown into "something went wrong working that out",
+     which is the right answer for most endpoints and useless here: the three
+     things that actually go wrong each have a different thing to do about them,
+     and the person reading the message is the one who has to do it. */
+  let built;
+  try {
+    built = await writeUpPdf(id, { issued });
+  } catch (e) {
+    console.error("write-up failed:", e.message);
+    if (/no Chrome found/i.test(e.message)) {
+      return res.status(503).json({ error:
+        "this server has no browser installed, so it cannot lay the notice out. " +
+        "It needs the Docker image rather than the plain Node runtime." });
+    }
+    if (/overflowed|cannot be trusted/i.test(e.message)) {
+      return res.status(500).json({ error:
+        "the notice did not fit its pages, so no document was produced rather " +
+        "than one with the boxes in the wrong place. " + e.message });
+    }
+    if (/no such person/i.test(e.message)) {
+      return res.status(404).json({ error: "no such person" });
+    }
+    return res.status(500).json({ error: e.message });
+  }
+
+  const { bytes, data } = built;
+  res.setHeader("content-type", "application/pdf");
+  /* attachment, not inline: this is a document somebody fills in and keeps,
+     and a browser's own viewer is where form fields go to be ignored. */
+  res.setHeader("content-disposition",
+    `attachment; filename="${writeUpFilename(data)}"`);
+  res.send(bytes);
 }));
 
 app.post("/api/admin/jobs/:name/run", wrap(async (req, res) => {

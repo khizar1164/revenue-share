@@ -11,12 +11,14 @@
 services:
   - type: web
     name: revenue-share
-    runtime: node
+    # Docker, since 9 October, for one reason: the disciplinary write-up is
+    # printed by Chrome, and Matthew needs a button rather than somebody to ask.
+    # See the Dockerfile.
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: starter                  # always on — see above
     region: oregon                 # same region as immediate-movers-db
     branch: main
-    buildCommand: npm ci --omit=dev
-    startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true
 

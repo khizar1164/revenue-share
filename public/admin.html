@@ -464,7 +464,8 @@ Tyler Johnston  44.25"></textarea>
   function renderRoster(d){
     var h = '<thead><tr><th>Code</th><th>Name</th><th class="n">Hours</th><th>Standing</th>'
           + '<th class="n">Pts</th><th class="n">Rev</th><th class="n">Share</th>'
-          + '<th class="n">+/−</th><th class="n">Take home</th><th></th></tr></thead><tbody>';
+          + '<th class="n">+/−</th><th class="n">Take home</th><th></th>'
+          + '<th class="n">Write-up</th></tr></thead><tbody>';
     d.rows.slice().sort(function(a,b){
       var t = function(x){ return x.paid?0:(x.forfeits?1:2); };
       return t(a)-t(b) || b.share-a.share;
@@ -486,7 +487,19 @@ Tyler Johnston  44.25"></textarea>
         + '<td class="n">'+(p.paid?usd(p.share):(p.forfeits?'<span style="color:var(--crit)">−'+usd(p.forfeited)+'</span>':"—"))+'</td>'
         + '<td class="n"'+(adj?' style="color:'+(adj>0?"var(--good)":"var(--crit)")+'"':'')+'>'+(adj?(adj>0?"+":"−")+usd(Math.abs(adj)):"—")+'</td>'
         + '<td class="n"><b>'+usd(p.take_home)+'</b></td>'
-        + '<td class="n" style="font-size:12px;color:var(--ink-3)">'+esc(p.reason||"")+'</td></tr>';
+        + '<td class="n" style="font-size:12px;color:var(--ink-3)">'+esc(p.reason||"")+'</td>'
+        /* Only where there is something to write about. A notice built from an
+           empty record would be four pages saying nothing happened, and the
+           button offering it would imply the system thought otherwise. The
+           number is the points lost in the last 60 days, which is the figure
+           the notice is about. */
+        + '<td class="n">'
+        +   ((p.discipline_lost > 0)
+              ? '<button class="sm" data-writeup="'+p.employee_id+'" data-who="'+esc(p.full_name)+'"'
+                + ' title="Build the disciplinary notice for ' + esc(p.full_name) + ' from their points">'
+                + '&minus;' + p.discipline_lost + '</button>'
+              : '<span style="color:var(--ink-3)">—</span>')
+        + '</td></tr>';
     });
     $("rosterTbl").innerHTML = h + "</tbody>";
 
@@ -770,6 +783,50 @@ Tyler Johnston  44.25"></textarea>
       })
       .catch(function(e){ toast("invites — " + e.message, true); })
       .finally(function(){ b.disabled = false; b.textContent = "Send crew sign-in links"; });
+  });
+
+  /* Build somebody's write-up and hand it over as a file.
+   *
+   * Chrome lays the notice out twice on the server, once to find where the
+   * supervisor's boxes landed and once to print, so this takes several seconds.
+   * The button says what it is doing, because a button that looks broken for
+   * eight seconds gets pressed again, and again.
+   *
+   * Fetched rather than linked so a failure arrives as a message instead of a
+   * tab full of JSON where a document should be. */
+  $("rosterTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-writeup]"); if (!b) return;
+    var id = b.getAttribute("data-writeup");
+    var who = b.getAttribute("data-who");
+    if (!confirm("Build the disciplinary notice for " + who + "?\n\n"
+        + "It is made from their points over the last 60 days. Nothing is sent "
+        + "to anyone and nothing is recorded — it downloads to you.")) return;
+
+    var label = b.innerHTML;
+    b.disabled = true; b.textContent = "…";
+    fetch("/api/admin/writeup/" + encodeURIComponent(id))
+      .then(function(r){
+        if (!r.ok) {
+          return r.json().catch(function(){ return {}; }).then(function(x){
+            throw new Error(x.error || ("HTTP " + r.status));
+          });
+        }
+        var name = "write-up.pdf";
+        var cd = r.headers.get("content-disposition") || "";
+        var m = cd.match(/filename="([^"]+)"/);
+        if (m) name = m[1];
+        return r.blob().then(function(blob){
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url; a.download = name;
+          document.body.appendChild(a); a.click(); a.remove();
+          /* Let the download start before the blob goes. */
+          setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
+          toast(name + " downloaded. Page 3 is the part Matthew types into.");
+        });
+      })
+      .catch(function(err){ toast("Could not build it — " + err.message, true); })
+      .finally(function(){ b.disabled = false; b.innerHTML = label; });
   });
 
   $("jobsTbl").addEventListener("click", function(e){

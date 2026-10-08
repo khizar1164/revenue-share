@@ -16,12 +16,10 @@
   },
   "dependencies": {
     "express": "^5.2.1",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.0"
   },
   "engines": {
     "node": ">=22"
-  },
-  "devDependencies": {
-    "pdf-lib": "^1.17.1"
   }
 }

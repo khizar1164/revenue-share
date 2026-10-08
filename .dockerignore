@@ -1,0 +1,13 @@
+# Everything the image does not need. The notice template in hr/ is needed and
+# stays; the sample PDFs and the HTML generated from them are not, and they are
+# the largest files in the repository.
+node_modules
+.git
+.env
+*.log
+hr/*.pdf
+hr/*.fillable.html
+hr/sample-notice.html
+hr/example-*.html
+hr/jayson-*.html
+scripts/
