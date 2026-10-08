@@ -31,7 +31,7 @@ import { query, withTransaction } from "../db.js";
 import { RULES } from "../calc.js";
 import {
   configured, writingEnabled, status as ctStatus, taskLevels,
-  findUser, findBoard, createTask, taskText
+  findUser, findBoard, findLabel, createTask, taskText
 } from "../connecteam.js";
 
 const LEVELS = [
@@ -111,7 +111,7 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
   /* Who the task is for, looked up once. If Connecteam cannot say, tasks are
      skipped and the crossings still get recorded — the worst case is that
      Matthew is told late, not that nobody ever knew. */
-  let assignee = null, board = null, reachProblem = ctStatus();
+  let assignee = null, board = null, label = null, reachProblem = ctStatus();
   const wantTasks = !dryRun && configured() && writingEnabled();
   if (wantTasks) {
     try {
@@ -120,8 +120,11 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
         name: process.env.CONNECTEAM_ASSIGNEE || "Matthew Brown"
       });
       board = await findBoard();
+      if (board) label = await findLabel(board.id ?? board.taskBoardId);
       if (!assignee) reachProblem = "nobody in Connecteam matches the assignee";
-      else if (!board) reachProblem = `no Connecteam board called "${process.env.CONNECTEAM_BOARD || "Payroll"}"`;
+      else if (!board) reachProblem = "no Connecteam task board to put it on";
+      /* A missing label is not a reason to withhold the task. Matthew filing
+         it himself is a smaller problem than him never hearing about it. */
     } catch (e) {
       reachProblem = e.message;
     }
@@ -157,6 +160,7 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
         const task = await createTask({
           boardId: board.id ?? board.taskBoardId,
           userIds: [assignee.userId],
+          labelIds: label ? [label.id] : undefined,
           title, description
         });
         taskId = String(task?.id ?? task?.taskId ?? "");

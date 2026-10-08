@@ -41,7 +41,7 @@ export function writingEnabled() {
 export function status() {
   if (!configured()) return "no Connecteam API key configured";
   if (!writingEnabled()) {
-    return "task creation is switched off — Andrew has not confirmed the board and assignee yet";
+    return "task creation is switched off — nobody has said to start writing to Matthew's list yet";
   }
   return null;
 }
@@ -124,11 +124,41 @@ export async function listBoards(opts = {}) {
   return r?.data?.taskBoards ?? r?.data?.taskboards ?? r?.data ?? [];
 }
 
-/** The board a task goes on, by name. "Payroll" unless told otherwise. */
-export async function findBoard(name = process.env.CONNECTEAM_BOARD || "Payroll", opts = {}) {
+/**
+ * The board a task goes on.
+ *
+ * Immediate Movers has exactly one, "Task Management", and everything is
+ * organised by label rather than by board. So an unnamed board means the only
+ * board there is: naming it in configuration would be writing down a fact the
+ * account can already answer, and getting a new board added would silently
+ * break it. Name one explicitly and it has to be that one.
+ */
+export async function findBoard(name = process.env.CONNECTEAM_BOARD, opts = {}) {
   const boards = await listBoards(opts);
+  if (!name) return boards.length === 1 ? boards[0] : null;
   const want = String(name).trim().toLowerCase();
   return boards.find(b => String(b.name ?? b.title ?? "").trim().toLowerCase() === want) ?? null;
+}
+
+export async function listLabels(boardId, opts = {}) {
+  const r = await call(`/tasks/v1/taskboards/${encodeURIComponent(boardId)}/labels`, opts);
+  return r?.data?.labels ?? [];
+}
+
+/**
+ * The label the task is filed under.
+ *
+ * Andrew, 6 October: 'Quick Task label "Human Resources"'. His earlier message
+ * said Payroll; both labels exist, and the later, more specific instruction is
+ * the one followed. It is also the label already on the quick tasks Matthew
+ * gets today, so a write-up will land where he is used to looking.
+ */
+export async function findLabel(boardId, name = process.env.CONNECTEAM_LABEL || "Human Resources", opts = {}) {
+  const labels = await listLabels(boardId, opts);
+  const want = String(name).trim().toLowerCase();
+  /* One of the labels in this account is called "Maintenance " with a trailing
+     space, so trimming both sides is not fussiness. */
+  return labels.find(l => String(l.name ?? "").trim().toLowerCase() === want) ?? null;
 }
 
 /**
@@ -138,7 +168,7 @@ export async function findBoard(name = process.env.CONNECTEAM_BOARD || "Payroll"
  * returned quietly, because a caller that reports "task created" when nothing
  * was created is worse than one that fails.
  */
-export async function createTask({ boardId, userIds, title, description, dueDate }, opts = {}) {
+export async function createTask({ boardId, userIds, title, description, labelIds, dueDate }, opts = {}) {
   if (!writingEnabled()) {
     throw new Error("CONNECTEAM_TASKS is not 'on' — no task would be created");
   }
@@ -149,7 +179,12 @@ export async function createTask({ boardId, userIds, title, description, dueDate
     title: String(title).slice(0, 200),
     userIds,
     status: "published",
-    ...(description ? { description: String(description) } : {}),
+    type: "oneTime",
+    /* Not a string. Connecteam's own quick tasks carry their body as a list of
+       typed blocks, and a bare string is accepted and then shows as nothing —
+       which is the worst of both, a task that exists and says nothing. */
+    ...(description ? { description: [{ type: "html", html: String(description) }] } : {}),
+    ...(labelIds?.length ? { labelIds } : {}),
     /* Connecteam wants whole seconds. */
     ...(dueDate ? { dueDate: Math.floor(new Date(dueDate).getTime() / 1000) } : {})
   };
@@ -172,25 +207,33 @@ export function taskText({ name, level, lost, windowFrom, windowTo, incidents = 
   };
   const title = `${WHAT[level] ?? "Disciplinary action"} — ${name}`;
 
+  const at = level === "warning" ? 15 : level === "suspension" ? 30 : 45;
+
   const worst = incidents
     .filter(i => i.delta < 0)
     .sort((a, b) => a.delta - b.delta)
     .slice(0, 4)
-    .map(i => `  ${i.date}  ${i.reason} (${i.delta})`);
+    .map(i => `<li>${esc(i.date)} — ${esc(i.reason)} <b>(${i.delta})</b></li>`);
 
-  const lines = [
-    `${name} has lost ${lost} points in the 60 days to ${windowTo}.`,
-    "",
-    `That crosses the ${level === "warning" ? 15 : level === "suspension" ? 30 : 45}-point ` +
-      `threshold, so a ${WHAT[level]?.toLowerCase() ?? "disciplinary notice"} is due.`,
-    ""
-  ];
-  if (worst.length) lines.push("Biggest deductions in the window:", ...worst, "");
-  lines.push(
-    `Window: ${windowFrom} to ${windowTo}.`,
-    "The write-up generates from the points record. Print it, go through it with",
-    "them, and both sign. Raised automatically by the revenue share system."
-  );
+  /* The body is HTML because that is what Connecteam stores. Kept to the tags
+     a task card actually renders: paragraphs, a list, bold. */
+  const html = [
+    `<p><b>${esc(name)}</b> has lost <b>${lost} points</b> in the 60 days to ${esc(windowTo)}.</p>`,
+    `<p>That crosses the ${at}-point threshold, so a ` +
+      `${esc(WHAT[level]?.toLowerCase() ?? "disciplinary notice")} is due.</p>`,
+    worst.length ? `<p>Biggest deductions in the window:</p><ul>${worst.join("")}</ul>` : "",
+    `<p>Window: ${esc(windowFrom)} to ${esc(windowTo)}.</p>`,
+    `<p>The write-up generates from the points record. Print it, go through it ` +
+      `with them, and both sign.</p>`,
+    `<p><i>Raised automatically by the revenue share system.</i></p>`
+  ].filter(Boolean).join("");
 
-  return { title, description: lines.join("\n") };
+  return { title, description: html };
+}
+
+/* A reason comes off a sheet somebody types into, so it reaches here as
+   whatever they wrote. Into HTML it goes escaped. */
+function esc(v) {
+  return String(v ?? "")
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }

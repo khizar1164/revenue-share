@@ -38,7 +38,7 @@ function withEnv(vars, fn) {
 console.log("1. IT WILL NOT WRITE UNTIL IT IS TOLD IT MAY");
 await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: undefined }, async () => {
   check("switched off by default", writingEnabled() === false);
-  check("and says why", /not confirmed the board/.test(status() ?? ""), status() ?? "(none)");
+  check("and says why", /nobody has said to start/.test(status() ?? ""), status() ?? "(none)");
   let threw = null;
   await createTask({ boardId: "b1", userIds: [1], title: "x" }).catch(e => { threw = e.message; });
   check("createTask refuses rather than pretending", /not 'on'/.test(threw ?? ""), threw ?? "it did not throw");
@@ -58,7 +58,8 @@ await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: "on" }, async 
   };
   const task = await createTask({
     boardId: "board-7", userIds: [4242], title: "Written warning — A Mover",
-    description: "because", dueDate: "2026-10-15T00:00:00Z"
+    description: "<p>because</p>", labelIds: ["lab-hr"],
+    dueDate: "2026-10-15T00:00:00Z"
   }, { fetchImpl });
 
   check("posts to the board's tasks collection",
@@ -70,6 +71,15 @@ await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: "on" }, async 
   check("dueDate is whole seconds, not milliseconds",
     seen.body.dueDate === 1792022400, String(seen.body.dueDate));
   check("and the new task's id comes back", String(task.id) === "991");
+
+  /* Connecteam stores a task body as typed blocks. A bare string is accepted
+     and then shows as nothing, which is a task that exists and says nothing. */
+  check("the body is a list of typed blocks, not a string",
+    Array.isArray(seen.body.description) && seen.body.description[0].type === "html",
+    JSON.stringify(seen.body.description));
+  check("carrying the html", seen.body.description[0].html === "<p>because</p>");
+  check("labelIds go through", seen.body.labelIds?.[0] === "lab-hr");
+  check("and it is a one-off, not a recurring task", seen.body.type === "oneTime");
 });
 
 console.log("\n3. A FAILURE SAYS WHAT CONNECTEAM SAID");
@@ -117,12 +127,20 @@ const t = taskText({
 });
 check("the title names the person and the action",
   t.title === "Written warning — Jayson Murphy", t.title);
-check("the body gives the number", /lost 15 points/.test(t.description));
+check("the body gives the number", /lost <b>15 points<\/b>/.test(t.description));
 check("and the window it was lost in", /2026-08-07 to 2026-10-06/.test(t.description));
 check("worst incident first", t.description.indexOf("No call no show") < t.description.indexOf("Late — 23 min"));
 check("it does not announce a decision",
   !/is suspended|is terminated|has been fired/i.test(t.description));
 check("it says where the write-up comes from", /write-up generates/.test(t.description));
+check("the body is html", /^<p>/.test(t.description));
+
+/* Reasons come off a sheet somebody types into. */
+const nasty = taskText({ name: "A Mover", level: "warning", lost: 15,
+  windowFrom: "2026-08-07", windowTo: "2026-10-06",
+  incidents: [{ date: "Oct 01, 2026", delta: -1, reason: "Late <b>& rude" }] });
+check("a typed reason cannot inject markup",
+  nasty.description.includes("Late &lt;b&gt;&amp; rude"));
 
 const sus = taskText({ name: "A Mover", level: "suspension", lost: 31,
   windowFrom: "2026-08-07", windowTo: "2026-10-06", incidents: [] });

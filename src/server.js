@@ -23,7 +23,8 @@ import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
 import {
   configured as ctConfigured, writingEnabled as ctWriting, status as ctStatus,
-  taskLevels as ctLevels, listBoards as ctBoards, findUser as ctFindUser
+  taskLevels as ctLevels, listBoards as ctBoards, findUser as ctFindUser,
+  listLabels as ctLabels, findLabel as ctFindLabel
 } from "./connecteam.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
@@ -735,7 +736,8 @@ app.get("/api/admin/connecteam", wrap(async (req, res) => {
     writing: ctWriting(),
     why: ctStatus(),
     levels: [...ctLevels()],
-    board_wanted: process.env.CONNECTEAM_BOARD || "Payroll",
+    board_wanted: process.env.CONNECTEAM_BOARD || "(the only one there is)",
+    label_wanted: process.env.CONNECTEAM_LABEL || "Human Resources",
     assignee_wanted: process.env.CONNECTEAM_ASSIGNEE_EMAIL
       || process.env.CONNECTEAM_ASSIGNEE || "Matthew Brown"
   };
@@ -744,8 +746,14 @@ app.get("/api/admin/connecteam", wrap(async (req, res) => {
     try {
       const boards = await ctBoards();
       out.boards = boards.map(b => ({ id: b.id ?? b.taskBoardId, name: b.name ?? b.title }));
-      out.board = out.boards.find(b =>
-        String(b.name).toLowerCase() === out.board_wanted.toLowerCase()) ?? null;
+      out.board = process.env.CONNECTEAM_BOARD
+        ? out.boards.find(b => String(b.name).toLowerCase() === out.board_wanted.toLowerCase()) ?? null
+        : (out.boards.length === 1 ? out.boards[0] : null);
+      if (out.board) {
+        out.labels = (await ctLabels(out.board.id)).map(l => l.name);
+        const lab = await ctFindLabel(out.board.id);
+        out.label = lab ? { id: lab.id, name: lab.name } : null;
+      }
       const who = await ctFindUser({
         email: process.env.CONNECTEAM_ASSIGNEE_EMAIL,
         name: process.env.CONNECTEAM_ASSIGNEE || "Matthew Brown"

@@ -47,16 +47,20 @@ services:
         value: "off"
 
       # Connecteam raises a task for Matthew when somebody crosses 15, 30 or 45
-      # lost points. Off until Andrew confirms the board and the assignee, and
-      # the key is still to come: the API needs the Expert tier. The discipline
-      # check itself runs regardless and records every crossing, so switching
-      # this on later does not mean the weeks before it went unwatched.
+      # lost points. Off until somebody says start: the discipline check runs
+      # either way and records every crossing, so switching this on later does
+      # not mean the weeks before it went unwatched.
       - key: CONNECTEAM_TASKS
         value: "off"
-      - key: CONNECTEAM_BOARD
-        value: Payroll
-      - key: CONNECTEAM_ASSIGNEE
-        value: Matthew Brown
+
+      # Andrew, 6 October: 'Quick Task label "Human Resources"'. It is also the
+      # label already on the quick tasks Matthew gets today, so a write-up lands
+      # where he is used to looking. No board is named because the account has
+      # exactly one, "Task Management", and everything is filed by label.
+      - key: CONNECTEAM_LABEL
+        value: Human Resources
+      - key: CONNECTEAM_ASSIGNEE_EMAIL
+        value: matthewb@immediatemoversnwi.com
 
       - key: TIMEZONE
         value: America/Chicago     # La Porte is Central, unlike most of Indiana
