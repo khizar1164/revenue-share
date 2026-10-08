@@ -31,7 +31,8 @@ const PEOPLE = [
   ["gave notice, left earlier this month",  "left",      "date_trunc('month', current_date)", true],
   ["gave notice, left last month",          "left",      "date_trunc('month', current_date) - interval '20 days'", true],
   ["gave notice, left two months ago",      "left",      "date_trunc('month', current_date) - interval '45 days'", false],
-  ["walked out this month",                 "no_notice", "current_date",            true],
+  ["walked out today",                      "no_notice", "current_date",            false],
+  ["walked out earlier this month",         "no_notice", "date_trunc('month', current_date)", false],
   ["walked out two months ago",             "no_notice", "date_trunc('month', current_date) - interval '45 days'", false],
   ["left, and nobody recorded when",        "left",      null,                      false],
 ];
@@ -56,9 +57,13 @@ for (const [i, row] of r.rows.entries()) {
    future change that reintroduces either one fails here by name. */
 console.log("\n2. THE TWO WAYS IT WAS WRONG BEFORE");
 const notice = r.rows.find(x => x.label === "gave notice, left earlier this month");
-const walked = r.rows.find(x => x.label === "walked out two months ago");
+const walked = r.rows.find(x => x.label === "walked out today");
 check("somebody still owed for the month they worked is not locked out", notice.allowed === true);
-check("somebody who forfeited does not keep access for ever", walked.allowed === false);
+check("somebody who forfeited keeps no access at all", walked.allowed === false);
+
+/* The whole rule in one sentence: access ends with the earning. */
+check("no forfeited leaver can sign in, whenever they went",
+  r.rows.filter(x => x.status === "no_notice").every(x => x.allowed === false));
 
 /* And against the people who actually exist. */
 console.log("\n3. THE REAL ROSTER");

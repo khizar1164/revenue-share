@@ -41,18 +41,26 @@ const normEmail = e => String(e ?? "").trim().toLowerCase();
  * access for ever. It is the same bug migration 006 fixed on the roster; this
  * door was missed.
  *
- * The rule now is the one the roster already uses: you can see your page while
- * you are still on a roster that matters. That is the month you left and the
- * month after it, because a final month's figures are not settled until after
- * it closes, and being shut out on the 1st means being shut out of exactly the
- * number you most want to check. After that you age out on your own.
+ * The rule follows the money, because the money is the only reason this page
+ * exists. Andrew, 9 October, choosing between the two readings: access ends
+ * with the earning.
+ *
+ *   working            yes
+ *   gave notice        yes, through the month they left and the month after.
+ *                      They are still owed that month, a final figure is not
+ *                      settled until the month closes, and being shut out on
+ *                      the 1st means being shut out of exactly the number they
+ *                      most want to check.
+ *   walked out         no, from the moment they are marked. They forfeited the
+ *                      share, so there is nothing of theirs left to look at.
  *
  * Written once and used by both doors — the link and the session — because two
  * copies of an access rule is one of them being wrong later.
  */
 export const STILL_HAS_ACCESS = `
   (status = 'active'
-   or (ended_on is not null
+   or (status = 'left'
+       and ended_on is not null
        and ended_on >= (date_trunc('month', current_date) - interval '1 month')::date))`;
 
 export async function issueLoginToken(email, { ip } = {}) {
