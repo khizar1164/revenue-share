@@ -852,6 +852,11 @@ app.get("/healthz", async (_req, res) => {
     out.last_runs = { error: e.message };
   }
 
+  /* Two booleans, no secret. Whether a deploy actually picked up the
+     environment it was given is otherwise unanswerable from outside, and the
+     alternative is waiting for somebody to cross 15 points to find out. */
+  out.connecteam = { configured: ctConfigured(), writing: ctWriting() };
+
   out.ok = out.database.reachable === true && (out.database.tables ?? 0) > 0;
   res.status(out.ok ? 200 : 503).json(out);
 });
