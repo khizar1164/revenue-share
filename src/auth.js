@@ -72,10 +72,26 @@ export async function consumeLoginToken(token, { userAgent } = {}) {
 
 export async function startSession(employeeId, { userAgent } = {}) {
   const token = newToken();
+  const agent = (userAgent ?? "").slice(0, 300);
   await query(
     `insert into sessions (token_hash, employee_id, expires_at, user_agent)
      values ($1, $2, now() + ($3 || ' days')::interval, $4)`,
-    [hash(token), employeeId, String(SESSION_DAYS), (userAgent ?? "").slice(0, 300)]);
+    [hash(token), employeeId, String(SESSION_DAYS), agent]);
+
+  /* The lasting record of the same moment. The session row is a credential and
+     gets deleted the day it lapses; this one is kept, because "when did Jacob
+     last look at his numbers" is a question somebody asks months later.
+
+     Deliberately not fatal. A sign-in that works but goes unrecorded is a small
+     problem; a mover standing in a car park unable to open their pay because
+     logging it failed is a much bigger one. */
+  try {
+    await query(`insert into sign_ins (employee_id, user_agent) values ($1, $2)`,
+      [employeeId, agent]);
+  } catch (e) {
+    console.error("sign-in not recorded:", e.message);
+  }
+
   return { token, employeeId, expiresInDays: SESSION_DAYS };
 }
 

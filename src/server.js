@@ -774,6 +774,48 @@ app.get("/api/admin/connecteam", wrap(async (req, res) => {
   res.json(out);
 }));
 
+/* Who has opened their own page, and when.
+ *
+ * Andrew, 9 October: the last date each crew member signed in, and a live list
+ * of sign-ins as they happen. Two questions about the same rows, so one call
+ * answers both rather than the page making two.
+ *
+ * Everyone on the roster appears, including the people who have never been in.
+ * That is the useful half of the answer: a list of only the people who have
+ * signed in cannot tell you who has not.
+ */
+app.get("/api/admin/sign-ins", wrap(async (req, res) => {
+  const people = await query(
+    `select e.id as employee_id, e.code_name, e.full_name, e.status,
+            coalesce(e.email, '') as email,
+            s.last_at, coalesce(s.times, 0)::int as times
+       from employees e
+       left join (
+         select employee_id, max(at) as last_at, count(*) as times
+           from sign_ins group by employee_id
+       ) s on s.employee_id = e.id
+      /* Active movers only, which is exactly who was sent a link. Counting
+         the people who left without notice into "7 of 18" would be measuring
+         take-up against a denominator that was never invited. Their sign-ins
+         still show in the feed below, because that happened. */
+      where e.is_mover and e.status = 'active'
+      order by s.last_at desc nulls last, e.full_name`);
+
+  const recent = await query(
+    `select s.at, e.full_name, e.code_name, s.user_agent
+       from sign_ins s
+       join employees e on e.id = s.employee_id
+      order by s.at desc
+      limit 40`);
+
+  res.json({
+    now: new Date().toISOString(),
+    people: people.rows,
+    recent: recent.rows,
+    never: people.rows.filter(p => !p.last_at).length
+  });
+}));
+
 /* The write-up, as a PDF Matthew can type into.
  *
  * Andrew, 9 October: Matthew should pick a name and get the document, rather

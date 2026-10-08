@@ -268,19 +268,6 @@
     </div>
 
     <div class="panel">
-      <h2>Claim deductions</h2>
-      <p class="dek">Comes off the whole pool before it splits. Type the <b>full amount including the $50 third-party handler fee</b> &mdash; nothing is added on top. Andrew, 28 September: "its something I will add into the claim amount when I enter the claim in".</p>
-      <div class="frow">
-        <div style="max-width:130px"><label for="clDate">Date</label><input type="date" id="clDate"></div>
-        <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
-        <div><label for="clNote">Reason</label><input type="text" id="clNote" placeholder="What happened"></div>
-        <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="1000"></div>
-        <button id="clSave">Add</button>
-      </div>
-      <div class="tblwrap scrolly" style="margin-top:16px"><table id="clTbl"></table></div>
-    </div>
-
-    <div class="panel">
       <h2>Bonus or individual deduction</h2>
       <p class="dek">Charged to one person, not the crew. <b>Private</b> &mdash; shows on their report only, never on the TV.</p>
       <div class="frow">
@@ -303,6 +290,20 @@
          has left is left out. Links last 20 minutes and work once, and the email
          tells them where to get a fresh one.</p>
       <button id="inviteBtn">Send crew sign-in links</button>
+
+      <!-- Andrew, 9 October: the last date each crew member signed in, and a
+           live list as it happens. Both read the same rows, so one request
+           answers both. -->
+      <div style="border-top:1px solid var(--seam);margin-top:16px;padding-top:14px">
+        <h2 style="font-size:14px;border:0;padding:0;margin:0 0 2px">Who has signed in</h2>
+        <p class="hint" id="signInSummary" style="margin:0 0 7px"></p>
+        <div class="tblwrap scrolly"><table id="signInTbl"></table></div>
+
+        <h2 style="font-size:14px;border:0;padding:0;margin:16px 0 2px">As it happens</h2>
+        <p class="hint" style="margin:0 0 7px">Newest first, and it checks again
+           every 30 seconds on its own.</p>
+        <div class="tblwrap scrolly"><table id="signInFeed"></table></div>
+      </div>
     </div>
   </div>
 
@@ -321,6 +322,19 @@ Tyler Johnston  44.25"></textarea>
       <div class="tblwrap" style="margin-top:14px"><table id="hoursTbl"></table></div>
     </div>
 
+
+    <div class="panel">
+      <h2>Claim deductions</h2>
+      <p class="dek">Comes off the whole pool before it splits. Type the <b>full amount including the $50 third-party handler fee</b> &mdash; nothing is added on top. Andrew, 28 September: "its something I will add into the claim amount when I enter the claim in".</p>
+      <div class="frow">
+        <div style="max-width:130px"><label for="clDate">Date</label><input type="date" id="clDate"></div>
+        <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
+        <div><label for="clNote">Reason</label><input type="text" id="clNote" placeholder="What happened"></div>
+        <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="1000"></div>
+        <button id="clSave">Add</button>
+      </div>
+      <div class="tblwrap scrolly" style="margin-top:16px"><table id="clTbl"></table></div>
+    </div>
     <div class="panel">
       <h2>The month</h2>
       <div class="tblwrap"><table id="poolTbl"></table></div>
@@ -735,6 +749,7 @@ Tyler Johnston  44.25"></textarea>
         renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
       }
       renderReviews(); renderCrewChips(); renderJobs(r[4]); renderRevenue(r[5]);
+      loadSignIns();
     }).catch(function(e){ toast(e.message, true); });
   }
 
@@ -794,6 +809,90 @@ Tyler Johnston  44.25"></textarea>
    *
    * Fetched rather than linked so a failure arrives as a message instead of a
    * tab full of JSON where a document should be. */
+  /* ------------------------------------------------------- crew sign-ins --- */
+
+  /* Andrew, 9 October: the last date each crew member signed in, and a live
+     list as it happens.
+   *
+   * Polled rather than pushed. Thirty seconds is live enough for "has Craig
+   * looked at his numbers yet", and a socket held open for every admin tab
+   * somebody left on a monitor is a cost with nothing to show for it.
+   *
+   * The whole roster is listed, the people who have never signed in included.
+   * That is the useful half: a list of everyone who has been in cannot tell
+   * you who has not. */
+
+  /* Enough of the user agent to recognise a phone from a laptop, and no more.
+     Nobody needs the version number, and the full string is unreadable. */
+  function device(ua){
+    if (!ua) return "";
+    if (/iPhone|iPod/i.test(ua)) return "iPhone";
+    if (/iPad/i.test(ua)) return "iPad";
+    if (/Android/i.test(ua)) return "Android";
+    if (/Macintosh|Mac OS/i.test(ua)) return "Mac";
+    if (/Windows/i.test(ua)) return "Windows";
+    return "";
+  }
+
+  function whenFull(t){
+    if (!t) return "";
+    var d = new Date(t);
+    return d.toLocaleDateString(undefined, { day:"numeric", month:"short" })
+      + " " + d.toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
+  }
+
+  function renderSignIns(d){
+    var people = d.people || [];
+    var inAt = people.filter(function(p){ return p.last_at; });
+    $("signInSummary").textContent = people.length
+      ? inAt.length + " of " + people.length + " have signed in at least once"
+        + (d.never ? ", " + d.never + " never have" : "")
+      : "";
+
+    $("signInTbl").innerHTML =
+      '<thead><tr><th>Who</th><th>Last signed in</th><th class="n">Times</th></tr></thead><tbody>'
+      + (people.length
+          ? people.map(function(p){
+              var never = !p.last_at;
+              return '<tr' + (never ? ' style="color:var(--ink-3)"' : '') + '>'
+                + '<td>'+esc(p.full_name)+'</td>'
+                + '<td title="'+esc(whenFull(p.last_at))+'">'
+                +   (never ? "never" : esc(ago(p.last_at)) + ' <span style="color:var(--ink-3);font-size:12px">'
+                              + esc(whenFull(p.last_at)) + '</span>')
+                + '</td>'
+                + '<td class="n">'+(p.times || 0)+'</td></tr>';
+            }).join("")
+          : '<tr><td colspan="3" style="color:var(--ink-3)">Nobody on the roster yet.</td></tr>')
+      + "</tbody>";
+
+    var recent = d.recent || [];
+    $("signInFeed").innerHTML =
+      '<thead><tr><th>When</th><th>Who</th><th>On</th></tr></thead><tbody>'
+      + (recent.length
+          ? recent.map(function(r){
+              return '<tr><td title="'+esc(whenFull(r.at))+'">'+esc(ago(r.at))+'</td>'
+                + '<td>'+esc(r.full_name)+'</td>'
+                + '<td style="color:var(--ink-3)">'+esc(device(r.user_agent))+'</td></tr>';
+            }).join("")
+          : '<tr><td colspan="3" style="color:var(--ink-3)">No sign-ins recorded yet.</td></tr>')
+      + "</tbody>";
+  }
+
+  function loadSignIns(){
+    return api("/api/admin/sign-ins")
+      .then(renderSignIns)
+      .catch(function(){ /* a missed poll is not worth shouting about */ });
+  }
+
+  /* Only while somebody is looking. A background tab polling all weekend is
+     traffic nobody reads. */
+  setInterval(function(){
+    if (!document.hidden && !$("adminPage").hidden) loadSignIns();
+  }, 30000);
+  document.addEventListener("visibilitychange", function(){
+    if (!document.hidden && !$("adminPage").hidden) loadSignIns();
+  });
+
   $("rosterTbl").addEventListener("click", function(e){
     var b = e.target.closest("button[data-writeup]"); if (!b) return;
     var id = b.getAttribute("data-writeup");
