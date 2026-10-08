@@ -30,13 +30,38 @@ const normEmail = e => String(e ?? "").trim().toLowerCase();
  * Returns { token, employee } when there is someone to send to, and null when
  * there is not — the caller answers identically either way.
  */
+/* Who may open their own page.
+ *
+ * This used to be `status <> 'left'`, which was exactly the wrong way round.
+ * Andrew settled the money on 23 September: "leave no notice given = no bonus,
+ * leaves with notice given = bonus earned still." So the person who gives
+ * notice is still owed the month they worked — and was locked out the instant
+ * they were marked, unable to see what they were owed. The person who walked
+ * out with no notice forfeited everything, had nothing to look at, and kept
+ * access for ever. It is the same bug migration 006 fixed on the roster; this
+ * door was missed.
+ *
+ * The rule now is the one the roster already uses: you can see your page while
+ * you are still on a roster that matters. That is the month you left and the
+ * month after it, because a final month's figures are not settled until after
+ * it closes, and being shut out on the 1st means being shut out of exactly the
+ * number you most want to check. After that you age out on your own.
+ *
+ * Written once and used by both doors — the link and the session — because two
+ * copies of an access rule is one of them being wrong later.
+ */
+export const STILL_HAS_ACCESS = `
+  (status = 'active'
+   or (ended_on is not null
+       and ended_on >= (date_trunc('month', current_date) - interval '1 month')::date))`;
+
 export async function issueLoginToken(email, { ip } = {}) {
   const addr = normEmail(email);
   if (!addr || !addr.includes("@")) return null;
 
   const r = await query(
     `select id, code_name, full_name, email from employees
-      where lower(email) = $1 and status <> 'left' and is_mover`, [addr]);
+      where lower(email) = $1 and is_mover and ${STILL_HAS_ACCESS}`, [addr]);
   if (!r.rowCount) return null;
 
   const employee = r.rows[0];
@@ -105,7 +130,7 @@ export async function sessionFor(token) {
 
   const e = await query(
     `select id, code_name, full_name, email from employees
-      where id = $1 and status <> 'left'`, [r.rows[0].employee_id]);
+      where id = $1 and ${STILL_HAS_ACCESS}`, [r.rows[0].employee_id]);
   return e.rows[0] ?? null;
 }
 
