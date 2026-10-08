@@ -818,7 +818,7 @@ app.get("/healthz", async (_req, res) => {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
          from sync_runs
-        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews')
+        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews', 'discipline')
         order by kind, started_at desc`);
     out.last_runs = recent.rows;
 
@@ -827,14 +827,15 @@ app.get("/healthz", async (_req, res) => {
     const stale = recent.rows.filter(r => {
       const age = Date.now() - new Date(r.started_at).getTime();
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
-                  : r.kind === "tardies" || r.kind === "reviews" ? 2 * 3600e3   // every 30 min
+                  : r.kind === "tardies" || r.kind === "reviews"
+                    || r.kind === "discipline" ? 2 * 3600e3      // every 30 min
                   : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;
     }).map(r => r.kind);
     if (stale.length) out.stale_jobs = stale;
 
-    const missing = ["smartmoving", "hours", "revenue", "writeback",
+    const missing = ["smartmoving", "hours", "revenue", "writeback", "discipline",
                      ...(process.env.TARDY_SHEET_ID ? ["tardies"] : []),
                      ...(process.env.REVIEW_SHEET_ID ? ["reviews"] : [])]
       .filter(k => !recent.rows.some(r => r.kind === k));
