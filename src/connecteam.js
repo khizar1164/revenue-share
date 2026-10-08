@@ -79,7 +79,11 @@ async function call(path, { method = "GET", body, fetchImpl = globalThis.fetch }
     /* Connecteam's errors are readable; say what it said rather than "request
        failed", because the usual cause is a plan that does not include the API
        or a key missing a scope, and both of those are stated in the reply. */
-    const why = json?.message || json?.error || text.slice(0, 200) || res.statusText;
+    /* Validation errors come back as an object, and a template literal turns
+       that into "[object Object]" — which is how an afternoon gets spent
+       guessing at a message the server already sent. */
+    const raw = json?.message ?? json?.error ?? json?.detail ?? text.slice(0, 400) ?? res.statusText;
+    const why = typeof raw === "string" ? raw : JSON.stringify(raw);
     const err = new Error(`Connecteam ${method} ${path} → ${res.status}: ${why}`);
     err.status = res.status;
     throw err;
@@ -180,10 +184,12 @@ export async function createTask({ boardId, userIds, title, description, labelId
     userIds,
     status: "published",
     type: "oneTime",
-    /* Not a string. Connecteam's own quick tasks carry their body as a list of
-       typed blocks, and a bare string is accepted and then shows as nothing —
-       which is the worst of both, a task that exists and says nothing. */
-    ...(description ? { description: [{ type: "html", html: String(description) }] } : {}),
+    /* Not a string, and not the shape a task comes back in either. Reading a
+       task gives description as a list of typed blocks; writing one wants an
+       object with a content string. Send a string and it is rejected; send the
+       shape that was read back and it is also rejected, with "field required"
+       pointing at body.description.content. Found by asking the API. */
+    ...(description ? { description: { type: "html", content: String(description) } } : {}),
     ...(labelIds?.length ? { labelIds } : {}),
     /* Connecteam wants whole seconds. */
     ...(dueDate ? { dueDate: Math.floor(new Date(dueDate).getTime() / 1000) } : {})

@@ -72,12 +72,13 @@ await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: "on" }, async 
     seen.body.dueDate === 1792022400, String(seen.body.dueDate));
   check("and the new task's id comes back", String(task.id) === "991");
 
-  /* Connecteam stores a task body as typed blocks. A bare string is accepted
-     and then shows as nothing, which is a task that exists and says nothing. */
-  check("the body is a list of typed blocks, not a string",
-    Array.isArray(seen.body.description) && seen.body.description[0].type === "html",
+  /* Reading a task gives description as a list of typed blocks; writing one
+     wants an object with a content string. Sending either a bare string or the
+     shape that was read back is rejected. */
+  check("the body is an object, not a string",
+    seen.body.description && !Array.isArray(seen.body.description),
     JSON.stringify(seen.body.description));
-  check("carrying the html", seen.body.description[0].html === "<p>because</p>");
+  check("with the html under content", seen.body.description.content === "<p>because</p>");
   check("labelIds go through", seen.body.labelIds?.[0] === "lab-hr");
   check("and it is a one-off, not a recurring task", seen.body.type === "oneTime");
 });

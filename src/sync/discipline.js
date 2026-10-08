@@ -188,9 +188,59 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
     raised.push(`${p.full_name} ${p.level} at ${p.lost}`);
   }
 
+  /* Crossings recorded while Connecteam was unreachable or switched off.
+     Without this the promise the rest of this file makes — that turning the
+     integration on later does not mean the weeks before went unwatched — is
+     only half true: the record would exist and nobody would ever be told. A
+     notice is retried while it is still open, because a person who is still
+     over the line still needs the conversation. Once they drop back under,
+     the moment has passed and chasing it would just be noise. */
+  const caughtUp = [];
+  if (wantTasks && assignee && board) {
+    const owed = await query(
+      /* As text, formatted by Postgres. A date column arrives as a JS Date,
+         and String()ing that gives "Thu Oct 08 2026 ..." — which is how a
+         task went out reading "the 60 days to Thu Oct 08". */
+      `select n.id, n.level, n.lost,
+              to_char(n.window_from, 'YYYY-MM-DD') as window_from,
+              to_char(n.window_to,   'YYYY-MM-DD') as window_to,
+              e.id as employee_id, e.full_name
+         from discipline_notices n
+         join employees e on e.id = n.employee_id
+        where n.cleared_at is null and n.task_id is null and n.task_error is not null
+        order by n.raised_at`);
+
+    for (const n of owed.rows) {
+      if (!wanted.has(n.level)) continue;
+      const incidents = await worstIncidents(n.employee_id, days);
+      const { title, description } = taskText({
+        name: n.full_name, level: n.level, lost: n.lost,
+        windowFrom: n.window_from,
+        windowTo: n.window_to,
+        incidents
+      });
+      try {
+        const task = await createTask({
+          boardId: board.id ?? board.taskBoardId,
+          userIds: [assignee.userId],
+          labelIds: label ? [label.id] : undefined,
+          title, description
+        });
+        await query(`update discipline_notices set task_id = $1, task_error = null where id = $2`,
+          [String(task?.id ?? task?.taskId ?? ""), n.id]);
+        caughtUp.push(n.full_name);
+      } catch (e) {
+        await query(`update discipline_notices set task_error = $1 where id = $2`,
+          [e.message, n.id]);
+        failed.push(`${n.full_name}: ${e.message.slice(0, 90)}`);
+      }
+    }
+  }
+
   const parts = [];
   parts.push(raised.length ? `${raised.length} crossed: ${raised.join("; ")}` : "nobody newly over");
   if (cleared.length) parts.push(`${cleared.length} back under: ${cleared.join(", ")}`);
+  if (caughtUp.length) parts.push(`${caughtUp.length} caught up: ${caughtUp.join(", ")}`);
   if (failed.length) parts.push(`${failed.length} task(s) not created — ${failed.join("; ")}`);
   else if (raised.length && reachProblem) parts.push(`no task sent — ${reachProblem}`);
   if (dryRun) parts.push("(dry run — nothing written)");
