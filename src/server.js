@@ -933,7 +933,7 @@ app.get("/healthz", async (_req, res) => {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
          from sync_runs
-        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews', 'discipline')
+        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews', 'discipline', 'crew')
         order by kind, started_at desc`);
     out.last_runs = recent.rows;
 
@@ -944,6 +944,7 @@ app.get("/healthz", async (_req, res) => {
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
                   : r.kind === "tardies" || r.kind === "reviews"
                     || r.kind === "discipline" ? 2 * 3600e3      // every 30 min
+                  : r.kind === "crew" ? 4 * 3600e3               // hourly
                   : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;

@@ -64,6 +64,12 @@ services:
       - key: CONNECTEAM_ASSIGNEE_EMAIL
         value: matthewb@immediatemoversnwi.com
 
+      # New movers come across from Connecteam hourly. The department is the
+      # rule: everybody on the dashboard is in Operations and the office is
+      # not, so Andrew decides who is a mover where he already decides it.
+      - key: CONNECTEAM_CREW_GROUP
+        value: Operations
+
       - key: TIMEZONE
         value: America/Chicago     # La Porte is Central, unlike most of Indiana
 

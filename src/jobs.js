@@ -31,6 +31,7 @@ import { reportFreshness } from "./sync/report-hook.js";
 import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
+import { syncCrew } from "./sync/crew.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -291,6 +292,14 @@ export function registerJobs(scheduler) {
      mean the weeks before it went unwatched. */
   scheduler.add("discipline", o => syncDiscipline(o ?? {}), {
     everyMs: 30 * MIN, runAtStartAfterMs: 105_000 });
+  /* New movers come from Connecteam now, not from their first job. Hourly:
+     somebody is hired on a day, not on a minute, and the roster only needs to
+     know before their first shift rather than within seconds of the paperwork.
+     Only runs where there is a key to run it with. */
+  if (process.env.CONNECTEAM_API_KEY) {
+    scheduler.add("crew", o => syncCrew(o ?? {}), {
+      everyMs: 60 * MIN, runAtStartAfterMs: 120_000 });
+  }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }
