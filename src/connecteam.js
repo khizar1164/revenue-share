@@ -172,7 +172,7 @@ export async function findLabel(boardId, name = process.env.CONNECTEAM_LABEL || 
  * returned quietly, because a caller that reports "task created" when nothing
  * was created is worse than one that fails.
  */
-export async function createTask({ boardId, userIds, title, description, labelIds, dueDate }, opts = {}) {
+export async function createTask({ boardId, userIds, title, description, labelIds, dueDate, startTime }, opts = {}) {
   if (!writingEnabled()) {
     throw new Error("CONNECTEAM_TASKS is not 'on' — no task would be created");
   }
@@ -191,8 +191,15 @@ export async function createTask({ boardId, userIds, title, description, labelId
        pointing at body.description.content. Found by asking the API. */
     ...(description ? { description: { type: "html", content: String(description) } } : {}),
     ...(labelIds?.length ? { labelIds } : {}),
-    /* Connecteam wants whole seconds. */
-    ...(dueDate ? { dueDate: Math.floor(new Date(dueDate).getTime() / 1000) } : {})
+    /* Connecteam wants whole seconds. A dueDate on its own is rejected with
+       "'<' not supported between instances of 'int' and 'NoneType'" — their
+       validator compares it against startTime and cannot handle the absence.
+       So a due date brings a start with it, defaulting to the morning of the
+       same day, which is what their own quick tasks carry. */
+    ...(dueDate ? {
+      dueDate: Math.floor(new Date(dueDate).getTime() / 1000),
+      startTime: Math.floor(new Date(startTime ?? dueDate).getTime() / 1000)
+    } : {})
   };
 
   const r = await call(`/tasks/v1/taskboards/${encodeURIComponent(boardId)}/tasks`,

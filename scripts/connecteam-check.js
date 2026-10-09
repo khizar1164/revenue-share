@@ -81,6 +81,10 @@ await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: "on" }, async 
   check("with the html under content", seen.body.description.content === "<p>because</p>");
   check("labelIds go through", seen.body.labelIds?.[0] === "lab-hr");
   check("and it is a one-off, not a recurring task", seen.body.type === "oneTime");
+  /* A dueDate alone is rejected: their validator compares it to startTime and
+     cannot handle startTime being absent. */
+  check("a due date brings a start time with it",
+    seen.body.startTime === seen.body.dueDate, JSON.stringify(seen.body.startTime));
 });
 
 console.log("\n3. A FAILURE SAYS WHAT CONNECTEAM SAID");
