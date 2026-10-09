@@ -101,12 +101,85 @@ async function gather(period) {
   const settings = await query(
     `select hours_gate_waived, note from month_settings where period = $1::date`, [period]);
 
+  /* What each person brings in from the months before this one. Attached here
+     rather than worked out in computeSplit, which is deliberately pure. */
+  const carry = await pointCarry(period);
+
   return {
     revenue:  revenue.rows[0] ?? null,
     claims:   claims.rows[0],
-    people:   people.rows,
+    people:   people.rows.map(p => ({ ...p, point_carry: carry.get(p.id) ?? 0 })),
     settings: settings.rows[0] ?? { hours_gate_waived: false, note: null }
   };
+}
+
+/* What each person carries into a month from the months before it.
+ *
+ * Andrew, 9 October: "a negative point balance carries over against the start
+ * of the following months points."
+ *
+ * Until now a bad month stopped at zero. Someone who started at 15 and lost 20
+ * finished on 0, exactly like someone who lost 15, and the extra 5 vanished at
+ * midnight on the 31st. That let a month be so bad that the rest of it was
+ * free. Now the overflow follows them.
+ *
+ * It has to be folded month by month, and that is the part worth being careful
+ * about. The carry is not a running total of everything ever lost — a quiet
+ * month clears it. Someone carrying -5 into a month where nothing happens
+ * starts at 15, ends at 10, and carries nothing into the month after. Only the
+ * amount a month finishes *below zero* survives it, so the rule can never
+ * accumulate into a debt nobody can work off.
+ *
+ * Every month in the range is folded, including the ones with no entries at
+ * all, because those are exactly the months that clear a carry. Folding only
+ * the months that have events would carry a penalty straight past the month
+ * that was meant to settle it.
+ */
+export async function pointCarry(period, rules = RULES) {
+  const start = PROGRAM_START.slice(0, 7);
+  const target = String(period).slice(0, 7);
+  if (target <= start) return new Map();           // nothing before the first month
+
+  const r = await query(
+    `select employee_id,
+            to_char(date_trunc('month', occurred_on), 'YYYY-MM') as month,
+            sum(delta)::int as delta
+       from point_events
+      where recorded_by is distinct from 'demo'
+        and occurred_on >= $1::date
+        and date_trunc('month', occurred_on) < $2::date
+      group by employee_id, 2`, [PROGRAM_START, period]);
+
+  /* employee -> month -> delta */
+  const byPerson = new Map();
+  for (const row of r.rows) {
+    if (!byPerson.has(row.employee_id)) byPerson.set(row.employee_id, new Map());
+    byPerson.get(row.employee_id).set(row.month, Number(row.delta));
+  }
+
+  const months = monthsBetween(start, target);     // start .. the month before target
+  const carry = new Map();
+  for (const [employeeId, deltas] of byPerson) {
+    let c = 0;
+    for (const m of months) {
+      const balance = rules.startPoints + (deltas.get(m) ?? 0) + c;
+      c = Math.min(0, balance);
+    }
+    if (c < 0) carry.set(employeeId, c);
+  }
+  return carry;
+}
+
+/** "2026-09" .. up to but not including "2026-12" */
+export function monthsBetween(fromYM, toYM) {
+  const out = [];
+  let [y, m] = fromYM.split("-").map(Number);
+  const [ty, tm] = toYM.split("-").map(Number);
+  while (y < ty || (y === ty && m < tm)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------ the split ---- */
@@ -128,7 +201,12 @@ export function computeSplit(raw, rules = RULES) {
 
   /* shape each person before any money is assigned */
   const rows = raw.people.map(p => {
-    const points  = Math.max(0, rules.startPoints + Number(p.point_delta));
+    /* Andrew, 9 October: a month that finishes below zero carries the
+       difference into the next one. The floor at zero stays — nobody's share
+       is ever negative — but the overflow is no longer forgiven. */
+    const carried = Number(p.point_carry ?? 0);
+    const balance = rules.startPoints + Number(p.point_delta) + carried;
+    const points  = Math.max(0, balance);
     const hoursOK = waived || Number(p.hours) >= rules.minHours;
     /* Gave notice and left during this month. Andrew, 23 September: "leaves
        with notice given = bonus earned still". So they are paid for the month
@@ -143,6 +221,13 @@ export function computeSplit(raw, rules = RULES) {
       gone,
       hours:       Number(p.hours),
       points,
+      /* What they started the month on, and how far below zero the month
+         itself went. Carried so the report can say why somebody began on 10
+         rather than 15, and so a month that ends at zero can still show what
+         it is handing on. */
+      point_carry_in:  carried,
+      point_start:     rules.startPoints + carried,
+      point_carry_out: Math.min(0, balance),
       review_points: Number(p.review_points),
       bonuses:       Number(p.bonuses),
       deductions:    Number(p.deductions),

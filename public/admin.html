@@ -220,7 +220,7 @@
 
     <div class="panel">
       <h2>Points</h2>
-      <p class="dek"><b>Late, truck not out on time, call offs and no call no shows come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in on day off</b>, which is now entered by hand and nothing else can work out: the schedule knows who was on a job, not whose day off it was.</p>
+      <p class="dek"><b>Late, truck not out on time, call offs and no call no shows come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in same day</b>, which is now entered by hand and nothing else can work out: the schedule knows who was on a job, not who came in at short notice.</p>
       <div class="frow">
         <div style="max-width:130px"><label for="ptDate">Date</label><input type="date" id="ptDate"></div>
         <div><label for="ptWho">Who</label><select id="ptWho"></select></div>
@@ -242,7 +242,7 @@
                  an individual deduction, which is money off one person, so it
                  belongs in the panel below rather than being a point as well. -->
             <option value="3">Most job photos submitted (+3)</option>
-            <option value="1">Came in on day off (+1)</option>
+            <option value="1">Came in same day (+1)</option>
             <option value="-1">Policy violation (−1)</option>
             <option value="-1">Up to 30 mins late (−1)</option>
             <option value="-1">Applicable material/equipment not removed from truck (−1)</option>
@@ -1129,7 +1129,7 @@ Tyler Johnston  44.25"></textarea>
 
   $("ptSave").addEventListener("click", function(){
     /* strips the score off the label — "(+1)" as well as "(−2)", or the
-       reason saved on the entry reads "Came in on day off (+1)" */
+       reason saved on the entry reads "Came in same day (+1)" */
     var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\([+−-]?\d+\)$/, "");
     api("/api/admin/points", { method:"POST", body: JSON.stringify({
       employee_id: $("ptWho").value, occurred_on: $("ptDate").value,

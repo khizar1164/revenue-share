@@ -61,6 +61,9 @@ export function boardView(result, ytdResult = null) {
     crew: result.rows.map(r => ({
       code_name:     r.code_name,
       points:        r.points,
+      point_carry_in:  r.point_carry_in,
+      point_start:     r.point_start,
+      point_carry_out: r.point_carry_out,
       review_points: r.review_points,
       hours:         r.hours,
       share:         r.share,
@@ -108,6 +111,9 @@ export function reportView(detail, ytdResult = null) {
     hours:    detail.hours,
     hours_ok: detail.hours_ok,
     points:   detail.points,
+    point_carry_in:  detail.point_carry_in,
+    point_start:     detail.point_start,
+    point_carry_out: detail.point_carry_out,
     review_points: detail.review_points,
 
     points_amount:  detail.points_amount,
