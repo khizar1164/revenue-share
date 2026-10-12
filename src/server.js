@@ -34,6 +34,8 @@ import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
          setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
 import { handleReportEmail } from "./sync/report-hook.js";
+import { verifyDelivery } from "./moveitpro.js";
+import { handleEvent } from "./sync/mip-relay.js";
 import { sendSignInLink, sendInvite, sendingEnabled, mailStatus, mailConfigured } from "./mail.js";
 
 loadEnv();
@@ -42,6 +44,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);                   // Render terminates TLS in front of us
+/* MoveitPro signs the RAW bytes it sends, so this one route has to see them
+   before anything parses and re-serialises them. Mounted ahead of the JSON
+   parser for that reason and no other. */
+app.post("/api/hooks/moveitpro",
+  express.raw({ type: "*/*", limit: "512kb" }),
+  (req, res) => handleMipDelivery(req, res));
+
 app.use(express.json({ limit: "256kb" }));
 
 /* Anything served over https is public, whatever NODE_ENV says. That is the
@@ -104,6 +113,36 @@ app.use("/api/admin", (req, res, next) => {
   }
   res.status(401).json({ error: "sign in to the admin panel first" });
 });
+
+/* The MoveitPro webhook receiver.
+ *
+ * Answers 2xx quickly and does the work after. MoveitPro retries seven times
+ * on anything else and disables an endpoint that keeps failing, and the work
+ * here involves two or three calls back to their own API — slow enough to trip
+ * a delivery timeout and get us retried for something that actually succeeded.
+ *
+ * So: verify, acknowledge, then post. A failure after the 200 is logged and
+ * the delivery is not retried, which is the right trade for a Discord notice.
+ * The alternative is a channel that duplicates every message whenever their
+ * API is slow.
+ */
+async function handleMipDelivery(req, res) {
+  const secret = (process.env.MIP_WEBHOOK_SECRET || "").trim();
+  const result = verifyDelivery(req.body, req.get("x-mip-signature"), secret);
+
+  if (!result.ok) {
+    /* 401, not 500: this is somebody else's request and the fault is theirs,
+       unless it is ours, in which case retrying will not help either. */
+    console.error("moveitpro webhook rejected:", result.why);
+    return res.status(401).json({ error: result.why });
+  }
+
+  res.status(200).json({ received: true });
+
+  handleEvent(result.event)
+    .then(what => console.log("moveitpro:", what))
+    .catch(e => console.error("moveitpro event failed:", result.event?.type, e.message));
+}
 
 /* ------------------------------------------------ report email webhook ---- */
 /*

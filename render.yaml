@@ -100,3 +100,22 @@ services:
         sync: false
       - key: CONNECTEAM_API_KEY
         sync: false
+
+      # The MoveitPro to Discord relay. Andrew, 9 October: jobs booked,
+      # rescheduled and cancelled into dispatch-updates, and payments entered
+      # by hand into payments — those are the ones the card processor never
+      # emails about. All five are credentials and are set in the dashboard.
+      #
+      # MIP_WEBHOOK_SECRET comes from registering the endpoint and MoveitPro
+      # shows it exactly once. A Discord webhook URL lets anyone holding it
+      # post into that channel as the app, so neither belongs in this file.
+      - key: MOVEITPRO_API_KEY
+        sync: false
+      - key: MOVEITPRO_HMAC_SECRET
+        sync: false
+      - key: MIP_WEBHOOK_SECRET
+        sync: false
+      - key: DISCORD_DISPATCH_URL
+        sync: false
+      - key: DISCORD_PAYMENTS_URL
+        sync: false

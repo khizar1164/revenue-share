@@ -1,0 +1,114 @@
+/* The MoveitPro relay, without MoveitPro and without Discord.
+ *
+ * Two things are worth being sure of before anything reaches a channel the
+ * whole company reads.
+ *
+ * The signature, because it is the only thing standing between that channel
+ * and anyone who finds the URL. Every way it can be wrong is tested: no
+ * header, a malformed one, the wrong secret, a body changed after signing,
+ * and a replay of a perfectly good signature from last week.
+ *
+ * The wording, because Andrew asked for the old date next to the new one and
+ * because calling a payment "cash" when the data only says "a person entered
+ * it" would be putting words in the system's mouth.
+ */
+import crypto from "node:crypto";
+import { verifyDelivery, MAX_SKEW_SECONDS } from "../src/moveitpro.js";
+import {
+  bookedMessage, rescheduledMessage, cancelledMessage, manualPaymentMessage, day, usd
+} from "../src/discord.js";
+
+let failures = 0;
+const check = (label, ok, detail = "") => {
+  if (!ok) failures++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  — " + detail : ""}`);
+};
+
+const SECRET = "mip_whsec_testonly";
+const sign = (body, secret = SECRET, t = Math.floor(Date.now() / 1000)) =>
+  `t=${t},v1=` + crypto.createHmac("sha256", secret).update(`${t}.${body}`).digest("hex");
+
+const BODY = JSON.stringify({ id: "11111111-1111-1111-1111-111111111111", type: "job.updated",
+                              record_id: "22222222-2222-2222-2222-222222222222" });
+
+console.log("1. THE SIGNATURE");
+check("a correctly signed delivery is accepted", verifyDelivery(BODY, sign(BODY), SECRET).ok);
+check("and its event comes back parsed",
+  verifyDelivery(BODY, sign(BODY), SECRET).event?.type === "job.updated");
+check("no header is refused", !verifyDelivery(BODY, null, SECRET).ok);
+check("a malformed header is refused", !verifyDelivery(BODY, "nonsense", SECRET).ok);
+check("the wrong secret is refused", !verifyDelivery(BODY, sign(BODY, "someone-elses"), SECRET).ok);
+check("an empty body is refused", !verifyDelivery("", sign(""), SECRET).ok);
+check("no secret configured is refused", !verifyDelivery(BODY, sign(BODY), "").ok);
+
+/* The attack this is really for: a real signature, a changed body. */
+const tampered = BODY.replace("job.updated", "job.created");
+check("a body changed after signing is refused",
+  !verifyDelivery(tampered, sign(BODY), SECRET).ok, "same signature, different body");
+
+/* And the other one: a real, correctly signed delivery, replayed later. */
+const old = Math.floor(Date.now() / 1000) - (MAX_SKEW_SECONDS + 60);
+check("a replay of a genuine signature is refused",
+  !verifyDelivery(BODY, sign(BODY, SECRET, old), SECRET).ok,
+  verifyDelivery(BODY, sign(BODY, SECRET, old), SECRET).why);
+check("something inside the window is still fine",
+  verifyDelivery(BODY, sign(BODY, SECRET, Math.floor(Date.now() / 1000) - 60), SECRET).ok);
+
+/* A body with no id cannot be deduplicated, and at-least-once delivery makes
+   that a duplicate-posting bug rather than a cosmetic one. */
+const noId = JSON.stringify({ type: "job.created" });
+check("a body with no id is refused", !verifyDelivery(noId, sign(noId), SECRET).ok);
+
+console.log("\n2. THE DISPATCH MESSAGES");
+const JOB = {
+  id: "22222222-2222-2222-2222-222222222222",
+  invoice_number: 11123,
+  customer_name: "Geneva Lanning",
+  customer_phone: "574-229-3269",
+  service_date: "2026-10-26",
+  origin_address: { full_address: "18369 Crownhill Drive, South Bend, Indiana 46637" },
+  destination_address: { full_address: "6338 Eagles Lake Drive, Cincinnati, Ohio 45248" }
+};
+const extra = { serviceType: "Load Only" };
+
+const booked = bookedMessage(JOB, extra);
+check("dates read the way the channel already reads", day("2026-10-26") === "10/26/2026");
+for (const bit of ["Job Booked", "11123", "Geneva Lanning", "574-229-3269",
+                   "10/26/2026", "Load Only", "Crownhill", "Eagles Lake"]) {
+  check(`booked message carries ${bit}`, booked.includes(bit));
+}
+
+const moved = rescheduledMessage({ ...JOB, service_date: "2026-11-02" }, "2026-10-26", extra);
+check("a reschedule shows the old date", moved.includes("10/26/2026"));
+check("and the new one", moved.includes("11/02/2026"));
+check("with the old one struck through", /~~10\/26\/2026~~/.test(moved));
+check("and still carries everything else", moved.includes("11123") && moved.includes("Load Only"));
+
+check("a cancellation says so", cancelledMessage(JOB, extra).startsWith("❌ **Job Cancelled**"));
+
+/* Names and addresses are typed by strangers. */
+const nasty = bookedMessage({ ...JOB, customer_name: "@everyone _boss_" }, extra);
+check("a customer cannot ping the company", !/allowed_mentions/.test(nasty) && nasty.includes("@everyone"));
+check("and cannot italicise the rest of the message", nasty.includes("\\_boss\\_"));
+
+console.log("\n3. THE PAYMENT MESSAGE");
+const pay = { amount_cents: 15000, tip_cents: 0, kind: "sale",
+              gateway_type: "manual", created_at: "2026-10-12T16:36:57.000Z" };
+const msg = manualPaymentMessage(pay, { customerName: "Jo Ellen Helmer", jobNumber: 11123 });
+check("the amount is right", usd(15000) === "$150.00");
+check("it is in the message", msg.includes("$150.00"));
+check("so is the customer", msg.includes("Jo Ellen Helmer"));
+check("and the job number", msg.includes("11123"));
+check("it does NOT claim to be cash", !/\bcash\b/i.test(msg),
+  "MoveitPro cannot tell cash from cheque, so neither can we");
+check("it says a person entered it", /entered by hand/i.test(msg));
+
+const tipped = manualPaymentMessage({ ...pay, tip_cents: 2000 }, { customerName: "A Customer" });
+check("a tip is broken out when there is one", tipped.includes("$20.00"));
+check("and the job's share shown beside it", tipped.includes("$130.00"));
+check("no tip line when there is no tip", !/Tip/.test(msg));
+
+console.log("\n" + "=".repeat(58));
+console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);
+console.log("=".repeat(58));
+process.exit(failures ? 1 : 0);
