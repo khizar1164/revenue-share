@@ -128,3 +128,15 @@ services:
       # cash is. Change this without a deploy if the first week says otherwise.
       - key: MIP_PAYMENT_SURFACES
         value: bol
+
+      # Meta lead ads reach MoveitPro through Zapier and this server, because
+      # Zapier cannot sign a MoveitPro write and a Code step would put the API
+      # secret inside a zap. LEAD_RELAY_KEY is the shared key Zapier sends; it
+      # is the only thing guarding a write to the CRM, so it lives in the
+      # dashboard. The other two are not secret.
+      - key: LEAD_RELAY_KEY
+        sync: false
+      - key: LEAD_REFERRED_BY
+        value: z AD - Social Media
+      - key: MOVEITPRO_BRANCH_ID
+        value: 9e6875d7-cbd5-4fcf-a03f-cb516b440d9c

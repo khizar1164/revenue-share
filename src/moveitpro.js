@@ -33,24 +33,24 @@ export function status() {
 
 /* ---------------------------------------------------------- outbound ----- */
 
-/**
- * GET something from MoveitPro.
- *
- * Only GET. A write would need an Idempotency-Key and a lot more care than a
- * Discord relay has any business taking, so the door is simply not here.
- */
+/** The signature MoveitPro expects on a request from us. */
+export function signRequest(method, pathWithQuery, rawBody = "") {
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const bodyHash = crypto.createHash("sha256").update(rawBody).digest("hex");
+  const canonical = ["v1", ts, method.toUpperCase(), pathWithQuery, bodyHash].join(":");
+  return {
+    "x-mip-timestamp": ts,
+    "x-mip-signature": crypto.createHmac("sha256", apiSecret()).update(canonical).digest("hex")
+  };
+}
+
+/** GET something from MoveitPro. */
 export async function get(pathWithQuery, { fetchImpl = globalThis.fetch } = {}) {
   if (!configured()) throw new Error(status());
-  const ts = Math.floor(Date.now() / 1000).toString();
-  const bodyHash = crypto.createHash("sha256").update("").digest("hex");
-  const canonical = ["v1", ts, "GET", pathWithQuery, bodyHash].join(":");
-  const sig = crypto.createHmac("sha256", apiSecret()).update(canonical).digest("hex");
-
   const res = await fetchImpl(BASE + pathWithQuery, {
     headers: {
       authorization: `Bearer ${apiKey()}`,
-      "x-mip-timestamp": ts,
-      "x-mip-signature": sig,
+      ...signRequest("GET", pathWithQuery),
       accept: "application/json"
     }
   });
@@ -65,6 +65,44 @@ export async function get(pathWithQuery, { fetchImpl = globalThis.fetch } = {}) 
     throw err;
   }
   return json?.data ?? json;
+}
+
+/**
+ * POST something to MoveitPro.
+ *
+ * Every write wants an Idempotency-Key, and it is the caller's job to choose
+ * one that means something: the same key with the same body replays the
+ * original response instead of creating a second record, which is the whole
+ * defence against Zapier retrying a lead.
+ */
+export async function post(pathWithQuery, body, { idempotencyKey, fetchImpl = globalThis.fetch } = {}) {
+  if (!configured()) throw new Error(status());
+  if (!idempotencyKey) throw new Error("a write needs an idempotency key");
+  const raw = JSON.stringify(body);
+
+  const res = await fetchImpl(BASE + pathWithQuery, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey()}`,
+      ...signRequest("POST", pathWithQuery, raw),
+      "idempotency-key": String(idempotencyKey).slice(0, 255),
+      "content-type": "application/json",
+      accept: "application/json"
+    },
+    body: raw
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* leave it */ }
+  if (!res.ok) {
+    const raw2 = json?.error ?? json?.message ?? text.slice(0, 300) ?? res.statusText;
+    const err = new Error(`MoveitPro POST ${pathWithQuery} → ${res.status}: ` +
+      (typeof raw2 === "string" ? raw2 : JSON.stringify(raw2)));
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return { data: json?.data ?? json, replayed: res.headers.get("idempotency-replayed") === "true" };
 }
 
 export const getJob = (id, o) => get(`/v1/jobs/${encodeURIComponent(id)}`, o);

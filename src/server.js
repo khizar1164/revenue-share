@@ -36,6 +36,7 @@ import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
 import { handleReportEmail } from "./sync/report-hook.js";
 import { verifyDelivery } from "./moveitpro.js";
 import { handleEvent } from "./sync/mip-relay.js";
+import { createLead, keyOk, relayKey } from "./sync/lead-intake.js";
 import { sendSignInLink, sendInvite, sendingEnabled, mailStatus, mailConfigured } from "./mail.js";
 
 loadEnv();
@@ -143,6 +144,35 @@ async function handleMipDelivery(req, res) {
     .then(what => console.log("moveitpro:", what))
     .catch(e => console.error("moveitpro event failed:", result.event?.type, e.message));
 }
+
+/* Meta lead ads, by way of Zapier, into MoveitPro.
+ *
+ * Zapier cannot sign a MoveitPro write, so it posts here with a shared key and
+ * this signs and forwards. The key is the only thing guarding a write to their
+ * CRM, so it is compared in constant time and the route says nothing useful
+ * when it is wrong.
+ *
+ * Answers synchronously, unlike the MoveitPro webhook: Zapier shows the reply
+ * in its own run history, and a lead that failed is something somebody needs
+ * to see there rather than in a log nobody reads.
+ */
+app.post("/api/hooks/meta-lead", wrap(async (req, res) => {
+  if (!relayKey()) return res.status(503).json({ error: "lead relay is not configured" });
+  if (!keyOk(req.get("x-relay-key"))) return res.status(401).json({ error: "no" });
+
+  try {
+    const r = await createLead(req.body ?? {});
+    console.log(`meta lead: ${r.name} → ${r.id}` +
+      (r.replayed ? " (replay)" : "") + (r.warnings.length ? ` [${r.warnings.join(", ")}]` : ""));
+    return res.json({ ok: true, lead_id: r.id, replayed: r.replayed, warnings: r.warnings });
+  } catch (e) {
+    console.error("meta lead failed:", e.message);
+    /* Zapier retries on 5xx and gives up on 4xx, which is the right split:
+       a malformed lead will not get better, an outage might. */
+    return res.status(e.status === 422 ? 422 : (e.status >= 500 ? 502 : 400))
+      .json({ error: e.message });
+  }
+}));
 
 /* ------------------------------------------------ report email webhook ---- */
 /*
