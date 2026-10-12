@@ -152,6 +152,23 @@ export async function handleEvent(event, opts = {}) {
 
   if (type === "job.created" || type === "job.updated") return handleJob(event, opts);
   if (type === "payment.recorded") return handlePayment(event, opts);
-  if (type === "ping") return "ping";
+  /* MoveitPro's own test event, and the only thing that exercises the whole
+     chain at once: their signature, our verification, and both Discord URLs
+     as the server actually has them. A ping that only answered 200 would
+     prove the half that was never in doubt. */
+  if (type === "ping") {
+    const said = [];
+    for (const [where, send] of [["dispatch-updates", discord.toDispatch],
+                                 ["payments", discord.toPayments]]) {
+      try {
+        await send("✅ **Relay connected.** MoveitPro can reach this channel. " +
+                   "Real messages start from the next booking or payment.", opts);
+        said.push(where);
+      } catch (e) {
+        said.push(`${where} FAILED (${e.message})`);
+      }
+    }
+    return "ping → " + said.join(", ");
+  }
   return `${type}: not a type we post`;
 }
