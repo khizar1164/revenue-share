@@ -65,9 +65,22 @@ export const usd = cents =>
   "$" + (Number(cents ?? 0) / 100).toLocaleString("en-US",
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** 2026-10-26 → 10/26/2026, the way the channel already reads. */
+/**
+ * 2026-10-26 → 10/26/2026, the way the channel already reads.
+ *
+ * Accepts a Date as well as a string. The caller is supposed to hand this
+ * plain text, but a date column read from Postgres arrives as a Date, and the
+ * old fallback printed the whole "Thu Oct 22 2026 00:00:00 GMT+0000
+ * (Coordinated Universal Time)" into Discord when it did. Falling back to
+ * something unreadable is worse than handling the case.
+ */
 export function day(d) {
   if (!d) return "—";
+  if (d instanceof Date) {
+    if (Number.isNaN(d.getTime())) return "—";
+    const p = n => String(n).padStart(2, "0");
+    return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}/${d.getUTCFullYear()}`;
+  }
   const [y, m, dd] = String(d).slice(0, 10).split("-");
   return y && m && dd ? `${m}/${dd}/${y}` : String(d);
 }

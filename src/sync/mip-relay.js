@@ -84,8 +84,15 @@ export async function handleJob(event, opts = {}) {
   const id = event.record_id ?? event.data?.id;
   if (!id) return "job event with no record id";
 
+  /* As text, formatted by Postgres. A date column arrives as a JS Date, and
+     MoveitPro sends a string — comparing the two stringifies the Date to
+     "Thu Oct 22 2026 ...", which never equals "2026-10-22". Every update then
+     looks like a date change, and the old date prints as that whole mouthful.
+     Both happened in the channel before this line said to_char. */
   const before = (await query(
-    `select service_date, cancelled_at, invoice_number from mip_jobs where job_id = $1`, [id])).rows[0];
+    `select to_char(service_date, 'YYYY-MM-DD') as service_date,
+            cancelled_at, invoice_number
+       from mip_jobs where job_id = $1`, [id])).rows[0];
 
   let job;
   try { job = await getJob(id, opts); }
@@ -98,8 +105,9 @@ export async function handleJob(event, opts = {}) {
   const extra = { serviceType: await serviceTypeFor(job, opts) };
   const nowCancelled = Boolean(job.cancelled_at);
   const wasCancelled = Boolean(before?.cancelled_at);
-  const dateMoved = before && String(before.service_date ?? "").slice(0, 10) !==
-                               String(job.service_date ?? "").slice(0, 10);
+  /* Both sides are now plain YYYY-MM-DD. A job with no date on either side has
+     not moved, which is why the empty strings have to compare equal. */
+  const dateMoved = before && (before.service_date ?? "") !== (job.service_date ?? "");
 
   let message = null, what = null;
   if (!before && !nowCancelled) {
