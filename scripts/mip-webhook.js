@@ -47,10 +47,16 @@ async function call(method, path, body) {
       "x-mip-signature": sig,
       accept: "application/json",
       ...(raw ? { "content-type": "application/json" } : {}),
-      /* Stable per target+events, so a retry replays rather than duplicates. */
+      /* Creating is stable per target and events, so a retry replays the
+         original response rather than making a second endpoint. A ping is the
+         opposite: you send one to find out whether it works NOW, so it gets a
+         fresh key each time. One shared key across both is how the first ping
+         came back as idempotency_key_reuse. */
       ...(method === "POST" ? {
-        "idempotency-key": "ims-relay-" +
-          crypto.createHash("sha256").update(TARGET + EVENTS.join(",")).digest("hex").slice(0, 32)
+        "idempotency-key": path.endsWith("/test")
+          ? `ims-ping-${Date.now()}`
+          : "ims-relay-" + crypto.createHash("sha256")
+              .update(method + path + TARGET + EVENTS.join(",")).digest("hex").slice(0, 32)
       } : {})
     },
     body: raw || undefined
