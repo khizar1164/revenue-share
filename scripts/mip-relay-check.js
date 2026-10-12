@@ -108,6 +108,36 @@ check("a tip is broken out when there is one", tipped.includes("$20.00"));
 check("and the job's share shown beside it", tipped.includes("$130.00"));
 check("no tip line when there is no tip", !/Tip/.test(msg));
 
+/* The filter that keeps the payments channel from doubling. "manual" is 98 of
+   every 100 payments, so it cannot be the test on its own; where the money was
+   taken is. */
+console.log("\n4. WHICH PAYMENTS ARE OURS TO POST");
+const surfaces = (process.env.MIP_PAYMENT_SURFACES || "bol")
+  .split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+const posts = p =>
+  p.gateway_type === "manual" &&
+  (!surfaces.length || surfaces.includes(String(p.surface ?? "").toLowerCase()));
+
+check("a payment taken on site is ours",
+  posts({ gateway_type: "manual", surface: "bol" }));
+check("one taken in the customer portal is not — Zapier already has it",
+  !posts({ gateway_type: "manual", surface: "customer_portal" }));
+check("a card through the processor is not",
+  !posts({ gateway_type: "authorize_net", surface: "bol" }));
+check("nor a Stripe one", !posts({ gateway_type: "stripe", surface: "bol" }));
+check("a surface we have never seen is not posted either",
+  !posts({ gateway_type: "manual", surface: "something_new" }),
+  "silence is recoverable, a doubled channel is not");
+
+/* Against the real spread: 96 portal, 2 bol out of 98 manual. */
+const sample = [
+  ...Array(96).fill({ gateway_type: "manual", surface: "customer_portal" }),
+  ...Array(2).fill({ gateway_type: "manual", surface: "bol" }),
+  ...Array(2).fill({ gateway_type: "authorize_net", surface: "customer_portal" })
+];
+check("on last week's real spread, 2 of 100 would post",
+  sample.filter(posts).length === 2, `${sample.filter(posts).length} of ${sample.length}`);
+
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);
 console.log("=".repeat(58));

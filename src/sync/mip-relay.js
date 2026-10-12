@@ -17,9 +17,25 @@ import { query } from "../db.js";
 import { getJob, getEstimate, getPayment, getCustomer } from "../moveitpro.js";
 import * as discord from "../discord.js";
 
-/* Their quick tasks and ours disagree about what "manual" means in English;
-   in their data it is simply "a person recorded this, the processor did not". */
+/* In MoveitPro's data "manual" means only "a person recorded this, the
+   processor did not" — and that turns out to be nearly everything: 98 of the
+   last 100 payments. On its own it is useless as a filter, because the card
+   and ACH payments Andrew already receives in Discord, from the processor's
+   own emails through Zapier, are recorded as manual too. Posting those would
+   double every card transaction in a channel that is currently correct.
+   
+   `surface` is what actually separates them. 96 of those 98 are
+   customer_portal — a customer paying online, which is exactly what the CC and
+   ACH Zaps already cover. The remaining two are `bol`: taken on site when the
+   Bill of Lading is signed, which is where cash and cheques are handed over.
+   
+   So the filter is where the money was taken, not how it was recorded. It is
+   still an inference rather than a fact — a card run on site is also `bol` —
+   which is why the message says a person entered it rather than calling it
+   cash, and why this is a list that can be changed without a deploy. */
 const BY_HAND = "manual";
+const SURFACES = () => (process.env.MIP_PAYMENT_SURFACES || "bol")
+  .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 
 /** Already seen? Delivery is at-least-once, so this is asked of everything. */
 async function alreadyHandled(event) {
@@ -120,6 +136,10 @@ export async function handlePayment(event, opts = {}) {
 
   if (payment.gateway_type !== BY_HAND) {
     return `payment ${id} went through ${payment.gateway_type} — the processor emails those`;
+  }
+  const surfaces = SURFACES();
+  if (surfaces.length && !surfaces.includes(String(payment.surface ?? "").toLowerCase())) {
+    return `payment ${id} was taken on ${payment.surface} — already in the channel via Zapier`;
   }
   if (payment.kind === "auth_only" || payment.status === "failed" || payment.status === "voided") {
     return `payment ${id} is ${payment.kind}/${payment.status} — no money moved`;

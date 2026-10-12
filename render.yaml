@@ -119,3 +119,12 @@ services:
         sync: false
       - key: DISCORD_PAYMENTS_URL
         sync: false
+
+      # Which payments the relay posts, by where the money was taken. "manual"
+      # cannot be the test on its own: it is 98 of every 100 payments, and the
+      # card and ACH ones already reach Discord from the processor's emails
+      # through Zapier. 96 of those 98 are customer_portal, which is exactly
+      # what Zapier covers; `bol` is taken on site at signing, which is where
+      # cash is. Change this without a deploy if the first week says otherwise.
+      - key: MIP_PAYMENT_SURFACES
+        value: bol
