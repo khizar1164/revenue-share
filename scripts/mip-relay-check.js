@@ -17,6 +17,7 @@ import { verifyDelivery, MAX_SKEW_SECONDS } from "../src/moveitpro.js";
 import {
   bookedMessage, rescheduledMessage, cancelledMessage, manualPaymentMessage, day, usd
 } from "../src/discord.js";
+import { isCancelled } from "../src/sync/mip-relay.js";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -137,6 +138,20 @@ const sample = [
 ];
 check("on last week's real spread, 2 of 100 would post",
   sample.filter(posts).length === 2, `${sample.filter(posts).length} of ${sample.length}`);
+
+/* Andrew cancelled a job on 13 October and nothing reached the channel. The
+   check asked only whether cancelled_at was set; of the 46 cancelled jobs in
+   the account, 45 have it null and say so only in status. */
+console.log("\n5. A CANCELLED JOB IS RECOGNISED HOWEVER IT IS MARKED");
+check("cancelled_at set", isCancelled({ cancelled_at: "2026-10-12T18:27:27Z", status: "cancelled" }));
+check("status says cancelled with no cancelled_at, which is the usual case",
+  isCancelled({ cancelled_at: null, status: "cancelled" }),
+  "45 of the 46 real ones look like this");
+check("whatever the case", isCancelled({ status: "Cancelled" }));
+check("and with a reason appended", isCancelled({ status: "cancelled - customer" }));
+check("a live job is not cancelled", !isCancelled({ status: "not-confirmed", cancelled_at: null }));
+check("nor a closed one", !isCancelled({ status: "closed", cancelled_at: null }));
+check("nor one we have never seen", !isCancelled(undefined) && !isCancelled(null));
 
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);

@@ -46,6 +46,22 @@ async function alreadyHandled(event) {
   return r.rowCount === 0;
 }
 
+/**
+ * Has this job been cancelled.
+ *
+ * Not simply whether cancelled_at is set, which is what this used to ask and
+ * why Andrew cancelled a job on 13 October and saw nothing in the channel. Of
+ * the 46 cancelled jobs in the account, 45 carry cancelled_at as null and say
+ * so only in status. MoveitPro records the cancellation on the free-text
+ * status and fills cancelled_at only sometimes.
+ *
+ * So either one counts. status is free text, so this matches rather than
+ * compares: "cancelled", "Cancelled", "cancelled - customer" all mean the job
+ * is not happening.
+ */
+export const isCancelled = job =>
+  Boolean(job?.cancelled_at) || /cancel/i.test(String(job?.status ?? ""));
+
 /* The service type lives on the estimate, not the job. A manual job has no
    estimate at all, which is not an error — it is a job somebody typed in. */
 async function serviceTypeFor(job, opts) {
@@ -91,7 +107,7 @@ export async function handleJob(event, opts = {}) {
      Both happened in the channel before this line said to_char. */
   const before = (await query(
     `select to_char(service_date, 'YYYY-MM-DD') as service_date,
-            cancelled_at, invoice_number
+            cancelled_at, status, invoice_number
        from mip_jobs where job_id = $1`, [id])).rows[0];
 
   let job;
@@ -103,8 +119,8 @@ export async function handleJob(event, opts = {}) {
   }
 
   const extra = { serviceType: await serviceTypeFor(job, opts) };
-  const nowCancelled = Boolean(job.cancelled_at);
-  const wasCancelled = Boolean(before?.cancelled_at);
+  const nowCancelled = isCancelled(job);
+  const wasCancelled = isCancelled(before);
   /* Both sides are now plain YYYY-MM-DD. A job with no date on either side has
      not moved, which is why the empty strings have to compare equal. */
   const dateMoved = before && (before.service_date ?? "") !== (job.service_date ?? "");
