@@ -29,7 +29,34 @@ check("and with no key configured, nothing is accepted",
   !keyOk("correct-horse-battery-staple"), "an unset secret must not mean an open door");
 process.env.LEAD_RELAY_KEY = "correct-horse-battery-staple";
 
-console.log("\n2. NAMES, HOWEVER THE FORM WAS BUILT");
+/* The payload the live zap actually sends, copied from a failed run on
+   13 October. It was refused for having no email and no phone, because the
+   mapping looked only for full_name, phone_number and camelCase, and
+   JavaScript does not think Email is email. Two real leads were lost. */
+console.log("\n2. THE PAYLOAD THE LIVE ZAP SENDS");
+const LIVE = {
+  FullName: "Lily Reagen Martinez",
+  PhoneNumber: "7087046124",
+  Email: "shouldbeblond10@gmail.com",
+  ReferralSource: "z AD - Social Media"
+};
+const live = toLead(LIVE);
+check("the email is found", live.body.email === "shouldbeblond10@gmail.com");
+check("the phone is found", live.body.phones?.[0]?.number === "7087046124");
+check("the name is split",
+  live.body.first_name === "Lily" && live.body.last_name === "Reagen Martinez");
+check("and nothing is warned about", live.warnings.length === 0, live.warnings.join(", "));
+
+console.log("\n3. HOWEVER THE FIELDS ARE SPELLED NEXT TIME");
+for (const key of ["email", "Email", "EMAIL", "email_address", "Email Address", "emailAddress"]) {
+  check(`${key} is understood`, toLead({ [key]: "a@b.com" }).body.email === "a@b.com");
+}
+for (const key of ["phone", "Phone", "phone_number", "PhoneNumber", "Phone Number", "mobile"]) {
+  check(`${key} is understood`,
+    toLead({ [key]: "5742293269" }).body.phones?.[0]?.number === "5742293269");
+}
+
+console.log("\n4. NAMES, HOWEVER THE FORM WAS BUILT");
 check("first and last, given separately",
   toLead({ first_name: "Geneva", last_name: "Lanning" }).body.first_name === "Geneva");
 check("a single full_name is split",
@@ -57,11 +84,13 @@ const { body, warnings } = toLead({
 check("the source is stamped on it", body.referred_by === "z AD - Social Media");
 check("and nothing is warned about a complete lead", warnings.length === 0, warnings.join(", "));
 
-/* The attribution must not be rewritable by whoever fills in the form. */
-const spoofed = toLead({ full_name: "A Person", email: "a@b.com",
-                         referred_by: "Google", referral_source: "Google" });
-check("a form field cannot rewrite where the lead came from",
-  spoofed.body.referred_by === "z AD - Social Media", spoofed.body.referred_by);
+/* The zap is authenticated with our own key, so a source it states is
+   configuration rather than user input. Silently ignoring it would make the
+   ReferralSource field in the zap do nothing at all, which is worse. */
+const stated = toLead({ full_name: "A Person", email: "a@b.com", ReferralSource: "Meta Lead Form" });
+check("a source the zap states is honoured", stated.body.referred_by === "Meta Lead Form");
+check("and ours is the fallback when it says nothing",
+  toLead({ email: "a@b.com" }).body.referred_by === "z AD - Social Media");
 
 const thin = toLead({ full_name: "No Contact" });
 check("a lead with no way to reach them is flagged",

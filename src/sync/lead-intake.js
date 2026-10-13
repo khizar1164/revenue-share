@@ -30,8 +30,39 @@ export function keyOk(given) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-const first = (...vals) => vals.find(v => v != null && String(v).trim() !== "") ?? null;
 const clean = v => v == null ? null : String(v).trim();
+
+/* Zapier sends whatever the person who built the step called the fields. The
+   live zap sends FullName, PhoneNumber and Email; my first guess looked only
+   for full_name and phone_number and camelCase, so every field missed and two
+   real leads were refused for having no way to contact them.
+   
+   Guessing spellings was the wrong shape of answer. Both sides are flattened
+   to letters and digits only — FullName, full_name, "Full Name" and fullname
+   all become fullname — so the mapping stops caring how anyone writes it. */
+const flatten = k => String(k).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function indexed(payload) {
+  const out = new Map();
+  for (const [k, v] of Object.entries(payload ?? {})) {
+    const key = flatten(k);
+    /* First spelling wins, so an explicit Email is not overwritten by a later
+       email_address that happens to be empty. */
+    if (!out.has(key) || (out.get(key) == null || String(out.get(key)).trim() === "")) {
+      out.set(key, v);
+    }
+  }
+  return out;
+}
+
+/** The first of these names that carries anything. */
+const pick = (idx, ...names) => {
+  for (const n of names) {
+    const v = idx.get(flatten(n));
+    if (v != null && String(v).trim() !== "") return v;
+  }
+  return null;
+};
 
 /** "Jane Q Smith" → ["Jane", "Q Smith"]. One word is a first name. */
 export function splitName(full) {
@@ -55,18 +86,18 @@ export function phoneOf(raw) {
  * empty row in front of the sales team.
  */
 export function toLead(payload = {}) {
-  const p = payload ?? {};
+  const idx = indexed(payload);
   const warnings = [];
 
-  let firstName = clean(first(p.first_name, p.firstName, p.given_name));
-  let lastName = clean(first(p.last_name, p.lastName, p.family_name, p.surname));
+  let firstName = clean(pick(idx, "first_name", "given_name"));
+  let lastName = clean(pick(idx, "last_name", "family_name", "surname"));
   if (!firstName) {
-    const [f, l] = splitName(first(p.full_name, p.fullName, p.name));
+    const [f, l] = splitName(pick(idx, "full_name", "name"));
     firstName = f; lastName = lastName ?? l;
   }
 
-  const email = clean(first(p.email, p.email_address, p.emailAddress));
-  const phone = phoneOf(first(p.phone, p.phone_number, p.phoneNumber, p.mobile));
+  const email = clean(pick(idx, "email", "email_address"));
+  const phone = phoneOf(pick(idx, "phone", "phone_number", "mobile", "cell"));
 
   if (!email) warnings.push("no email");
   if (!phone) warnings.push("no usable phone");
@@ -76,13 +107,17 @@ export function toLead(payload = {}) {
     ...(lastName ? { last_name: lastName.slice(0, 128) } : {}),
     ...(email ? { email } : {}),
     ...(phone ? { phones: [{ type: "Mobile", number: phone }] } : {}),
-    /* Where the lead came from. Set by the caller's configuration rather than
-       by the payload, so a form field can never rewrite our attribution. */
-    referred_by: (process.env.LEAD_REFERRED_BY || "z AD - Social Media").slice(0, 128),
+    /* Where the lead came from. The caller is authenticated with our own
+       relay key, so this is configuration rather than user input: if the zap
+       states a source, that is a deliberate choice by whoever built it and
+       silently ignoring it would be worse than honouring it. Falls back to
+       ours when it says nothing. */
+    referred_by: (clean(pick(idx, "referral_source", "referred_by", "source")) ||
+                  process.env.LEAD_REFERRED_BY || "z AD - Social Media").slice(0, 128),
     ...(process.env.MOVEITPRO_BRANCH_ID ? { branch_id: process.env.MOVEITPRO_BRANCH_ID } : {})
   };
 
-  const moveDate = clean(first(p.move_date, p.moveDate, p.when_are_you_moving));
+  const moveDate = clean(pick(idx, "move_date", "when_are_you_moving"));
   if (moveDate && /^\d{4}-\d{2}-\d{2}$/.test(moveDate)) body.move_date = moveDate;
 
   return { body, warnings };
@@ -97,7 +132,8 @@ export function toLead(payload = {}) {
  * because that is the only identifier either side agrees on.
  */
 export function idempotencyKeyFor(payload, body) {
-  const given = payload?.leadgen_id ?? payload?.lead_id ?? payload?.id;
+  const idx = indexed(payload);
+  const given = pick(idx, "leadgen_id", "lead_id", "id");
   if (given) return `meta-${String(given).slice(0, 200)}`;
   const seed = [body.email, body.phones?.[0]?.number, body.first_name, body.last_name].join("|");
   return "meta-" + crypto.createHash("sha256").update(seed).digest("hex").slice(0, 40);
