@@ -62,30 +62,47 @@ async function alreadyHandled(event) {
 export const isCancelled = job =>
   Boolean(job?.cancelled_at) || /cancel/i.test(String(job?.status ?? ""));
 
-/* The service type lives on the estimate, not the job. A manual job has no
-   estimate at all, which is not an error — it is a job somebody typed in. */
-async function serviceTypeFor(job, opts) {
-  if (!job.estimate_id) return null;
+/* The service type lives on the estimate, not the job — and so does the number
+   the company actually uses. MoveitPro puts two numbers on every booked move,
+   ESTIMATE #11251 and INVOICE #9194, and every thread, board and rep says the
+   estimate one. The relay used to print invoice_number, which is why Andrew
+   saw numbers that did not match the threads.
+
+   A manual job has no estimate at all, which is not an error — it is a job
+   somebody typed in, and it has only an invoice number. Both fields come back
+   null for those and the caller falls back. */
+async function estimateFor(job, opts) {
+  if (!job.estimate_id) return { serviceType: null, jobNumber: null };
   try {
     const e = await getEstimate(job.estimate_id, opts);
-    return e?.service_type ?? null;
+    return {
+      serviceType: e?.service_type ?? null,
+      jobNumber: e?.estimate_number ?? null
+    };
   } catch {
-    return null;                         // never let a nicety lose the message
+    return { serviceType: null, jobNumber: null };  // never lose the message
   }
 }
 
-async function remember(job) {
+/* estimate_number is stored as well as invoice_number because the payments
+   channel has only a job id to work from and still has to print the number
+   staff recognise, without fetching the estimate a second time. */
+async function remember(job, estimateNumber = null) {
   await query(
-    `insert into mip_jobs (job_id, invoice_number, service_date, cancelled_at, status, customer_name)
-     values ($1,$2,$3,$4,$5,$6)
+    `insert into mip_jobs (job_id, invoice_number, estimate_number, service_date,
+                           cancelled_at, status, customer_name)
+     values ($1,$2,$3,$4,$5,$6,$7)
      on conflict (job_id) do update set
-       invoice_number = excluded.invoice_number,
-       service_date   = excluded.service_date,
-       cancelled_at   = excluded.cancelled_at,
-       status         = excluded.status,
-       customer_name  = excluded.customer_name,
-       updated_at     = now()`,
-    [job.id, job.invoice_number ?? null, job.service_date ?? null,
+       invoice_number  = excluded.invoice_number,
+       /* a later event that cannot reach the estimate must not wipe a number
+          we already know */
+       estimate_number = coalesce(excluded.estimate_number, mip_jobs.estimate_number),
+       service_date    = excluded.service_date,
+       cancelled_at    = excluded.cancelled_at,
+       status          = excluded.status,
+       customer_name   = excluded.customer_name,
+       updated_at      = now()`,
+    [job.id, job.invoice_number ?? null, estimateNumber, job.service_date ?? null,
      job.cancelled_at ?? null, job.status ?? null, job.customer_name ?? null]);
 }
 
@@ -118,7 +135,7 @@ export async function handleJob(event, opts = {}) {
     throw e;
   }
 
-  const extra = { serviceType: await serviceTypeFor(job, opts) };
+  const extra = await estimateFor(job, opts);
   const nowCancelled = isCancelled(job);
   const wasCancelled = isCancelled(before);
   /* Both sides are now plain YYYY-MM-DD. A job with no date on either side has
@@ -134,10 +151,11 @@ export async function handleJob(event, opts = {}) {
     message = discord.rescheduledMessage(job, before.service_date, extra); what = "rescheduled";
   }
 
-  await remember(job);
-  if (!message) return `job ${job.invoice_number ?? id}: nothing worth posting`;
+  await remember(job, extra.jobNumber);
+  const said = extra.jobNumber ?? job.invoice_number ?? id;
+  if (!message) return `job ${said}: nothing worth posting`;
   await discord.toDispatch(message, opts);
-  return `job ${job.invoice_number ?? id} ${what}`;
+  return `job ${said} ${what}`;
 }
 
 /**
@@ -180,8 +198,10 @@ export async function handlePayment(event, opts = {}) {
   let jobNumber = null;
   if (payment.surface_entity_type === "dispatch_job" && payment.surface_entity_id) {
     const known = (await query(
-      `select invoice_number from mip_jobs where job_id = $1`, [payment.surface_entity_id])).rows[0];
-    jobNumber = known?.invoice_number ?? null;
+      `select estimate_number, invoice_number from mip_jobs where job_id = $1`,
+      [payment.surface_entity_id])).rows[0];
+    /* The estimate number is what staff quote. A manual job has none. */
+    jobNumber = known?.estimate_number ?? known?.invoice_number ?? null;
   }
 
   await discord.toPayments(

@@ -97,10 +97,20 @@ export function when(ts) {
 
 const line = (emoji, label, value) => `${emoji} **${label}:** ${esc(value) || "—"}`;
 
-/** The block every dispatch message shares, so the three read alike. */
-function jobLines(job, { serviceType } = {}) {
+/**
+ * The block every dispatch message shares, so the three read alike.
+ *
+ * The number is the ESTIMATE number when the job has one. MoveitPro keeps two
+ * on every job — estimate #11251 and invoice #9194 for the same move — and the
+ * company says the estimate number. Andrew, 15 October: "These are showing the
+ * wrong job numbers sometimes." They were showing invoice_number, which is
+ * right in the database and wrong in a channel where Jason answers with
+ * "see the #11251 thread". A manual job has no estimate, so the invoice number
+ * is still what prints for those.
+ */
+function jobLines(job, { serviceType, jobNumber } = {}) {
   return [
-    line("🏷️", "Job #", job.invoice_number ?? "—"),
+    line("🏷️", "Job #", jobNumber ?? job.invoice_number ?? "—"),
     line("👤", "Customer", job.customer_name),
     line("📞", "Phone", job.customer_phone),
     line("📅", "Move Date", day(job.service_date)),

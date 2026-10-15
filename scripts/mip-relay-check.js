@@ -79,6 +79,33 @@ for (const bit of ["Job Booked", "11123", "Geneva Lanning", "574-229-3269",
   check(`booked message carries ${bit}`, booked.includes(bit));
 }
 
+/* Andrew, 15 October: "These are showing the wrong job numbers sometimes."
+   MoveitPro puts two numbers on one move — estimate #11251 and invoice #9194
+   for Christine Paro — and the channel reads the estimate one, because that is
+   what the threads and the boards and the reps all say. The relay printed the
+   invoice number, which is correct data answering the wrong question. The two
+   counters are independent, so they drift by thousands. */
+console.log("\n2b. WHICH OF THE TWO NUMBERS GOES IN THE CHANNEL");
+const PARO = { ...JOB, invoice_number: 9194, customer_name: "Christine Paro" };
+const paro = bookedMessage(PARO, { serviceType: "Residential Move", jobNumber: 11251 });
+check("the estimate number is the one that prints", paro.includes("11251"),
+  "what Jason answers Andrew with");
+check("and the invoice number is not", !paro.includes("9194"),
+  "nobody quotes the billing counter");
+for (const kind of [["rescheduled", rescheduledMessage(PARO, "2026-10-20", { jobNumber: 11251 })],
+                    ["cancelled", cancelledMessage(PARO, { jobNumber: 11251 })]]) {
+  check(`a ${kind[0]} message uses it too`, kind[1].includes("11251") && !kind[1].includes("9194"));
+}
+
+/* A manual job is typed straight into dispatch and never has an estimate, so
+   the invoice number is the only number it has. Printing a dash instead would
+   be a worse answer than printing the number that exists. */
+check("a manual job still shows its invoice number",
+  bookedMessage(PARO, { serviceType: null, jobNumber: null }).includes("9194"),
+  "no estimate exists for one of these");
+check("and a job with neither prints a dash",
+  bookedMessage({ ...JOB, invoice_number: null }, {}).includes("**Job #:** —"));
+
 const moved = rescheduledMessage({ ...JOB, service_date: "2026-11-02" }, "2026-10-26", extra);
 check("a reschedule shows the old date", moved.includes("10/26/2026"));
 check("and the new one", moved.includes("11/02/2026"));
