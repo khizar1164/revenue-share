@@ -37,6 +37,35 @@ const BY_HAND = "manual";
 const SURFACES = () => (process.env.MIP_PAYMENT_SURFACES || "bol")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 
+/* Card transactions, and why they are off.
+ *
+ * Andrew, 17 October: "Let's hold off for now until we have phased out
+ * SmartMoving completely. If you would like to build it and test it and have
+ * it on pause, you're more than welcome to."
+ *
+ * So this ships finished and silent. Switching MIP_CARD_PAYMENTS to "on" is
+ * the whole activation: no deploy, no code change, and it can go back off just
+ * as fast if the channel doubles. Until then card events are fetched, counted
+ * and dropped, which also means the logs show what WOULD have posted before
+ * anyone commits to it. */
+const cardPaymentsEnabled = () =>
+  String(process.env.MIP_CARD_PAYMENTS || "off").trim().toLowerCase() === "on";
+
+/**
+ * Is this a chargeback.
+ *
+ * Andrew, same message: "we will want to keep the zap active that looks for
+ * charge back notifications." That zap reads the processor's own email, which
+ * arrives whether or not MoveitPro ever hears about the dispute, so it is the
+ * better source and it stays.
+ *
+ * This is therefore a hard exclusion rather than a default. It holds even when
+ * MIP_CARD_PAYMENTS is on, because the failure it prevents is a chargeback
+ * posting twice in the one channel where people are already alarmed.
+ */
+export const isChargeback = payment =>
+  String(payment?.status ?? "").toLowerCase() === "chargeback";
+
 /** Already seen? Delivery is at-least-once, so this is asked of everything. */
 async function alreadyHandled(event) {
   const r = await query(
@@ -158,12 +187,56 @@ export async function handleJob(event, opts = {}) {
   return `job ${said} ${what}`;
 }
 
+/** Who the payment belongs to, when we can find out. Never fatal. */
+async function nameOn(payment, opts) {
+  if (!payment.customer_id) return null;
+  try {
+    const c = await getCustomer(payment.customer_id, opts);
+    return [c?.first_name, c?.last_name].filter(Boolean).join(" ") || c?.name || null;
+  } catch { return null; }
+}
+
+/** The invoice number we already know for the job this payment sits on. */
+async function jobNumberOn(payment) {
+  if (payment.surface_entity_type !== "dispatch_job" || !payment.surface_entity_id) return null;
+  const known = (await query(
+    `select estimate_number, invoice_number from mip_jobs where job_id = $1`,
+    [payment.surface_entity_id])).rows[0];
+  return known?.estimate_number ?? known?.invoice_number ?? null;
+}
+
+/**
+ * A card transaction, posted from the ledger rather than the processor email.
+ *
+ * The refund is the whole reason this exists, so the sale it reverses is
+ * fetched when there is one. parent_transaction_id is only populated on
+ * refund and void rows, and a failed lookup costs us a line of detail rather
+ * than the message.
+ */
+async function postCard(payment, opts) {
+  const [customerName, jobNumber] = await Promise.all([
+    nameOn(payment, opts), jobNumberOn(payment)
+  ]);
+
+  let parent = null;
+  if (payment.parent_transaction_id) {
+    try { parent = await getPayment(payment.parent_transaction_id, opts); }
+    catch { /* the reversal still posts, just without naming its sale */ }
+  }
+
+  await discord.toPayments(
+    discord.cardPaymentMessage(payment, { customerName, jobNumber, parent }), opts);
+
+  const sign = (payment.kind === "refund" || payment.kind === "void") ? "-" : "";
+  return `card ${payment.kind} posted (${sign}${discord.usd(payment.amount_cents)})`;
+}
+
 /**
  * One payment event.
  *
- * Only the ones a person entered. Card and ACH already reach the payments
- * channel from the processor's own emails, and posting them again would double
- * every card transaction in a channel that is currently correct.
+ * Hand-entered payments post today. Card transactions are built and tested but
+ * held behind MIP_CARD_PAYMENTS until SmartMoving is retired, and chargebacks
+ * are never ours at all.
  */
 export async function handlePayment(event, opts = {}) {
   const id = event.record_id ?? event.data?.id;
@@ -176,14 +249,31 @@ export async function handlePayment(event, opts = {}) {
     throw e;
   }
 
-  if (payment.gateway_type !== BY_HAND) {
-    return `payment ${id} went through ${payment.gateway_type} — the processor emails those`;
+  /* Chargebacks are somebody else's job, whatever else is switched on. */
+  if (isChargeback(payment)) {
+    return `payment ${id} is a chargeback — the processor's own zap posts those`;
   }
+
+  /* An authorization is a hold, not money. It is noise in either channel. */
+  if (payment.kind === "auth_only") {
+    return `payment ${id} is auth_only — no money moved`;
+  }
+
+  const byHand = payment.gateway_type === BY_HAND;
+
+  if (!byHand) {
+    if (!cardPaymentsEnabled()) {
+      return `payment ${id} went through ${payment.gateway_type} — card posting is off ` +
+             `(would have been ${payment.kind})`;
+    }
+    return postCard(payment, opts);
+  }
+
   const surfaces = SURFACES();
   if (surfaces.length && !surfaces.includes(String(payment.surface ?? "").toLowerCase())) {
     return `payment ${id} was taken on ${payment.surface} — already in the channel via Zapier`;
   }
-  if (payment.kind === "auth_only" || payment.status === "failed" || payment.status === "voided") {
+  if (payment.status === "failed" || payment.status === "voided") {
     return `payment ${id} is ${payment.kind}/${payment.status} — no money moved`;
   }
 

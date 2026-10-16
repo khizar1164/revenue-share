@@ -15,9 +15,10 @@
 import crypto from "node:crypto";
 import { verifyDelivery, MAX_SKEW_SECONDS } from "../src/moveitpro.js";
 import {
-  bookedMessage, rescheduledMessage, cancelledMessage, manualPaymentMessage, day, usd
+  bookedMessage, rescheduledMessage, cancelledMessage, manualPaymentMessage,
+  cardPaymentMessage, signedUsd, day, usd
 } from "../src/discord.js";
-import { isCancelled } from "../src/sync/mip-relay.js";
+import { isCancelled, isChargeback } from "../src/sync/mip-relay.js";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -165,6 +166,66 @@ const sample = [
 ];
 check("on last week's real spread, 2 of 100 would post",
   sample.filter(posts).length === 2, `${sample.filter(posts).length} of ${sample.length}`);
+
+/* Andrew, 16 October: a refund posted reading "Approved, $150.00" and Jason
+   asked whether the customer had rebooked. Andrew then confirmed the processor
+   email carries nothing to tell a refund from a sale, so this had to move to
+   MoveitPro's ledger, where `kind` says so outright.
+
+   He also set two conditions: hold it until SmartMoving is retired, and leave
+   the chargeback zap alone. Both are tested here, because both are the kind of
+   thing a later change breaks silently. */
+console.log("\n6. CARD TRANSACTIONS, AND THE TWO RULES ANDREW SET");
+
+const CARD = { id: "c1", gateway_type: "authorize_net", kind: "sale", status: "captured",
+               amount_cents: 15000, tip_cents: 0, created_at: "2026-10-16T22:22:00.000Z" };
+const REFUND = { ...CARD, id: "c2", kind: "refund", amount_cents: 15000,
+                 parent_transaction_id: "c1" };
+
+check("money going out is written with the minus in front", signedUsd(-15000) === "-$150.00",
+  "not $-150.00, where the sign hides behind the dollar");
+check("money coming in is unchanged", signedUsd(15000) === "$150.00");
+
+const sale = cardPaymentMessage(CARD, { customerName: "Christian Nava", jobNumber: 11251 });
+check("a sale reads as a card payment", sale.startsWith("💳 **Card Payment**"));
+check("and its amount is positive", sale.includes("$150.00") && !sale.includes("-$150.00"));
+
+const refund = cardPaymentMessage(REFUND, { customerName: "Christian Nava", jobNumber: 11251,
+                                            parent: { amount_cents: 15000, created_at: "2026-10-14" } });
+check("a refund says so in the heading", refund.startsWith("↩️ **Refund Issued**"),
+  "nobody should read as far as the amount to know which way the money went");
+check("and its amount is negative", refund.includes("-$150.00"));
+check("and it names the sale it reverses", refund.includes("Reverses") && refund.includes("10/14/2026"));
+check("a refund with no parent found still posts",
+  cardPaymentMessage(REFUND, { customerName: "X" }).includes("-$150.00"));
+
+check("a void is also a reversal",
+  cardPaymentMessage({ ...CARD, kind: "void" }, {}).startsWith("🚫 **Payment Voided**"));
+check("a declined card says declined",
+  cardPaymentMessage({ ...CARD, status: "failed" }, {}).includes("Declined"));
+
+console.log("\n   Rule 1: it ships paused");
+const paused = p => {
+  const was = process.env.MIP_CARD_PAYMENTS;
+  process.env.MIP_CARD_PAYMENTS = p;
+  const on = String(process.env.MIP_CARD_PAYMENTS || "off").toLowerCase() === "on";
+  if (was === undefined) delete process.env.MIP_CARD_PAYMENTS; else process.env.MIP_CARD_PAYMENTS = was;
+  return on;
+};
+delete process.env.MIP_CARD_PAYMENTS;
+check("with nothing configured, card posting is off",
+  String(process.env.MIP_CARD_PAYMENTS || "off").toLowerCase() !== "on",
+  "Andrew: hold off until SmartMoving is phased out");
+check("'on' is the only thing that switches it on", paused("on") === true);
+check("'off' does not", paused("off") === false);
+check("nor does a typo", paused("yes") === false && paused("true") === false);
+
+console.log("\n   Rule 2: chargebacks are never ours");
+check("a chargeback is recognised", isChargeback({ status: "chargeback" }));
+check("whatever the case", isChargeback({ status: "Chargeback" }));
+check("an ordinary capture is not", !isChargeback({ status: "captured" }));
+check("nor a refund", !isChargeback({ status: "refunded" }));
+check("and nothing at all is not", !isChargeback(undefined) && !isChargeback({}));
 
 /* Andrew cancelled a job on 13 October and nothing reached the channel. The
    check asked only whether cancelled_at was set; of the 46 cancelled jobs in

@@ -66,6 +66,19 @@ export const usd = cents =>
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
+ * Money that can go backwards, written the way a person reads it.
+ *
+ * usd() alone would render a reversal as "$-150.00", with the sign hiding
+ * behind the dollar. Andrew, 16 October: "can you make these show negative."
+ * The minus belongs in front, where the eye lands on it first, because the
+ * whole point is that Jason read a refund as a booking.
+ */
+export const signedUsd = cents => {
+  const n = Number(cents ?? 0);
+  return (n < 0 ? "-" : "") + usd(Math.abs(n));
+};
+
+/**
  * 2026-10-26 → 10/26/2026, the way the channel already reads.
  *
  * Accepts a Date as well as a string. The caller is supposed to hand this
@@ -156,5 +169,51 @@ export function manualPaymentMessage(payment, { customerName, jobNumber } = {}) 
   }
   if (jobNumber) out.push(line("🏷️", "Job #", jobNumber));
   out.push(line("🧾", "Type", payment.kind), line("📅", "Date/Time", when(payment.created_at)));
+  return out.join("\n");
+}
+
+/**
+ * A card transaction, taken from MoveitPro rather than the processor's email.
+ *
+ * Andrew, 16 October: a refund reached the payments channel reading
+ * "Response: Approved, Total Amount: $150.00" and Jason asked whether the
+ * customer had moved their date. The processor's email carries nothing that
+ * distinguishes a refund from a sale, as Andrew confirmed himself, so no
+ * amount of parsing could have caught it.
+ *
+ * MoveitPro's ledger can: `kind` is one of sale, auth_only, capture, void or
+ * refund, and refunds are child rows pointing at the sale they reverse. Their
+ * spec says amounts arrive as positive magnitudes and "net-of-refund
+ * derivation is the consumer's concern", so applying the sign is our job.
+ *
+ * A reversal gets its own heading and its own colour of language. Nobody
+ * should have to read as far as the amount to know which way the money went.
+ */
+export function cardPaymentMessage(payment, { customerName, jobNumber, parent } = {}) {
+  const reversal = payment.kind === "refund" || payment.kind === "void";
+  const declined = payment.status === "failed";
+  const cents = Number(payment.amount_cents ?? 0) * (reversal ? -1 : 1);
+
+  const heading = reversal
+    ? (payment.kind === "refund" ? "↩️ **Refund Issued**" : "🚫 **Payment Voided**")
+    : "💳 **Card Payment**";
+
+  const out = [heading, "", line("👤", "Customer", customerName),
+               line("💲", "Amount", signedUsd(cents))];
+
+  if (Number(payment.tip_cents ?? 0) > 0 && !reversal) {
+    const net = Number(payment.amount_cents ?? 0) - Number(payment.tip_cents ?? 0);
+    out.push(line("🙏", "Tip", `${usd(payment.tip_cents)} (of which ${usd(net)} is the job)`));
+  }
+  if (jobNumber) out.push(line("🏷️", "Job #", jobNumber));
+
+  /* What is being reversed, when we could find it. A refund on its own tells
+     you money went out; naming the sale tells you which one. */
+  if (reversal && parent) {
+    out.push(line("🔗", "Reverses", `${usd(parent.amount_cents)} taken ${day(parent.created_at)}`));
+  }
+
+  out.push(line(declined ? "❌" : "✅", "Status", declined ? "Declined" : "Approved"));
+  out.push(line("📅", "Date/Time", when(payment.created_at)));
   return out.join("\n");
 }
