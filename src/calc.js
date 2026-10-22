@@ -14,7 +14,7 @@
  *            rises to absorb the gap, so the pool always pays out in full.
  */
 
-import { query } from "./db.js";
+import { query, pointNote } from "./db.js";
 
 export const RULES = {
   commissionRate: 0.02,      // 2% of completed revenue
@@ -470,7 +470,7 @@ export async function forEmployee(year, month, employeeId) {
   const period = periodOf(year, month);
 
   const ledger = await query(
-    `select occurred_on, delta, reason, job_number
+    `select occurred_on, delta, reason, job_number, ${await pointNote()} as note
        from point_events
       where employee_id = $1 and date_trunc('month', occurred_on) = $2::date
       order by occurred_on, id`, [employeeId, period]);

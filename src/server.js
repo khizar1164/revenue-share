@@ -17,8 +17,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
-import { query, loadEnv, safeTarget } from "./db.js";
-import { matchableRoster } from "./roster.js";
+import { query, loadEnv, safeTarget, hasColumn, pointNote } from "./db.js";
+import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
 import {
@@ -400,6 +400,47 @@ app.get("/api/admin/roster", wrap(async (_req, res) => {
   res.json(r.rows);
 }));
 
+/* Two accounts, one person.
+ *
+ * Andrew, 21 October: "Landon has two accounts in revenue dashboard." Nothing
+ * here changes anything — it says who looks like a duplicate and what each row
+ * is holding, so whoever merges them can see which account the crew actually
+ * know and what will move. The merge itself is the route below.
+ *
+ * Counted rather than summarised: a row with the points on it and a row with
+ * the hours on it is the exact shape of this fault, and seeing that is what
+ * tells you it is one person rather than two.
+ */
+app.get("/api/admin/duplicates", wrap(async (_req, res) => {
+  const merged = await hasColumn("employees", "merged_into")
+    ? "e.merged_into" : "null::uuid as merged_into";
+  const r = await query(
+    `select e.id, e.code_name, e.full_name, e.email, e.sm_crew_id, e.status,
+            e.is_mover, ${merged},
+            to_char(e.created_at, 'YYYY-MM-DD') as created_on,
+            (select count(*) from point_events pe where pe.employee_id = e.id)::int as points,
+            (select count(*) from review_credits rc where rc.employee_id = e.id)::int as reviews,
+            (select count(*) from adjustments a where a.employee_id = e.id)::int as adjustments,
+            (select coalesce(sum(h.hours), 0) from hours h where h.employee_id = e.id)::float8 as hours,
+            (select count(*) from sign_ins si where si.employee_id = e.id)::int as sign_ins,
+            (select count(*) from sm_job_crew jc
+              where e.sm_crew_id is not null and jc.sm_crew_id = e.sm_crew_id)::int as jobs
+       from employees e
+      order by e.code_name`);
+
+  /* Which one to keep, suggested and nothing more. The account with the most
+     recorded against it is the one whose code name is on the wall and in
+     everybody's head; a tie goes to whichever existed first. */
+  const weight = p => p.points + p.reviews + p.adjustments + p.sign_ins + p.jobs +
+    (p.hours > 0 ? 1 : 0);
+  const groups = likelyDuplicates(r.rows).map(g => ({
+    ...g,
+    suggest_keep: [...g.people].sort((a, b) =>
+      weight(b) - weight(a) || String(a.created_on).localeCompare(String(b.created_on)))[0].id
+  }));
+  res.json(groups);
+}));
+
 /* job number -> the crew who worked it. This is the lookup that makes logging
    a review two fields and a tap. */
 app.get("/api/admin/job/:jobNumber", wrap(async (req, res) => {
@@ -555,6 +596,7 @@ app.get("/api/admin/claims", wrap(async (req, res) => {
 
 /* ids are bigserial; anything else is refused before it reaches the query */
 const rowId = v => /^\d{1,18}$/.test(String(v)) ? String(v) : null;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.delete("/api/admin/claims/:id", wrap(async (req, res) => {
   const id = rowId(req.params.id);
@@ -611,11 +653,16 @@ app.put("/api/admin/hours/bulk", wrap(async (req, res) => {
   }
 
   /* Include anyone who left during the month being imported, or their last
-     weeks of hours would come back unmatched and could never be entered. */
+     weeks of hours would come back unmatched and could never be entered.
+     is_mover keeps two kinds of row out: the office, who are not on the share,
+     and an account merged into another one — which still carries the name
+     Matthew's export spells, and would otherwise go on absorbing hours that
+     belong to the account it was merged into. */
   const roster = (await query(
     `select id, full_name, code_name from employees
-      where status <> 'left'
-         or (ended_on >= $1::date and ended_on < $1::date + interval '1 month')`,
+      where is_mover
+        and (status <> 'left'
+             or (ended_on >= $1::date and ended_on < $1::date + interval '1 month'))`,
     [period])).rows;
 
   /* Connecteam spells names its own way, so match generously: exact, then
@@ -701,15 +748,49 @@ app.patch("/api/admin/employee/:id", wrap(async (req, res) => {
   res.json(r.rows[0]);
 }));
 
+/* Fold one account into the other.
+ *
+ * The id in the path is the one being merged away; `into` is the one kept. All
+ * of it happens in one transaction, and the reply says exactly what moved —
+ * this is a change to somebody's pay, so it should be readable rather than
+ * trusted.
+ */
+app.post("/api/admin/employee/:id/merge", wrap(async (req, res) => {
+  const into = String(req.body?.into ?? "");
+  if (!UUID.test(req.params.id) || !UUID.test(into)) {
+    return res.status(400).json({ error: "both accounts have to be named" });
+  }
+  try {
+    res.json(await mergeEmployees(req.params.id, into));
+  } catch (e) {
+    if (e.code === "42703" || /merged_into/.test(e.message)) {
+      return res.status(503).json({ error: "the database has not had db/014 applied yet — " +
+        "run npm run migrate, then try again" });
+    }
+    /* mergeEmployees marks the refusals that are somebody's mistake rather
+       than a fault, and those are the only ones repeated back. */
+    if (e.refused) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+}));
+
 app.post("/api/admin/points", wrap(async (req, res) => {
   const { employee_id, occurred_on, delta, reason, job_number } = req.body ?? {};
   if (!Number.isInteger(delta) || delta === 0) return res.status(400).json({ error: "delta must be a non-zero whole number" });
+
+  /* Andrew, 21 October: a note so the person knows what the deduction was for.
+     Optional, and trimmed to something that fits the line it is shown on. */
+  const note = String(req.body?.note ?? "").trim().slice(0, 300) || null;
+  const noteable = note !== null && await hasColumn("point_events", "note");
+
   const r = await query(
-    `insert into point_events (employee_id, occurred_on, delta, reason, job_number, recorded_by)
-     values ($1,$2,$3,$4,$5,$6) returning id`,
+    `insert into point_events (employee_id, occurred_on, delta, reason, job_number, recorded_by
+                              ${noteable ? ", note" : ""})
+     values ($1,$2,$3,$4,$5,$6${noteable ? ",$7" : ""}) returning id`,
     [employee_id, occurred_on || new Date(), delta, reason || "Adjustment",
-     job_number || null, req.body.recorded_by || "admin"]);
-  res.status(201).json(r.rows[0]);
+     job_number || null, req.body.recorded_by || "admin",
+     ...(noteable ? [note] : [])]);
+  res.status(201).json({ ...r.rows[0], note: noteable ? note : null });
 }));
 
 /* The month's point log, so a mistaken entry can be found and taken back out. */
@@ -718,6 +799,7 @@ app.get("/api/admin/points", wrap(async (req, res) => {
   const period = `${year}-${String(month).padStart(2, "0")}-01`;
   const r = await query(
     `select pe.id, to_char(pe.occurred_on, 'YYYY-MM-DD') as occurred_on, pe.delta, pe.reason, pe.job_number, pe.recorded_by,
+            ${await pointNote("pe.")} as note,
             e.id as employee_id, e.code_name, e.full_name
        from point_events pe join employees e on e.id = pe.employee_id
       where date_trunc('month', pe.occurred_on) = $1::date

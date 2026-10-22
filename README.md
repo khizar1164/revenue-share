@@ -25,6 +25,7 @@ Monthly revenue × 2%, less claims, is the pool. It splits **50% on performance 
 | Crew per job, job dates, same-day bonuses | SmartMoving API | every 4 hours |
 | Hours | Connecteam → the `Hours` tabs in the Movers Dashboard sheet | every 10 minutes |
 | Reviews, claims, points, bonuses, deductions | typed into `/admin` | instantly |
+| The note on a point entry, where one is typed | typed into `/admin` | instantly |
 | Day-end summary and a backup of everything typed | written out to the sheet | nightly |
 | Who has crossed 15, 30 or 45 lost points in 60 days | the points themselves | every 30 minutes |
 
@@ -53,8 +54,8 @@ npm run test:live   # admin and report flows against the real database
 ```
 
 `npm test` is the one to run constantly. It covers the calculation, the tardy
-rules, the review rules and the scheduler, and it passes with the database
-switched off entirely — so a red is always a real red.
+rules, the review rules, the scheduler and who is one person twice, and it
+passes with the database switched off entirely — so a red is always a real red.
 
 `npm run test:db` boots a server and talks to whatever `DATABASE_URL` points
 at, which today is production. `log-check` writes there: it creates a point
@@ -93,7 +94,17 @@ Andrew has not approved sign-in emails to the crew yet.
 
 **`point_events` is a dated log, never a running total.** That is what makes the
 rolling 60-day discipline window, the "why is my number what it is" ledger, and
-any dispute about a deduction answerable.
+any dispute about a deduction answerable. The `reason` on an entry is picked off
+Andrew's list and is the only part anything reads — the write-up's impact
+paragraph and policy reference are keyed off that text. The optional `note`
+beside it is the manager's own words about what happened, shown to the person
+and printed on a write-up, and matched on by nothing.
+
+**Migrations are run by hand and the service deploys on a push**, so the code is
+sometimes ahead of the schema. Anything reading a newly added column asks
+`hasColumn` first (`src/db.js`) rather than letting Postgres reject the whole
+statement — a missing column should cost an optional field, not somebody's
+report.
 
 **The roster follows the jobs.** Working a job is what makes someone a mover, so
 new starters enrol themselves. Office and management are marked `is_mover =
@@ -104,6 +115,18 @@ straight back.
 spell people differently — Josh Trim is "Joshua Trim" in one and "Josh T" in
 another. The matcher is generous but refuses when two people fit, because a
 wrong match pays the wrong man and nobody notices.
+
+**There are two doors onto the roster, and they used to make two of somebody.**
+Connecteam adds a new starter the day they are set up; SmartMoving adds whoever
+works a job. The SmartMoving side keyed on `sm_crew_id` alone, so somebody
+brought across from Connecteam — who has no crew id — was enrolled a second
+time by their first job, and the month then split across the two accounts.
+Points on one, hours on the other, and neither reaching the hours gate. The
+crew id is now attached to the account already there, on an exact name and
+nothing looser: a near miss is reported for somebody to look at instead, since
+welding two people into one account is worse than a duplicate. **Two accounts,
+one person** in `/admin` finds the pairs that exist and merges them, and
+because no month is stored, merging rights the months already gone.
 
 **The TV's allow-list is in `views.js`.** It names every field it emits, so
 adding a column to the calculation can never silently put it on the wall.

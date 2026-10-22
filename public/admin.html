@@ -264,6 +264,16 @@
         </div>
         <button id="ptSave">Add</button>
       </div>
+      <!-- Andrew, 21 October: "can you make it so that I can enter a note for
+           when someone gets a policy deduction so they know what it's for?"
+           The reason above stays his list, word for word, because the break
+           room sheet and this have to agree. The note is the detail. -->
+      <div class="frow">
+        <div><label for="ptNote">Note &mdash; optional</label>
+          <input type="text" id="ptNote" maxlength="300" placeholder="Pads left out overnight after the Hobart job"></div>
+      </div>
+      <p class="hint">The person sees the note on their own page, under the entry, and it is
+         printed on a write-up beside the reason. Nothing is worked out from it.</p>
       <div class="tblwrap scrolly" style="margin-top:16px"><table id="ptTbl"></table></div>
     </div>
 
@@ -368,6 +378,19 @@ Tyler Johnston  44.25"></textarea>
       <div class="tblwrap"><table id="jobsTbl"></table></div>
     </div>
   </div>
+</div>
+
+<!-- Andrew, 21 October: "Landon has two accounts in revenue dashboard."
+     Hidden unless there is something in it. -->
+<div class="panel" id="dupPanel" style="margin-top:16px" hidden>
+  <h2>Two accounts, one person</h2>
+  <p class="dek">Somebody set up in Connecteam and then working their first job used to arrive
+     twice, once through each door. The month then splits across the two &mdash; points on one,
+     hours on the other, and neither reaching the <span class="minH">100</span>-hour minimum.
+     Tick the account to keep and merge: points, reviews, hours, bonuses, deductions and
+     sign-ins all move to it, and <b>every month recalculates</b>, including ones already paid.
+     The spare row is kept, off the roster, as the record of the merge.</p>
+  <div id="dupList"></div>
 </div>
 
 <div class="panel" style="margin-top:16px">
@@ -560,7 +583,9 @@ Tyler Johnston  44.25"></textarea>
     STATE.points.forEach(function(p){
       var d = Number(p.delta);
       h += '<tr><td>'+shortDate(p.occurred_on)+'</td><td>'+esc(p.full_name)+'</td>'
-        + '<td style="font-size:13px">'+esc(p.reason)+'</td>'
+        + '<td style="font-size:13px">'+esc(p.reason)
+        +   (p.note ? '<div style="color:var(--ink-3);font-size:12px;margin-top:1px">'+esc(p.note)+'</div>' : '')
+        + '</td>'
         + '<td class="n" style="color:'+(d<0?"var(--crit)":"var(--good)")+'"><b>'+(d>0?"+":"−")+Math.abs(d)+'</b></td>'
         + '<td class="n">'+(p.recorded_by === "system"
             ? '<span class="auto" title="Added from the SmartMoving schedule">Automatic</span>'
@@ -749,7 +774,7 @@ Tyler Johnston  44.25"></textarea>
         renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
       }
       renderReviews(); renderCrewChips(); renderJobs(r[4]); renderRevenue(r[5]);
-      loadSignIns();
+      loadSignIns(); loadDuplicates();
     }).catch(function(e){ toast(e.message, true); });
   }
 
@@ -886,6 +911,116 @@ Tyler Johnston  44.25"></textarea>
           : '<tr><td colspan="3" style="color:var(--ink-3)">No sign-ins recorded yet.</td></tr>')
       + "</tbody>";
   }
+
+  /* ------------------------------------------------- two of somebody --- */
+
+  /* Andrew, 21 October: "Landon has two accounts in revenue dashboard."
+     Nothing merges on its own. The page shows what each account is holding,
+     because a row with the points on it beside a row with the hours on it is
+     what tells you it is one person; and the one with the most against it is
+     ticked to start with, because that is the code name on the wall. */
+  var DUPS = [];
+
+  function renderDuplicates(){
+    $("dupPanel").hidden = DUPS.length === 0;
+    if (!DUPS.length) { $("dupList").innerHTML = ""; return; }
+
+    $("dupList").innerHTML = DUPS.map(function(g, gi){
+      var head = '<p style="margin:0 0 6px"><b>' + esc(g.people[0].full_name) + '</b>'
+        + ' <span style="color:var(--ink-3);font-size:13px">· ' + esc(g.why) + '</span>'
+        + (g.certain ? '' : ' <span class="chip" style="color:var(--warn);border-color:var(--warn)">check this</span>')
+        + '</p>';
+
+      var warn = g.certain ? ''
+        : '<p class="hint" style="margin:0 0 6px">Part of this is held together by nothing more than'
+          + ' a first name and a last initial, which is also how two different people look alike'
+          + ' &mdash; Jason Powell and Jason Plummer both read as "Jason P". Be sure this is one'
+          + ' person before merging.</p>';
+
+      var h = '<thead><tr><th style="width:62px">Keep</th><th>Code</th><th>Name</th><th>Email</th>'
+        + '<th>Added</th><th class="n">Pts</th><th class="n">Rev</th><th class="n">Hrs</th>'
+        + '<th class="n">Sign-ins</th><th class="n">Jobs</th></tr></thead><tbody>';
+
+      g.people.forEach(function(p){
+        h += '<tr><td><input type="radio" name="dupkeep' + gi + '" value="' + esc(p.id) + '"'
+          +   (p.id === g.suggest_keep ? ' checked' : '') + '></td>'
+          + '<td class="code">' + esc(p.code_name) + '</td>'
+          + '<td>' + esc(p.full_name)
+          +   (p.status === "active" ? '' : ' <span style="font-size:11px;color:var(--ink-3)">· left</span>')
+          +   (p.is_mover ? '' : ' <span style="font-size:11px;color:var(--ink-3)">· not a mover</span>')
+          + '</td>'
+          + '<td style="font-size:12px">' + esc(p.email || "—") + '</td>'
+          + '<td style="font-size:12px">' + esc(p.created_on || "—") + '</td>'
+          + '<td class="n">' + p.points + '</td><td class="n">' + p.reviews + '</td>'
+          + '<td class="n">' + (p.hours ? p.hours : "—") + '</td>'
+          + '<td class="n">' + p.sign_ins + '</td>'
+          + '<td class="n">' + (p.sm_crew_id ? p.jobs : '<span style="color:var(--ink-3)">—</span>') + '</td>'
+          + '</tr>';
+      });
+
+      return '<div style="border-top:1px solid var(--seam);padding:14px 0 4px">' + head + warn
+        + '<div class="tblwrap"><table>' + h + '</tbody></table></div>'
+        + '<div class="frow" style="margin-top:10px"><button class="go" data-merge="' + gi + '">'
+        + 'Merge into the one ticked</button></div></div>';
+    }).join("");
+  }
+
+  function loadDuplicates(){
+    return api("/api/admin/duplicates").then(function(d){
+      DUPS = d || []; renderDuplicates();
+    }).catch(function(){ /* the panel is a help, not the page */ });
+  }
+
+  $("dupList").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-merge]"); if (!b) return;
+    var g = DUPS[Number(b.getAttribute("data-merge"))];
+    if (!g) return;
+
+    var picked = document.querySelector('input[name="dupkeep' + b.getAttribute("data-merge") + '"]:checked');
+    if (!picked) { toast("Tick the account to keep first.", true); return; }
+    var keep = g.people.filter(function(p){ return p.id === picked.value; })[0];
+    var gone = g.people.filter(function(p){ return p.id !== picked.value; });
+
+    if (!confirm("Merge " + gone.map(function(p){ return p.code_name; }).join(" and ")
+        + " into " + keep.code_name + " (" + keep.full_name + ")?\n\n"
+        + "Everything recorded against "
+        + (gone.length > 1 ? "them" : gone[0].code_name) + " moves across, hours for the same "
+        + "month are added together, and every month is worked out again — including months "
+        + "already paid.\n\nThe spare "
+        + (gone.length > 1 ? "rows stay" : "row stays") + " off the roster as the record of this.")) return;
+
+    b.disabled = true; b.textContent = "Merging…";
+    /* One at a time. Each merge reads both rows and writes them, and the second
+       one has to see what the first did. */
+    gone.reduce(function(chain, p){
+      return chain.then(function(out){
+        return api("/api/admin/employee/" + encodeURIComponent(p.id) + "/merge", {
+          method: "POST", body: JSON.stringify({ into: keep.id })
+        }).then(function(r){ return out.concat([r]); });
+      });
+    }, Promise.resolve([])).then(function(results){
+      var moved = 0, notes = [];
+      results.forEach(function(r){
+        Object.keys(r.moved || {}).forEach(function(k){ moved += Number(r.moved[k]) || 0; });
+        if (r.email_taken) notes.push(r.email_taken + " is now on " + r.kept.code_name);
+        if (r.email_dropped) notes.push("the address " + r.email_dropped + " was removed — "
+          + "put it on " + r.kept.code_name + " if that is the one they use");
+        /* Both rows carrying a SmartMoving crew id means two identities over
+           there, and only one can sit on the account kept. Jobs recorded under
+           the other one still will not credit anybody, so say so rather than
+           letting it look finished. */
+        if (r.crew_id_kept) notes.push(r.merged.code_name + " had a SmartMoving crew id of its "
+          + "own and keeps it, so jobs recorded under that id do not count towards "
+          + r.kept.code_name);
+      });
+      toast("Merged into " + keep.code_name + ". " + moved + " record(s) moved."
+        + (notes.length ? " " + notes.join("; ") + "." : ""));
+      return Promise.all([loadDuplicates(), load()]);
+    }).catch(function(e){
+      b.disabled = false; b.textContent = "Merge into the one ticked";
+      toast(e.message, true);
+    });
+  });
 
   function loadSignIns(){
     return api("/api/admin/sign-ins")
@@ -1131,11 +1266,22 @@ Tyler Johnston  44.25"></textarea>
     /* strips the score off the label — "(+1)" as well as "(−2)", or the
        reason saved on the entry reads "Came in same day (+1)" */
     var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\([+−-]?\d+\)$/, "");
+    var note = $("ptNote").value.trim();
     api("/api/admin/points", { method:"POST", body: JSON.stringify({
       employee_id: $("ptWho").value, occurred_on: $("ptDate").value,
-      delta: Number(sel.value), reason: text
-    })}).then(function(){ toast("Point event recorded."); load(); })
-      .catch(function(e){ toast(e.message, true); });
+      delta: Number(sel.value), reason: text, note: note
+    })}).then(function(r){
+      /* The reply says what was actually stored. The note column arrives with
+         db/015, and the service is deployed on a push while the migrations are
+         run by hand — so between the two, a note typed here would otherwise
+         disappear without a word. */
+      if (note && r && !r.note) {
+        toast("Point recorded, but the note was not saved — the database needs db/015 applying.", true);
+      } else {
+        toast("Point event recorded.");
+      }
+      $("ptNote").value=""; load();
+    }).catch(function(e){ toast(e.message, true); });
   });
 
   /* taking an entry back out — asked once, because it cannot be undone */

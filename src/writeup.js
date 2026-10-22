@@ -25,7 +25,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { query } from "./db.js";
+import { query, pointNote } from "./db.js";
 import { RULES } from "./calc.js";
 import { fill, valueFor, fieldValues } from "../hr/render-notice.mjs";
 import { makeFillable } from "../hr/make-fillable.mjs";
@@ -46,7 +46,8 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
   /* Every deduction in the window, oldest first, which is how the table on
      page 1 reads: a sequence rather than a league table. */
   const incidents = (await query(
-    `select to_char(occurred_on, 'YYYY-MM-DD') as date, delta, reason
+    `select to_char(occurred_on, 'YYYY-MM-DD') as date, delta, reason,
+            ${await pointNote()} as note
        from point_events
       where employee_id = $1
         and delta < 0

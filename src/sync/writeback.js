@@ -15,7 +15,7 @@
  * Share Calculations.
  */
 
-import { query } from "../db.js";
+import { query, pointNote } from "../db.js";
 import { monthly } from "../calc.js";
 import { summaryRequests, backupRequests, hoursRequests } from "./sheet-format.js";
 
@@ -121,7 +121,8 @@ export async function buildBackup() {
 
   const points = await query(`
     select 'point' as type, pe.occurred_on::text as date, e.code_name, e.full_name,
-           pe.reason || coalesce(' · job ' || pe.job_number, '') as detail,
+           pe.reason || coalesce(' · job ' || pe.job_number, '')
+                     || coalesce(' — ' || ${await pointNote("pe.")}, '') as detail,
            pe.delta::text as amount, coalesce(pe.recorded_by,'') as by, pe.created_at
       from point_events pe join employees e on e.id = pe.employee_id`);
 
