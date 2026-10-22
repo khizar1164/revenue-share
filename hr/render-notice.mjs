@@ -274,8 +274,13 @@ const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
  * in two, which is how an eight-incident notice ran longer than Jayson's.
  */
 function incidentTable(incidents, lostSigned) {
+  /* The note a manager typed when the points were entered, under the reason it
+     belongs to. Andrew, 21 October: so the person knows what it was for. The
+     reason above it is still the only thing anything reads — the impact
+     paragraph and the policy reference are keyed off that text, never this. */
   const row = i =>
-    `<tr><td>${day(i.date)}</td><td>${esc(i.reason)}</td>` +
+    `<tr><td>${day(i.date)}</td><td>${esc(i.reason)}` +
+    (i.note ? `<span class="inote">${esc(i.note)}</span>` : "") + `</td>` +
     `<td class="n pts">${i.delta > 0 ? "+" : "−"}${Math.abs(i.delta)}</td></tr>`;
   const head = '<thead><tr><th style="width:110px">Date</th><th>What happened</th>' +
                '<th class="n" style="width:46px">Pts</th></tr></thead>';
@@ -311,10 +316,6 @@ export function fill(data, opts = {}) {
      field values instead. Printing them as well would show every line twice. */
   const editable = opts.fillable === true;
   const [vName, vText] = VALUES[data.value] ?? VALUES.accountability;
-
-  const rows = data.incidents.map(i =>
-    `<tr><td>${day(i.date)}</td><td>${esc(i.reason)}</td>` +
-    `<td class="n pts">${i.delta > 0 ? "+" : "−"}${Math.abs(i.delta)}</td></tr>`).join("\n      ");
 
   const lost = data.incidents.filter(i => i.delta < 0).reduce((a, i) => a + i.delta, 0);
 

@@ -164,7 +164,7 @@
 
   <section class="card">
     <h2>Your points this month</h2>
-    <p class="dek">Everyone starts at 15. A second job in a day earns <b>+1</b> and is added automatically from the schedule &mdash; you don't have to log it.</p>
+    <p class="dek">Everyone starts at 15. A second job in a day earns <b>+1</b> and is added automatically from the schedule &mdash; you don't have to log it. Where a manager has left a note on an entry, you'll see it under the entry.</p>
     <table id="ledger"></table>
   </section>
 
@@ -300,6 +300,9 @@
       run += e.delta;
       h += '<tr><td>'+day(e.occurred_on)+'</td><td>'+esc(e.reason)
         + (e.job_number ? ' <span style="color:var(--ink-3)">· job '+esc(e.job_number)+'</span>' : '')
+        /* The note a manager typed when they entered it. Andrew, 21 October:
+           so the person knows what the deduction was for. */
+        + (e.note ? '<div style="color:var(--ink-3);font-size:13px;margin-top:2px">'+esc(e.note)+'</div>' : '')
         + '</td><td class="n"><span class="pill '+(e.delta>0?"plus":"minus")+'">'
         + (e.delta>0?"+":"−")+Math.abs(e.delta)+'</span></td>'
         + '<td class="n"><b>'+run+'</b></td></tr>';

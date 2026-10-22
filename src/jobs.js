@@ -32,6 +32,7 @@ import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { syncCrew } from "./sync/crew.js";
+import { placeCrewMembers } from "./roster.js";
 import { query, withTransaction } from "./db.js";
 
 /* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
@@ -90,16 +91,25 @@ export async function syncSmartMoving({ year, month } = {}) {
   });
 
   /* Working a job is what makes someone a mover, so the roster follows the
-     jobs. Office and sales never appear because they never work one. */
+     jobs. Office and sales never appear because they never work one.
+     Somebody set up in Connecteam first is already here without a crew id, and
+     this is where that id is attached to them rather than to a second account
+     in their name — see placeCrewMembers and Andrew's two Landons. */
   const worked = new Set();
   for (const ids of index.crewByJob.values()) for (const id of ids) worked.add(id);
 
-  const known = new Set((await query(
-    `select sm_crew_id from employees where sm_crew_id is not null`)).rows.map(r => r.sm_crew_id));
+  const placed = await placeCrewMembers(index.crew.filter(m => worked.has(m.id)));
+
+  const recognised = [];
+  for (const { member, employee } of placed.adopt) {
+    const r = await query(
+      `update employees set sm_crew_id = $1, updated_at = now()
+        where id = $2 and sm_crew_id is null returning code_name`, [member.id, employee.id]);
+    if (r.rowCount) recognised.push(`${member.name} is ${r.rows[0].code_name}`);
+  }
 
   const added = [];
-  for (const member of index.crew) {
-    if (known.has(member.id) || !worked.has(member.id)) continue;
+  for (const member of placed.add) {
     const taken = new Set((await query(`select code_name from employees`)).rows.map(r => r.code_name));
     const code = NAME_POOL.find(n => !taken.has(n)) ?? `CREW${taken.size + 1}`;
     await query(
@@ -117,6 +127,8 @@ export async function syncSmartMoving({ year, month } = {}) {
     jobs: index.jobs.length,
     crew: index.crew.length,
     enrolled: added,
+    recognised,
+    check_these: placed.maybe,
     day_off_rows_removed: sd.removed,
     day_off_points_removed: sd.points,
     api_calls: client.callCount

@@ -9,6 +9,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { createClient, monthBounds, buildJobCrewIndex } from "../src/sync/smartmoving.js";
 import { syncSameDayPoints } from "../src/sync/points.js";
+import { placeCrewMembers } from "../src/roster.js";
 import { query, withTransaction, close, loadEnv } from "../src/db.js";
 
 loadEnv();
@@ -70,17 +71,27 @@ try {
   for (const ids of index.crewByJob.values()) {
     for (const id of ids) jobsPerCrew.set(id, (jobsPerCrew.get(id) || 0) + 1);
   }
-  const known = new Set(
-    (await query(`select sm_crew_id from employees where sm_crew_id is not null`))
-      .rows.map(r => r.sm_crew_id));
 
   const NAME_POOL = ["RANGER","JAGUAR","LYNX","BEAR","BISON","RHINO","WOLF","OTTER",
     "TITAN","FALCON","HAWK","BADGER","MOOSE","COBRA","EAGLE","VIPER","RAVEN","STAG",
     "PUMA","OSPREY","HERON","MARLIN","KODIAK","SABLE","HERON","ORYX"];
 
+  /* Somebody already on the roster from Connecteam has no crew id yet, and
+     their first job must attach it to them rather than open a second account
+     in their name. Same decision as the scheduled sync makes. */
+  const placed = await placeCrewMembers(index.crew.filter(m => jobsPerCrew.has(m.id)));
+
+  const recognised = [];
+  for (const { member, employee } of placed.adopt) {
+    const r = await query(
+      `update employees set sm_crew_id = $1, updated_at = now()
+        where id = $2 and sm_crew_id is null returning code_name`, [member.id, employee.id]);
+    if (r.rowCount) recognised.push(`${member.name} is ${r.rows[0].code_name}`);
+  }
+  if (recognised.length) console.log("  already here: " + recognised.join(", "));
+
   const added = [];
-  for (const member of index.crew) {
-    if (known.has(member.id) || !jobsPerCrew.has(member.id)) continue;
+  for (const member of placed.add) {
     const taken = new Set((await query(`select code_name from employees`)).rows.map(r => r.code_name));
     const code = NAME_POOL.find(n => !taken.has(n)) ?? `CREW${taken.size + 1}`;
     await query(
@@ -90,6 +101,7 @@ try {
     added.push(`${member.name} as ${code}`);
   }
   if (added.length) console.log("  enrolled: " + added.join(", "));
+  for (const m of placed.maybe) console.log("  CHECK: " + m);
 
   const sd = await syncSameDayPoints(period);
   if (sd.removed) console.log(`  swept up ${sd.removed} leftover day-off point(s), worth ${sd.points}`);
