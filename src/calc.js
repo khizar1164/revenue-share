@@ -95,6 +95,24 @@ async function gather(period) {
       where e.is_mover
         and (e.status <> 'left'
              or (e.ended_on >= $1::date and e.ended_on < $1::date + interval '1 month'))
+        /* Andrew, 22 October: "anybody that is marked as Left, no notice and
+           has no hours does not show up on current or future months from the
+           date they were marked ... I dont want the list to keep growing too
+           long as staff come and go."
+
+           Hours are the test, not the date. Blade and Aaron were marked in
+           October having worked none of it, so October never shows them;
+           Mason was marked the same week but had hours, so he stays on October
+           and falls off November on his own. Nobody's pay moves: a share is
+           divided by denomB, which counts only the people being paid, and
+           somebody on no hours is in neither that nor the forfeit list unless
+           the gate is waived. If their hours turn up late the row returns by
+           itself, because this reads the hours rather than recording a
+           decision about the person. */
+        and not (e.status = 'no_notice'
+                 and e.ended_on is not null
+                 and e.ended_on < $1::date + interval '1 month'
+                 and coalesce(h.hours, 0) = 0)
       order by e.code_name`,
     [period, RULES.disciplineDays]);
 
