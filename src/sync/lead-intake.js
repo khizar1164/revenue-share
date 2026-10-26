@@ -155,8 +155,11 @@ export function parseMoveDate(value) {
   if (!s) return null;
 
   let y, m, d;
-  const iso = s.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})$/);
-  const us = s.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{2}|\d{4})$/);
+  /* One or more separators, not exactly one. The live zap sends "10/ 25/2026",
+     a slash and a space together, because the form answer carries the spacing
+     the customer typed. A single-character separator refused it. */
+  const iso = s.match(/^(\d{4})[-/.,\s]+(\d{1,2})[-/.,\s]+(\d{1,2})$/);
+  const us = s.match(/^(\d{1,2})[-/.,\s]+(\d{1,2})[-/.,\s]+(\d{2}|\d{4})$/);
   if (iso) { [, y, m, d] = iso; }
   else if (us) {
     [, m, d, y] = us;

@@ -126,6 +126,12 @@ check("the way the Meta form answers it, 8 31 26 style",
 check("slashes", parseMoveDate(`${mm}/${dd}/${yy}`) === isoSoon);
 check("dashes", parseMoveDate(`${mm}-${dd}-${soon.getUTCFullYear()}`) === isoSoon);
 check("ISO, which already worked", parseMoveDate(isoSoon) === isoSoon);
+/* Straight off a live zap run on 26 October, which the first version refused:
+   the separator is a slash and a space together, not one character. */
+check("the spacing the live zap actually sends, 10/ 25/2026",
+  parseMoveDate(`${mm}/ ${dd}/${soon.getUTCFullYear()}`) === isoSoon,
+  `${mm}/ ${dd}/${soon.getUTCFullYear()} → ${parseMoveDate(`${mm}/ ${dd}/${soon.getUTCFullYear()}`)}`);
+check("and spaces either side of a dash", parseMoveDate(`${mm} - ${dd} - ${yy}`) === isoSoon);
 check("a day that does not exist is refused", parseMoveDate("02 31 27") === null);
 check("free text is refused", parseMoveDate("next month sometime") === null);
 check("nothing is refused", parseMoveDate("") === null && parseMoveDate(null) === null);
