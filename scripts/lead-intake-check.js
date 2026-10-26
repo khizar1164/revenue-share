@@ -45,7 +45,11 @@ check("the email is found", live.body.email === "shouldbeblond10@gmail.com");
 check("the phone is found", live.body.phones?.[0]?.number === "7087046124");
 check("the name is split",
   live.body.first_name === "Lily" && live.body.last_name === "Reagen Martinez");
-check("and nothing is warned about", live.warnings.length === 0, live.warnings.join(", "));
+/* That run carried no date field at all, which is now said out loud: it is
+   the single most useful thing in the zap's run history, because a lead with
+   no move date never reaches a rep's follow-up list. */
+check("and the only thing warned about is the date it never had",
+  live.warnings.join(", ") === "no move date", live.warnings.join(", "));
 
 console.log("\n3. HOWEVER THE FIELDS ARE SPELLED NEXT TIME");
 for (const key of ["email", "Email", "EMAIL", "email_address", "Email Address", "emailAddress"]) {
@@ -78,11 +82,14 @@ check("a good one becomes a Mobile entry",
   toLead({ phone: "5742293269" }).body.phones?.[0]?.type === "Mobile");
 
 console.log("\n4. WHAT THE LEAD CARRIES");
+const soonest = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
 const { body, warnings } = toLead({
-  full_name: "Geneva Lanning", email: "g@example.com", phone: "574-229-3269"
+  full_name: "Geneva Lanning", email: "g@example.com", phone: "574-229-3269",
+  move_date: soonest
 });
 check("the source is stamped on it", body.referred_by === "z AD - Social Media");
 check("and nothing is warned about a complete lead", warnings.length === 0, warnings.join(", "));
+check("a complete lead carries its date", body.move_date === soonest, String(body.move_date));
 
 /* The zap is authenticated with our own key, so a source it states is
    configuration rather than user input. Silently ignoring it would make the
@@ -152,6 +159,67 @@ check("even when the zap sends the question text as the key",
 const unreadable = toLead({ FullName: "Odd Date", Email: "o@example.com", MoveDate: "whenever" });
 check("a date we cannot read is reported, not dropped in silence",
   unreadable.warnings.some(w => w.startsWith("move date not understood")));
+
+/* Everything below is the third round of this same bug. The date was still not
+   arriving in MoveitPro after the first two fixes, and the reason was not the
+   parser: the fallback that finds the field when the zap sends the question
+   text as the key kept only values it could already parse. An answer it could
+   not read was indistinguishable from no answer, so the lead went through with
+   no date AND no warning — the exact state these checks now forbid. */
+console.log("\n7. THE SHAPES THAT WERE STILL BEING LOST");
+const YEAR = soon.getUTCFullYear();
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const word = MONTH_NAMES[mm - 1];
+
+check("a timestamp, which is what Meta's own date question answers with",
+  parseMoveDate(`${isoSoon}T00:00:00`) === isoSoon, `${isoSoon}T00:00:00 → ${parseMoveDate(`${isoSoon}T00:00:00`)}`);
+check("the same with an offset on the end", parseMoveDate(`${isoSoon}T00:00:00+0000`) === isoSoon);
+check("and with a Z", parseMoveDate(`${isoSoon}T00:00:00.000Z`) === isoSoon);
+check("a date Zapier reformatted, 11/15/2026 12:00 AM style",
+  parseMoveDate(`${mm}/${dd}/${YEAR} 12:00 AM`) === isoSoon,
+  `${mm}/${dd}/${YEAR} 12:00 AM → ${parseMoveDate(`${mm}/${dd}/${YEAR} 12:00 AM`)}`);
+check("a month written in words", parseMoveDate(`${word} ${dd}, ${YEAR}`) === isoSoon,
+  `${word} ${dd}, ${YEAR} → ${parseMoveDate(`${word} ${dd}, ${YEAR}`)}`);
+check("the day first", parseMoveDate(`${dd} ${word} ${YEAR}`) === isoSoon);
+check("an ordinal on the day", parseMoveDate(`${word} ${dd}th ${YEAR}`) === isoSoon);
+check("no year at all means the next one of those days",
+  parseMoveDate(`${mm}/${dd}`) === isoSoon, `${mm}/${dd} → ${parseMoveDate(`${mm}/${dd}`)}`);
+check("but a word where the month goes is still refused",
+  parseMoveDate("whenever 15 2027") === null);
+
+const stamped = toLead({ FullName: "Timestamped", Email: "t@example.com", PhoneNumber: "2193183639",
+  "What date would you like to move? (mm/dd/yyyy)": `${isoSoon}T00:00:00` });
+check("a timestamp under the question text reaches the lead body",
+  stamped.body.move_date === isoSoon, String(stamped.body.move_date));
+
+const loose = toLead({ FullName: "Loose Wording", Email: "l@example.com", PhoneNumber: "2193183639",
+  "When would you like to move?": `${mm}/${dd}/${YEAR}` });
+check("so does an answer to a question that never says 'date'",
+  loose.body.move_date === isoSoon, String(loose.body.move_date));
+
+const odd = toLead({ FullName: "Odd Answer", Email: "q@example.com", PhoneNumber: "2193183639",
+  "When would you like to move?": "sometime in the spring" });
+check("and an answer we cannot read is reported there too",
+  odd.warnings.some(w => w.startsWith("move date not understood")), odd.warnings.join(", "));
+
+/* Meta stamps every lead with its own submission time and Zapier adds more.
+   They parse perfectly, so the field finder has to refuse them by name. */
+const today = new Date().toISOString().slice(0, 10);
+const stampedOnly = toLead({ "Created Date": today, created_time: `${today}T14:03:00+0000`,
+  FullName: "Blank Date", Email: "b@example.com", PhoneNumber: "2193183639",
+  "What date would you like to move": "" });
+check("the day the lead arrived never becomes the move date",
+  stampedOnly.body.move_date === undefined, String(stampedOnly.body.move_date));
+check("and the lead says it has no date",
+  stampedOnly.warnings.includes("no move date"), stampedOnly.warnings.join(", "));
+
+const addresses = toLead({ FullName: "Address Only", Email: "a@example.com", PhoneNumber: "2193183639",
+  "Where are you moving from": "123 Main St", "Where are you moving to": "456 Oak Ave" });
+check("and an address is never mistaken for one",
+  addresses.body.move_date === undefined &&
+  !addresses.warnings.some(w => w.startsWith("move date not understood")),
+  addresses.warnings.join(", "));
 
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);

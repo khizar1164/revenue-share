@@ -123,52 +123,62 @@ export function toLead(payload = {}) {
      like to move (mm dd yyyy)" and answers come back as "8 31 26". An ISO-only
      check threw every one of those away without a word, which is why social
      ads arrived with no date on them. */
-  const rawDate = clean(pick(idx, "move_date", "when_are_you_moving")) ?? dateLike(idx);
+  const rawDate = clean(pick(idx, "move_date", "moving_date", "date_of_move",
+                              "when_are_you_moving")) ?? moveDateField(idx);
   if (rawDate) {
     const parsed = parseMoveDate(rawDate);
     if (parsed) body.move_date = parsed;
     /* Say so rather than dropping it. A date we cannot read is a form question
        that changed shape, and that is worth seeing in the logs. */
     else warnings.push(`move date not understood: ${rawDate}`);
+  } else {
+    /* The lead still goes through, because a rep can ask. But a date that was
+       never there has to be as visible as a missing phone number: leads were
+       reaching MoveitPro undated for a fortnight and nothing anywhere said so. */
+    warnings.push("no move date");
   }
 
   return { body, warnings };
 }
 
-/** Any field whose name mentions a date, for when the zap is rebuilt and the
-    question text comes through as the key. First one that parses wins. */
-function dateLike(idx) {
-  for (const [k, v] of idx) {
-    if (!k.includes("date") || v == null || String(v).trim() === "") continue;
-    if (parseMoveDate(v)) return String(v).trim();
-  }
-  return null;
-}
+/* Dates the platform stamped rather than the customer answered. Meta puts
+   created_time on every lead and Zapier adds timestamps of its own, and all of
+   them parse perfectly well — a lead whose date answer came through blank
+   arrived carrying the day it was submitted, which sorts the job to the wrong
+   end of the board as surely as no date at all. */
+const platformDate = k =>
+  /creat|submit|receiv|updat|sent|timestamp|birth|expir/.test(k) || k === "dob";
 
 /**
- * "8 31 26", "08/31/2026", "8-31-2026" and "2026-08-31" all mean the same day.
- * Month first, because that is how the Meta form asks and how the US writes it.
- * Returns YYYY-MM-DD, or null when it is not a real calendar date.
+ * The field holding the move date, whatever the form called it.
+ *
+ * For when the zap is rebuilt and the question text arrives as the key, which
+ * is Zapier's own default. A candidate has to read like a date question at all
+ * — "where are you moving from" is an address — and one that mentions the move
+ * beats a bare Date column.
+ *
+ * Returns the raw answer whether or not it parses. The version that kept only
+ * values it could already parse is why Meta's own date question disappeared
+ * without a word: to the caller, unreadable looked exactly like absent.
  */
-export function parseMoveDate(value) {
-  const s = String(value ?? "").trim();
-  if (!s) return null;
+function moveDateField(idx) {
+  let best = null, bestRank = 9;
+  for (const [k, v] of idx) {
+    if (v == null || String(v).trim() === "" || platformDate(k)) continue;
+    if (!/date|when|day/.test(k)) continue;
+    const rank = /mov(e|ing)|relocat/.test(k) ? 0 : 1;
+    if (rank < bestRank) { best = String(v).trim(); bestRank = rank; }
+  }
+  return best;
+}
 
-  let y, m, d;
-  /* One or more separators, not exactly one. The live zap sends "10/ 25/2026",
-     a slash and a space together, because the form answer carries the spacing
-     the customer typed. A single-character separator refused it. */
-  const iso = s.match(/^(\d{4})[-/.,\s]+(\d{1,2})[-/.,\s]+(\d{1,2})$/);
-  const us = s.match(/^(\d{1,2})[-/.,\s]+(\d{1,2})[-/.,\s]+(\d{2}|\d{4})$/);
-  if (iso) { [, y, m, d] = iso; }
-  else if (us) {
-    [, m, d, y] = us;
-    /* Two digits means this century. Meta has never sent a four-digit year
-       from a two-digit question, but it costs nothing to accept both. */
-    if (y.length === 2) y = String(2000 + Number(y));
-  } else return null;
+const MONTHS = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+};
 
-  y = Number(y); m = Number(m); d = Number(d);
+/** A real calendar date, close enough to now to be a booking. YYYY-MM-DD. */
+function calendarDate(y, m, d) {
   const date = new Date(Date.UTC(y, m - 1, d));
   /* Catches 02 31 and friends: the Date rolls them forward, so a round trip
      that does not come back the same is not a real date. */
@@ -182,6 +192,62 @@ export function parseMoveDate(value) {
 
   const pad = n => String(n).padStart(2, "0");
   return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+/**
+ * "8 31 26", "08/31/2026", "8-31-2026", "2026-08-31", "2026-08-31T00:00:00",
+ * "Aug 31 2026" and "8/31" all mean the same day. Month first on the numeric
+ * forms, because that is how the Meta form asks and how the US writes it.
+ *
+ * Returns YYYY-MM-DD, or null when it is not a real calendar date.
+ */
+export function parseMoveDate(value) {
+  let s = String(value ?? "").trim().toLowerCase();
+  if (!s) return null;
+
+  /* The time comes off before anything else looks at the string. Meta's own
+     date question type answers with a full timestamp — "2026-11-15T00:00:00" —
+     and Zapier reformats dates as "11/15/2026 12:00 AM". Both are a day
+     somebody picked with midnight stapled on, and both were refused outright. */
+  s = s.replace(/[t\s]+\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*(am|pm)?\s*(z|[+-]\d{2}:?\d{2})?$/, "")
+       .replace(/[.,\s]+$/, "")
+       .trim();
+  if (!s) return null;
+
+  /* One or more separators, not exactly one. The live zap sends "10/ 25/2026",
+     a slash and a space together, because the form answer carries the spacing
+     the customer typed. A single-character separator refused it. */
+  const SEP = "[-/.,\\s]+", ORD = "(?:st|nd|rd|th)?";
+  const iso = s.match(new RegExp(`^(\\d{4})${SEP}(\\d{1,2})${SEP}(\\d{1,2})$`));
+  const us = s.match(new RegExp(`^(\\d{1,2})${SEP}(\\d{1,2})${SEP}(\\d{2}|\\d{4})$`));
+  /* A month in words, for the form answered by somebody who ignored the
+     (mm dd yyyy), and a bare month and day for the one answered "8/31". */
+  const named = s.match(new RegExp(`^([a-z]{3,9})\\.?${SEP}(\\d{1,2})${ORD}(?:${SEP}(\\d{2}|\\d{4}))?$`));
+  const dayFirst = s.match(new RegExp(`^(\\d{1,2})${ORD}${SEP}([a-z]{3,9})\\.?(?:${SEP}(\\d{2}|\\d{4}))?$`));
+  const noYear = s.match(new RegExp(`^(\\d{1,2})${SEP}(\\d{1,2})$`));
+
+  let y, m, d;
+  if (iso) [, y, m, d] = iso;
+  else if (us) [, m, d, y] = us;
+  else if (named) { [, , d, y] = named; m = MONTHS[named[1].slice(0, 3)]; }
+  else if (dayFirst) { [, d, , y] = dayFirst; m = MONTHS[dayFirst[2].slice(0, 3)]; }
+  else if (noYear) [, m, d] = noYear;
+  else return null;
+  if (!m) return null;  // a word where the month goes, and not a month
+
+  m = Number(m); d = Number(d);
+  /* Two digits means this century. Meta has never sent a four-digit year
+     from a two-digit question, but it costs nothing to accept both. */
+  if (y != null && String(y).length === 2) y = 2000 + Number(y);
+
+  /* No year at all: the next time that day comes round. Someone answering
+     "8/31" in October means next August, and the window in calendarDate is
+     what decides which of the two years it is. */
+  if (y == null) {
+    const thisYear = new Date().getUTCFullYear();
+    return calendarDate(thisYear, m, d) ?? calendarDate(thisYear + 1, m, d);
+  }
+  return calendarDate(Number(y), m, d);
 }
 
 /**
@@ -215,6 +281,10 @@ export async function createLead(payload, opts = {}) {
     id: r.data?.id ?? null,
     replayed: r.replayed,
     name: [body.first_name, body.last_name].filter(Boolean).join(" ") || "(no name)",
+    /* Reported back so the caller can log what was actually sent. Whether a
+       dateless lead in MoveitPro means we never read the date or they never
+       stored it is otherwise unanswerable from this side. */
+    moveDate: body.move_date ?? null,
     warnings
   };
 }

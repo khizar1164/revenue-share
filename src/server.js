@@ -212,9 +212,15 @@ app.post("/api/hooks/meta-lead", wrap(async (req, res) => {
 
   try {
     const r = await createLead(req.body ?? {});
+    /* The move date is logged and answered back deliberately. A lead sitting
+       in MoveitPro with no date could mean the mapping never read one or that
+       MoveitPro never stored it, and those have different fixes: this says
+       which, in the log and in the zap's own run history. */
     console.log(`meta lead: ${r.name} → ${r.id}` +
+      (r.moveDate ? ` moving ${r.moveDate}` : "") +
       (r.replayed ? " (replay)" : "") + (r.warnings.length ? ` [${r.warnings.join(", ")}]` : ""));
-    return res.json({ ok: true, lead_id: r.id, replayed: r.replayed, warnings: r.warnings });
+    return res.json({ ok: true, lead_id: r.id, move_date: r.moveDate,
+                      replayed: r.replayed, warnings: r.warnings });
   } catch (e) {
     console.error("meta lead failed:", e.message);
     /* Zapier retries on 5xx and gives up on 4xx, which is the right split:
