@@ -147,4 +147,4 @@ services:
       # every plausible name until their ticket says which one is read. Narrow
       # it to the winner here, without a deploy.
       - key: LEAD_MOVE_DATE_FIELDS
-        value: move_date,service_date,estimated_move_date,requested_move_date
+        value: preferred_move_date,move_date,service_date,estimated_move_date,requested_move_date

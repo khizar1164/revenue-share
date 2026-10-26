@@ -39,8 +39,10 @@ const clean = v => v == null ? null : String(v).trim();
  * and drops a field it does not recognise, so a wrong name and a success look
  * identical from here — which is why this went unnoticed through two fixes.
  *
- * Their own records call it service_date. That is the field the relay reads
- * back off every job and prints as "Move Date" in dispatch-updates, so it is
+ * Their own screen calls it Preferred Move Date, on the estimate, and the
+ * estimates list prints that column as MOVE DATE — beside EST. DATE, which is
+ * the day the estimate was written and is the one Andrew watched get set
+ * instead. Their job records call the same thing service_date. Those two are
  * the likeliest of these by some distance.
  *
  * A list, and in the environment rather than here, for the same reason
@@ -48,7 +50,7 @@ const clean = v => v == null ? null : String(v).trim();
  * of them are ignored, and whichever one lands can be narrowed to — or the
  * whole thing put back to move_date — without a deploy. */
 const moveDateFields = () => (process.env.LEAD_MOVE_DATE_FIELDS ||
-  "move_date,service_date,estimated_move_date,requested_move_date")
+  "preferred_move_date,move_date,service_date,estimated_move_date,requested_move_date")
   .split(",").map(f => f.trim()).filter(Boolean);
 
 /* Zapier sends whatever the person who built the step called the fields. The

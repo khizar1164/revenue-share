@@ -230,7 +230,8 @@ check("and an address is never mistaken for one",
 console.log("\n8. THE KEY MOVEITPRO ACTUALLY READS");
 const sent = toLead({ FullName: "Keyed Lead", Email: "k@example.com",
   PhoneNumber: "2193183639", MoveDate: `${mm} ${dd} ${yy}` });
-for (const field of ["move_date", "service_date", "estimated_move_date", "requested_move_date"]) {
+for (const field of ["preferred_move_date", "move_date", "service_date",
+                     "estimated_move_date", "requested_move_date"]) {
   check(`the date goes out as ${field}`, sent.body[field] === isoSoon, String(sent.body[field]));
 }
 check("and it is reported back whatever it went out as",
