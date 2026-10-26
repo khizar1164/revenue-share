@@ -117,10 +117,68 @@ export function toLead(payload = {}) {
     ...(process.env.MOVEITPRO_BRANCH_ID ? { branch_id: process.env.MOVEITPRO_BRANCH_ID } : {})
   };
 
-  const moveDate = clean(pick(idx, "move_date", "when_are_you_moving"));
-  if (moveDate && /^\d{4}-\d{2}-\d{2}$/.test(moveDate)) body.move_date = moveDate;
+  /* The move date decides whether the lead reaches a sales rep's follow-up
+     list at all, so it is worth more effort than the rest. Meta returns it
+     however the form asked for it: the live form asks "What date would you
+     like to move (mm dd yyyy)" and answers come back as "8 31 26". An ISO-only
+     check threw every one of those away without a word, which is why social
+     ads arrived with no date on them. */
+  const rawDate = clean(pick(idx, "move_date", "when_are_you_moving")) ?? dateLike(idx);
+  if (rawDate) {
+    const parsed = parseMoveDate(rawDate);
+    if (parsed) body.move_date = parsed;
+    /* Say so rather than dropping it. A date we cannot read is a form question
+       that changed shape, and that is worth seeing in the logs. */
+    else warnings.push(`move date not understood: ${rawDate}`);
+  }
 
   return { body, warnings };
+}
+
+/** Any field whose name mentions a date, for when the zap is rebuilt and the
+    question text comes through as the key. First one that parses wins. */
+function dateLike(idx) {
+  for (const [k, v] of idx) {
+    if (!k.includes("date") || v == null || String(v).trim() === "") continue;
+    if (parseMoveDate(v)) return String(v).trim();
+  }
+  return null;
+}
+
+/**
+ * "8 31 26", "08/31/2026", "8-31-2026" and "2026-08-31" all mean the same day.
+ * Month first, because that is how the Meta form asks and how the US writes it.
+ * Returns YYYY-MM-DD, or null when it is not a real calendar date.
+ */
+export function parseMoveDate(value) {
+  const s = String(value ?? "").trim();
+  if (!s) return null;
+
+  let y, m, d;
+  const iso = s.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})$/);
+  const us = s.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{2}|\d{4})$/);
+  if (iso) { [, y, m, d] = iso; }
+  else if (us) {
+    [, m, d, y] = us;
+    /* Two digits means this century. Meta has never sent a four-digit year
+       from a two-digit question, but it costs nothing to accept both. */
+    if (y.length === 2) y = String(2000 + Number(y));
+  } else return null;
+
+  y = Number(y); m = Number(m); d = Number(d);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  /* Catches 02 31 and friends: the Date rolls them forward, so a round trip
+     that does not come back the same is not a real date. */
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
+
+  /* A move date years in the past is a mistyped year, not a booking. Rejecting
+     it here keeps obvious rubbish off the estimate, where it would sort the
+     job to the wrong end of the board. */
+  const now = Date.now();
+  if (date.getTime() < now - 90 * 864e5 || date.getTime() > now + 1095 * 864e5) return null;
+
+  const pad = n => String(n).padStart(2, "0");
+  return `${y}-${pad(m)}-${pad(d)}`;
 }
 
 /**
