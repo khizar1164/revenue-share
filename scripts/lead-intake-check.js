@@ -9,7 +9,7 @@
  * that creates a second lead puts the same person in front of the sales team
  * twice.
  */
-import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk } from "../src/sync/lead-intake.js";
+import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk, parseMoveDate } from "../src/sync/lead-intake.js";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -111,6 +111,41 @@ check("Meta's own id is used when the zap passes one",
 check("and two different Meta ids never collide",
   idempotencyKeyFor({ leadgen_id: "1" }, toLead(payload).body) !==
   idempotencyKeyFor({ leadgen_id: "2" }, toLead(payload).body));
+
+/* Without a date the lead never reaches a rep's follow-up list, which is how
+   social ads ended up sitting unworked. The live Meta form asks for mm dd yyyy
+   and people answer it loosely, so the parser has to be generous about the
+   shape and strict about the day being real. */
+console.log("\n6. THE MOVE DATE");
+const soon = new Date(Date.now() + 120 * 864e5);
+const yy = String(soon.getUTCFullYear()).slice(2), mm = soon.getUTCMonth() + 1, dd = soon.getUTCDate();
+const isoSoon = `${soon.getUTCFullYear()}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+
+check("the way the Meta form answers it, 8 31 26 style",
+  parseMoveDate(`${mm} ${dd} ${yy}`) === isoSoon, `${mm} ${dd} ${yy} → ${parseMoveDate(`${mm} ${dd} ${yy}`)}`);
+check("slashes", parseMoveDate(`${mm}/${dd}/${yy}`) === isoSoon);
+check("dashes", parseMoveDate(`${mm}-${dd}-${soon.getUTCFullYear()}`) === isoSoon);
+check("ISO, which already worked", parseMoveDate(isoSoon) === isoSoon);
+check("a day that does not exist is refused", parseMoveDate("02 31 27") === null);
+check("free text is refused", parseMoveDate("next month sometime") === null);
+check("nothing is refused", parseMoveDate("") === null && parseMoveDate(null) === null);
+check("a mistyped year in the past is refused", parseMoveDate("08 31 21") === null,
+  "a 2021 date on a new lead is a typo, not a booking");
+
+const dated = toLead({ FullName: "Dated Lead", Email: "d@example.com",
+  PhoneNumber: "2193183639", MoveDate: `${mm} ${dd} ${yy}` });
+check("and it reaches the lead body", dated.body.move_date === isoSoon, String(dated.body.move_date));
+
+/* The zap names this field itself. If someone rebuilds it and maps the raw
+   question text instead, the date must still come through. */
+const asked = toLead({ FullName: "Rebuilt Zap", Email: "r@example.com",
+  "What Date Would You Like To Move Mm Dd Yyyy": `${mm}/${dd}/${yy}` });
+check("even when the zap sends the question text as the key",
+  asked.body.move_date === isoSoon, String(asked.body.move_date));
+
+const unreadable = toLead({ FullName: "Odd Date", Email: "o@example.com", MoveDate: "whenever" });
+check("a date we cannot read is reported, not dropped in silence",
+  unreadable.warnings.some(w => w.startsWith("move date not understood")));
 
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);
