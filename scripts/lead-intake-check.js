@@ -221,6 +221,37 @@ check("and an address is never mistaken for one",
   !addresses.warnings.some(w => w.startsWith("move date not understood")),
   addresses.warnings.join(", "));
 
+/* 26 October, after the date was finally being read: the lead arrived in
+   MoveitPro with no date on it at all, and no error. They drop a field they do
+   not recognise, so move_date was never their name for it — their own job
+   records call it service_date. Until they answer the ticket, the date goes out
+   under every plausible name, which is free because the ones they do not know
+   are ignored. */
+console.log("\n8. THE KEY MOVEITPRO ACTUALLY READS");
+const sent = toLead({ FullName: "Keyed Lead", Email: "k@example.com",
+  PhoneNumber: "2193183639", MoveDate: `${mm} ${dd} ${yy}` });
+for (const field of ["move_date", "service_date", "estimated_move_date", "requested_move_date"]) {
+  check(`the date goes out as ${field}`, sent.body[field] === isoSoon, String(sent.body[field]));
+}
+check("and it is reported back whatever it went out as",
+  sent.moveDate === isoSoon, String(sent.moveDate));
+
+/* The whole point of the env var: once their ticket says which one lands, it
+   narrows to that without a deploy, and back again just as fast. */
+process.env.LEAD_MOVE_DATE_FIELDS = "service_date";
+const narrowed = toLead({ FullName: "Narrowed", Email: "n@example.com",
+  PhoneNumber: "2193183639", MoveDate: `${mm} ${dd} ${yy}` });
+check("narrowing it to one key sends only that one",
+  narrowed.body.service_date === isoSoon && narrowed.body.move_date === undefined,
+  Object.keys(narrowed.body).join(", "));
+check("and the date is still reported", narrowed.moveDate === isoSoon);
+delete process.env.LEAD_MOVE_DATE_FIELDS;
+
+const undated = toLead({ FullName: "No Date", Email: "u@example.com", PhoneNumber: "2193183639" });
+check("a lead with no date carries no date key at all",
+  undated.body.move_date === undefined && undated.body.service_date === undefined &&
+  undated.moveDate === null, Object.keys(undated.body).join(", "));
+
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);
 console.log("=".repeat(58));

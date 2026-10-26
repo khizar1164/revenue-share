@@ -140,3 +140,11 @@ services:
         value: z AD - Social Media
       - key: MOVEITPRO_BRANCH_ID
         value: 9e6875d7-cbd5-4fcf-a03f-cb516b440d9c
+
+      # Which key carries the move date on a lead write. MoveitPro accepted
+      # move_date on 26 October and stored nothing, and they drop a field they
+      # do not recognise rather than refusing it, so the date goes out under
+      # every plausible name until their ticket says which one is read. Narrow
+      # it to the winner here, without a deploy.
+      - key: LEAD_MOVE_DATE_FIELDS
+        value: move_date,service_date,estimated_move_date,requested_move_date

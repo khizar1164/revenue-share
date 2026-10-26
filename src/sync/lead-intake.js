@@ -32,6 +32,25 @@ export function keyOk(given) {
 
 const clean = v => v == null ? null : String(v).trim();
 
+/* Which key carries the move date to MoveitPro.
+ *
+ * 26 October: the relay read "2026-11-25" off the form, sent it as move_date,
+ * and the lead came back with no date anywhere on it. Their API takes a write
+ * and drops a field it does not recognise, so a wrong name and a success look
+ * identical from here — which is why this went unnoticed through two fixes.
+ *
+ * Their own records call it service_date. That is the field the relay reads
+ * back off every job and prints as "Move Date" in dispatch-updates, so it is
+ * the likeliest of these by some distance.
+ *
+ * A list, and in the environment rather than here, for the same reason
+ * MIP_PAYMENT_SURFACES is: the date costs nothing under four keys while three
+ * of them are ignored, and whichever one lands can be narrowed to — or the
+ * whole thing put back to move_date — without a deploy. */
+const moveDateFields = () => (process.env.LEAD_MOVE_DATE_FIELDS ||
+  "move_date,service_date,estimated_move_date,requested_move_date")
+  .split(",").map(f => f.trim()).filter(Boolean);
+
 /* Zapier sends whatever the person who built the step called the fields. The
    live zap sends FullName, PhoneNumber and Email; my first guess looked only
    for full_name and phone_number and camelCase, so every field missed and two
@@ -125,9 +144,13 @@ export function toLead(payload = {}) {
      ads arrived with no date on them. */
   const rawDate = clean(pick(idx, "move_date", "moving_date", "date_of_move",
                               "when_are_you_moving")) ?? moveDateField(idx);
+  let moveDate = null;
   if (rawDate) {
     const parsed = parseMoveDate(rawDate);
-    if (parsed) body.move_date = parsed;
+    if (parsed) {
+      moveDate = parsed;
+      for (const field of moveDateFields()) body[field] = parsed;
+    }
     /* Say so rather than dropping it. A date we cannot read is a form question
        that changed shape, and that is worth seeing in the logs. */
     else warnings.push(`move date not understood: ${rawDate}`);
@@ -138,7 +161,10 @@ export function toLead(payload = {}) {
     warnings.push("no move date");
   }
 
-  return { body, warnings };
+  /* moveDate separately from the body, because which key it went out under is
+     now configuration and the caller still has to be able to log what it
+     sent. */
+  return { body, warnings, moveDate };
 }
 
 /* Dates the platform stamped rather than the customer answered. Meta puts
@@ -268,7 +294,7 @@ export function idempotencyKeyFor(payload, body) {
 
 /** Sign it and send it. Returns something worth logging. */
 export async function createLead(payload, opts = {}) {
-  const { body, warnings } = toLead(payload);
+  const { body, warnings, moveDate } = toLead(payload);
   if (!body.email && !body.phones) {
     const e = new Error("a lead with neither an email nor a phone is not worth creating");
     e.status = 422;
@@ -284,7 +310,7 @@ export async function createLead(payload, opts = {}) {
     /* Reported back so the caller can log what was actually sent. Whether a
        dateless lead in MoveitPro means we never read the date or they never
        stored it is otherwise unanswerable from this side. */
-    moveDate: body.move_date ?? null,
+    moveDate,
     warnings
   };
 }
