@@ -791,11 +791,17 @@ app.post("/api/admin/points", wrap(async (req, res) => {
   const note = String(req.body?.note ?? "").trim().slice(0, 300) || null;
   const noteable = note !== null && await hasColumn("point_events", "note");
 
+  /* Andrew, 27 October: a credit in his own words. Until now the reason always
+     came off his dropdown, so it was as long as it was and always said
+     something; a typed one has to be trimmed to the width of the line it is
+     shown on, in the ledger, the admin log, a write-up and the nightly sheet. */
+  const reasonText = String(reason ?? "").trim().slice(0, 120) || "Adjustment";
+
   const r = await query(
     `insert into point_events (employee_id, occurred_on, delta, reason, job_number, recorded_by
                               ${noteable ? ", note" : ""})
      values ($1,$2,$3,$4,$5,$6${noteable ? ",$7" : ""}) returning id`,
-    [employee_id, occurred_on || new Date(), delta, reason || "Adjustment",
+    [employee_id, occurred_on || new Date(), delta, reasonText,
      job_number || null, req.body.recorded_by || "admin",
      ...(noteable ? [note] : [])]);
   res.status(201).json({ ...r.rows[0], note: noteable ? note : null });
