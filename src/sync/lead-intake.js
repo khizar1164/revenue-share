@@ -279,20 +279,11 @@ export async function createLead(payload, opts = {}) {
   });
   const id = r.data?.id ?? null;
 
-  /* MoveitPro keeps move_date on the lead but does not put it on the estimate
-     it raises alongside, and the estimate is what the sales team work from and
-     what drives their follow-up list. Every other way a lead arrives sets both.
-     Until they close that gap, write it on ourselves. */
-  let dated = null;
-  if (id && body.move_date && !r.replayed) {
-    try {
-      dated = await dateTheEstimate(id, body.move_date, opts);
-    } catch (e) {
-      /* Never lose a lead over this. The lead is the thing that matters; a
-         missing date costs the office a lookup, a thrown error costs the lead. */
-      warnings.push(`estimate not dated: ${e.message}`);
-    }
-  }
+  /* The estimate is deliberately not touched here. MoveitPro does not raise it
+     at the same moment as the lead — a lead created at 13:39 still had none
+     minutes later — so there is nothing to write to yet, and waiting for one
+     would hold Zapier's request open for a timer that usually expires empty.
+     The lead-dates job picks it up once it exists. */
 
   return {
     id,
@@ -302,7 +293,6 @@ export async function createLead(payload, opts = {}) {
        dateless lead in MoveitPro means we never read the date or they never
        stored it is otherwise unanswerable from this side. */
     moveDate: body.move_date ?? null,
-    dated,
     warnings
   };
 }
@@ -310,25 +300,21 @@ export async function createLead(payload, opts = {}) {
 /**
  * Put the move date on the draft estimate MoveitPro raised for this lead.
  *
- * The estimate does not always exist the instant the lead does, so this looks
- * more than once before giving up. It only ever writes to a draft with no date
- * on it: once the office has touched the estimate, their date wins over ours.
+ * One look, no waiting: the caller decides when it is worth asking. It only
+ * ever writes to a draft with no date on it, so once the office has touched
+ * the estimate their date wins over ours.
  *
  * Returns the estimate number it dated, or null when there was nothing to do.
  */
-export async function dateTheEstimate(leadId, moveDate, { sleep = ms => new Promise(r => setTimeout(r, ms)), attempts = [0, 1500, 4000], ...opts } = {}) {
-  for (const wait of attempts) {
-    if (wait) await sleep(wait);
-    const found = await get(
-      `/v1/estimates?limit=5&status=draft&prospect_id=${encodeURIComponent(leadId)}`, opts);
-    const estimate = (Array.isArray(found) ? found : found?.data ?? [])[0];
-    if (!estimate) continue;
-    if (estimate.service_date) return null;          // somebody got there first
+export async function dateTheEstimate(leadId, moveDate, opts = {}) {
+  const found = await get(
+    `/v1/estimates?limit=5&status=draft&prospect_id=${encodeURIComponent(leadId)}`, opts);
+  const estimate = (Array.isArray(found) ? found : found?.data ?? [])[0];
+  if (!estimate) return null;                        // not raised yet
+  if (estimate.service_date) return null;            // somebody got there first
 
-    await patch(`/v1/estimates/${encodeURIComponent(estimate.id)}`,
-      { service_date: moveDate },
-      { idempotencyKey: `estdate-${estimate.id}-${moveDate}`, ifMatch: estimate.updated_at, ...opts });
-    return estimate.estimate_number ?? estimate.id;
-  }
-  return null;
+  await patch(`/v1/estimates/${encodeURIComponent(estimate.id)}`,
+    { service_date: moveDate },
+    { idempotencyKey: `estdate-${estimate.id}-${moveDate}`, ifMatch: estimate.updated_at, ...opts });
+  return estimate.estimate_number ?? estimate.id;
 }

@@ -9,7 +9,8 @@
  * that creates a second lead puts the same person in front of the sales team
  * twice.
  */
-import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk, parseMoveDate, dateTheEstimate, createLead } from "../src/sync/lead-intake.js";
+import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk, parseMoveDate } from "../src/sync/lead-intake.js";
+import { syncLeadDates } from "../src/sync/lead-dates.js";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -220,11 +221,12 @@ check("and an address is never mistaken for one",
   addresses.body.move_date === undefined &&
   !addresses.warnings.some(w => w.startsWith("move date not understood")),
   addresses.warnings.join(", "));
-/* MoveitPro stores move_date on the lead but leaves the estimate it raises
-   alongside undated, and the estimate is what the sales team work from. We
-   write it on ourselves. These run against a stubbed MoveitPro, so nothing
+
+/* MoveitPro leaves the estimate undated when the lead came through the API,
+   and the estimate is what the sales team see. The sweep writes the date on
+   once the estimate exists. These run against a stubbed MoveitPro, so nothing
    here touches the real one. */
-console.log("\n8. DATING THE ESTIMATE MOVEITPRO LEAVES BLANK");
+console.log("\n8. DATING THE ESTIMATES MOVEITPRO LEAVES BLANK");
 process.env.MOVEITPRO_API_KEY = "test-key";
 process.env.MOVEITPRO_HMAC_SECRET = "test-secret";
 
@@ -234,70 +236,73 @@ const reply = (status, body) => ({
   text: async () => JSON.stringify(body)
 });
 
-/* A MoveitPro that hands over `estimates` in order, one per look. */
-function fakeMip(estimates, { onPatch = () => reply(200, { success: true, data: {} }) } = {}) {
-  const seen = { gets: 0, patches: [] };
+/** A MoveitPro holding these leads and these draft estimates. */
+function fakeMip(leads, drafts, { onPatch = () => reply(200, { success: true, data: {} }) } = {}) {
+  const seen = { patches: [] };
   const fetchImpl = async (url, init = {}) => {
-    const method = init.method || "GET";
-    if (method === "PATCH") {
+    if ((init.method || "GET") === "PATCH") {
       seen.patches.push({ url, headers: init.headers, body: JSON.parse(init.body) });
       return onPatch();
     }
-    if (url.includes("/v1/estimates")) {
-      const next = estimates[Math.min(seen.gets++, estimates.length - 1)];
-      return reply(200, { success: true, data: next ? [next] : [] });
-    }
-    return reply(200, { success: true, data: { id: "lead-1" } });   // POST /v1/leads
+    if (url.includes("/v1/estimates")) return reply(200, { success: true, data: drafts });
+    return reply(200, { success: true, data: leads });
   };
   return { fetchImpl, seen };
 }
 
-const noSleep = async () => {};
-const EST = { id: "est-1", estimate_number: 11440, service_date: null, updated_at: "2026-10-27T10:00:00Z" };
+const LEAD = { id: "lead-1", move_date: "2026-11-25" };
+const DRAFT = { id: "est-1", estimate_number: 11440, prospect_id: "lead-1",
+                service_date: null, updated_at: "2026-10-27T10:00:00Z" };
+const quiet = () => {};
 
 {
-  const { fetchImpl, seen } = fakeMip([EST]);
-  const out = await dateTheEstimate("lead-1", "2026-11-20", { fetchImpl, sleep: noSleep });
-  check("an undated draft gets the move date", out === 11440, String(out));
-  check("and it is sent as service_date", seen.patches[0]?.body.service_date === "2026-11-20");
+  const { fetchImpl, seen } = fakeMip([LEAD], [DRAFT]);
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
+  check("an undated draft gets its lead's move date", out.dated === 1, JSON.stringify(out));
+  check("and it is sent as service_date", seen.patches[0]?.body.service_date === "2026-11-25");
   check("with If-Match carrying what we read",
-    seen.patches[0]?.headers["if-match"] === EST.updated_at);
+    seen.patches[0]?.headers["if-match"] === DRAFT.updated_at);
 }
 
 {
-  const worked = { ...EST, service_date: "2026-12-01" };
-  const { fetchImpl, seen } = fakeMip([worked]);
-  const out = await dateTheEstimate("lead-1", "2026-11-20", { fetchImpl, sleep: noSleep });
+  const { fetchImpl, seen } = fakeMip([LEAD], [{ ...DRAFT, service_date: "2026-12-01" }]);
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
   check("a date the office already set is left alone",
-    out === null && seen.patches.length === 0, "their date must win over ours");
+    out.already === 1 && out.dated === 0 && seen.patches.length === 0,
+    "their date must win over ours");
 }
 
 {
-  /* The estimate is not always there the instant the lead is. */
-  const { fetchImpl, seen } = fakeMip([null, null, EST]);
-  const out = await dateTheEstimate("lead-1", "2026-11-20", { fetchImpl, sleep: noSleep });
-  check("an estimate that appears a moment later is still dated",
-    out === 11440 && seen.patches.length === 1, String(out));
+  /* The estimate is not raised at the same moment as the lead. Nothing to do
+     yet is a normal state, not a failure. */
+  const { fetchImpl, seen } = fakeMip([LEAD], []);
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
+  check("a lead whose estimate does not exist yet is left for next time",
+    out.waiting === 1 && out.dated === 0 && seen.patches.length === 0, JSON.stringify(out));
 }
 
 {
-  const { fetchImpl, seen } = fakeMip([null]);
-  const out = await dateTheEstimate("lead-1", "2026-11-20", { fetchImpl, sleep: noSleep });
-  check("and one that never appears is given up on quietly",
-    out === null && seen.patches.length === 0);
+  const { fetchImpl, seen } = fakeMip([{ id: "lead-2" }], [{ ...DRAFT, prospect_id: "lead-2" }]);
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
+  check("a lead with no move date is not touched at all",
+    out.looked === 0 && seen.patches.length === 0);
 }
 
 {
-  /* The lead is what matters. A date we could not write is worth reporting,
-     never worth throwing away a lead for. */
-  const { fetchImpl } = fakeMip([EST], { onPatch: () => reply(412, { error: "stale" }) });
-  const r = await createLead(
-    { FullName: "Dated Lead", Email: "d@example.com", PhoneNumber: "2193183639",
-      MoveDate: `${mm} ${dd} ${yy}` },
-    { fetchImpl, sleep: noSleep });
-  check("a lead still lands when the estimate cannot be dated", r.id === "lead-1");
-  check("and the failure is reported rather than swallowed",
-    r.warnings.some(w => w.startsWith("estimate not dated")), JSON.stringify(r.warnings));
+  /* A 412 is the office editing the estimate between our read and our write. */
+  const { fetchImpl } = fakeMip([LEAD], [DRAFT], { onPatch: () => reply(412, { error: "stale" }) });
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
+  check("an estimate that changed under us is counted, not thrown",
+    out.failed === 1 && out.dated === 0, JSON.stringify(out));
+}
+
+{
+  const many = Array.from({ length: 100 }, (_, i) =>
+    ({ ...DRAFT, id: `e${i}`, prospect_id: `p${i}` }));
+  const { fetchImpl } = fakeMip([LEAD], many);
+  const out = await syncLeadDates({ fetchImpl, log: quiet });
+  check("a full page of drafts says so rather than pretending it saw them all",
+    out.capped === true, "older estimates would be missed in silence otherwise");
 }
 
 console.log("\n" + "=".repeat(58));
