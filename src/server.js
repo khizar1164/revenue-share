@@ -219,10 +219,10 @@ app.post("/api/hooks/meta-lead", wrap(async (req, res) => {
     console.log(`meta lead: ${r.name} → ${r.id}` +
       (r.moveDate ? ` moving ${r.moveDate}` : "") +
       (r.replayed ? " (replay)" : "") +
-      (r.dated ? ` (estimate #${r.dated} dated)` : "") +
+      (r.estimate ? ` estimate #${r.estimate}` : "") +
       (r.warnings.length ? ` [${r.warnings.join(", ")}]` : ""));
     return res.json({ ok: true, lead_id: r.id, move_date: r.moveDate,
-                      replayed: r.replayed, dated: r.dated, warnings: r.warnings });
+                      replayed: r.replayed, estimate: r.estimate, warnings: r.warnings });
   } catch (e) {
     console.error("meta lead failed:", e.message);
     /* Zapier retries on 5xx and gives up on 4xx, which is the right split:
