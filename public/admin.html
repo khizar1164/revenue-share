@@ -260,9 +260,25 @@
             <option value="-3">Claim (−3)</option>
             <option value="-5">Customer complaint — specifically names you (−5)</option>
             <option value="-10">No call no show — tardiness not communicated within 30 minutes of shift start (−10)</option>
+            <!-- Andrew, 27 October: "I need a way to credit someone additional
+                 points with a custom reason". It sits at the bottom and outside
+                 his wording so the list above still reads exactly like the sheet
+                 in the break room.
+
+                 Credit only, never a deduction. A deduction counts toward the
+                 60-day window and its reason is printed on the disciplinary
+                 notice as the rule the person broke, so a reason typed on the
+                 spot would end up citing a policy nobody has written. -->
+            <option value="custom">Something else — credit, in your own words</option>
           </select>
         </div>
         <button id="ptSave">Add</button>
+      </div>
+      <div class="frow" id="ptCustomRow" hidden>
+        <div style="max-width:110px"><label for="ptCustomPts">Points</label>
+          <input type="number" id="ptCustomPts" min="1" step="1" value="1"></div>
+        <div><label for="ptCustomWhy">What they did</label>
+          <input type="text" id="ptCustomWhy" maxlength="120" placeholder="Drove to Valparaiso at short notice to finish a job"></div>
       </div>
       <!-- Andrew, 21 October: "can you make it so that I can enter a note for
            when someone gets a policy deduction so they know what it's for?"
@@ -1262,14 +1278,31 @@ Tyler Johnston  44.25"></textarea>
       .catch(function(e){ toast(e.message, true); });
   });
 
+  /* The two custom fields are only there while they are being used, so the
+     panel still reads as Andrew's list at a glance. */
+  $("ptReason").addEventListener("change", function(){
+    var custom = $("ptReason").value === "custom";
+    $("ptCustomRow").hidden = !custom;
+    if (custom) $("ptCustomWhy").focus();
+  });
+
   $("ptSave").addEventListener("click", function(){
-    /* strips the score off the label — "(+1)" as well as "(−2)", or the
-       reason saved on the entry reads "Came in same day (+1)" */
-    var sel = $("ptReason"), text = sel.options[sel.selectedIndex].text.replace(/\s*\([+−-]?\d+\)$/, "");
+    var sel = $("ptReason"), text, delta;
+    if (sel.value === "custom") {
+      text  = $("ptCustomWhy").value.trim();
+      delta = Math.round(Number($("ptCustomPts").value));
+      if (!text) { toast("Say what the credit is for.", true); $("ptCustomWhy").focus(); return; }
+      if (!(delta >= 1)) { toast("A credit has to be at least one point.", true); $("ptCustomPts").focus(); return; }
+    } else {
+      /* strips the score off the label — "(+1)" as well as "(−2)", or the
+         reason saved on the entry reads "Came in same day (+1)" */
+      text  = sel.options[sel.selectedIndex].text.replace(/\s*\([+−-]?\d+\)$/, "");
+      delta = Number(sel.value);
+    }
     var note = $("ptNote").value.trim();
     api("/api/admin/points", { method:"POST", body: JSON.stringify({
       employee_id: $("ptWho").value, occurred_on: $("ptDate").value,
-      delta: Number(sel.value), reason: text, note: note
+      delta: delta, reason: text, note: note
     })}).then(function(r){
       /* The reply says what was actually stored. The note column arrives with
          db/015, and the service is deployed on a push while the migrations are
@@ -1280,7 +1313,7 @@ Tyler Johnston  44.25"></textarea>
       } else {
         toast("Point event recorded.");
       }
-      $("ptNote").value=""; load();
+      $("ptNote").value=""; $("ptCustomWhy").value=""; load();
     }).catch(function(e){ toast(e.message, true); });
   });
 
