@@ -12,8 +12,10 @@
  *                  where the hex signs "{t}." + the RAW body with the
  *                  endpoint's own secret, which is a different secret again.
  *
- * Everything here is read-only against their API. Nothing in this file creates
- * or changes anything in MoveitPro.
+ * The writes here are deliberate and few: creating a lead, and dating the
+ * estimate that MoveitPro raises alongside it. Both carry an idempotency key,
+ * and the patch carries an If-Match, so a retry cannot duplicate a record and
+ * a stale read cannot overwrite the office's own edit.
  */
 import crypto from "node:crypto";
 
@@ -103,6 +105,46 @@ export async function post(pathWithQuery, body, { idempotencyKey, fetchImpl = gl
     throw err;
   }
   return { data: json?.data ?? json, replayed: res.headers.get("idempotency-replayed") === "true" };
+}
+
+/**
+ * PATCH something in MoveitPro.
+ *
+ * Their API refuses a write that does not say which version of the record it
+ * read, so If-Match carries the updated_at the caller fetched. Send a stale
+ * one and you get a 412 rather than quietly overwriting somebody else's edit,
+ * which is the behaviour we want on records the office is also working on.
+ */
+export async function patch(pathWithQuery, body, { idempotencyKey, ifMatch, fetchImpl = globalThis.fetch } = {}) {
+  if (!configured()) throw new Error(status());
+  if (!idempotencyKey) throw new Error("a write needs an idempotency key");
+  if (!ifMatch) throw new Error("a patch needs the record's current updated_at");
+  const raw = JSON.stringify(body);
+
+  const res = await fetchImpl(BASE + pathWithQuery, {
+    method: "PATCH",
+    headers: {
+      authorization: `Bearer ${apiKey()}`,
+      ...signRequest("PATCH", pathWithQuery, raw),
+      "idempotency-key": String(idempotencyKey).slice(0, 255),
+      "if-match": String(ifMatch),
+      "content-type": "application/json",
+      accept: "application/json"
+    },
+    body: raw
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* leave it */ }
+  if (!res.ok) {
+    const raw2 = json?.error ?? json?.message ?? text.slice(0, 300) ?? res.statusText;
+    const err = new Error(`MoveitPro PATCH ${pathWithQuery} → ${res.status}: ` +
+      (typeof raw2 === "string" ? raw2 : JSON.stringify(raw2)));
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json?.data ?? json;
 }
 
 export const getJob = (id, o) => get(`/v1/jobs/${encodeURIComponent(id)}`, o);

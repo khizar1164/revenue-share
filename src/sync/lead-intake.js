@@ -17,7 +17,7 @@
  * than a lead silently arriving with no name.
  */
 import crypto from "node:crypto";
-import { post } from "../moveitpro.js";
+import { post, get, patch } from "../moveitpro.js";
 
 /** Zapier's own shared key. Not MoveitPro's, and not interchangeable with it. */
 export const relayKey = () => (process.env.LEAD_RELAY_KEY || "").trim() || null;
@@ -211,10 +211,54 @@ export async function createLead(payload, opts = {}) {
   const r = await post("/v1/leads", body, {
     idempotencyKey: idempotencyKeyFor(payload, body), ...opts
   });
+  const id = r.data?.id ?? null;
+
+  /* MoveitPro keeps move_date on the lead but does not put it on the estimate
+     it raises alongside, and the estimate is what the sales team work from and
+     what drives their follow-up list. Every other way a lead arrives sets both.
+     Until they close that gap, write it on ourselves. */
+  let dated = null;
+  if (id && body.move_date && !r.replayed) {
+    try {
+      dated = await dateTheEstimate(id, body.move_date, opts);
+    } catch (e) {
+      /* Never lose a lead over this. The lead is the thing that matters; a
+         missing date costs the office a lookup, a thrown error costs the lead. */
+      warnings.push(`estimate not dated: ${e.message}`);
+    }
+  }
+
   return {
-    id: r.data?.id ?? null,
+    id,
     replayed: r.replayed,
     name: [body.first_name, body.last_name].filter(Boolean).join(" ") || "(no name)",
+    dated,
     warnings
   };
+}
+
+/**
+ * Put the move date on the draft estimate MoveitPro raised for this lead.
+ *
+ * The estimate does not always exist the instant the lead does, so this looks
+ * more than once before giving up. It only ever writes to a draft with no date
+ * on it: once the office has touched the estimate, their date wins over ours.
+ *
+ * Returns the estimate number it dated, or null when there was nothing to do.
+ */
+export async function dateTheEstimate(leadId, moveDate, { sleep = ms => new Promise(r => setTimeout(r, ms)), attempts = [0, 1500, 4000], ...opts } = {}) {
+  for (const wait of attempts) {
+    if (wait) await sleep(wait);
+    const found = await get(
+      `/v1/estimates?limit=5&status=draft&prospect_id=${encodeURIComponent(leadId)}`, opts);
+    const estimate = (Array.isArray(found) ? found : found?.data ?? [])[0];
+    if (!estimate) continue;
+    if (estimate.service_date) return null;          // somebody got there first
+
+    await patch(`/v1/estimates/${encodeURIComponent(estimate.id)}`,
+      { service_date: moveDate },
+      { idempotencyKey: `estdate-${estimate.id}-${moveDate}`, ifMatch: estimate.updated_at, ...opts });
+    return estimate.estimate_number ?? estimate.id;
+  }
+  return null;
 }
