@@ -9,7 +9,8 @@
  * that creates a second lead puts the same person in front of the sales team
  * twice.
  */
-import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk, parseMoveDate } from "../src/sync/lead-intake.js";
+import { toLead, splitName, phoneOf, idempotencyKeyFor, keyOk, parseMoveDate,
+         startEstimate, createLead } from "../src/sync/lead-intake.js";
 import { syncLeadDates } from "../src/sync/lead-dates.js";
 
 let failures = 0;
@@ -303,6 +304,88 @@ const quiet = () => {};
   const out = await syncLeadDates({ fetchImpl, log: quiet });
   check("a full page of drafts says so rather than pretending it saw them all",
     out.capped === true, "older estimates would be missed in silence otherwise");
+}
+
+/* MoveitPro raises no estimate for a lead created through the API, and its own
+   screen says follow-ups start once an estimate exists. So the lead lands
+   where no rep is looking. We raise it ourselves. */
+console.log("\n9. RAISING THE ESTIMATE MOVEITPRO DOES NOT");
+
+/** A MoveitPro holding `existing` estimates for the lead we ask about. */
+function fakeEstimates(existing, { onPost = () => reply(200, { success: true,
+    data: { id: "new-est", estimate_number: 11500 } }) } = {}) {
+  const seen = { posts: [], patches: [] };
+  const fetchImpl = async (url, init = {}) => {
+    const method = init.method || "GET";
+    if (method === "POST" && url.includes("/v1/estimates")) {
+      seen.posts.push({ headers: init.headers, body: JSON.parse(init.body) });
+      return onPost();
+    }
+    if (method === "PATCH") {
+      seen.patches.push({ headers: init.headers, body: JSON.parse(init.body) });
+      return reply(200, { success: true, data: {} });
+    }
+    if (url.includes("/v1/estimates")) return reply(200, { success: true, data: existing });
+    return reply(200, { success: true, data: { id: "lead-1" } });   // POST /v1/leads
+  };
+  return { fetchImpl, seen };
+}
+
+{
+  const { fetchImpl, seen } = fakeEstimates([]);
+  const out = await startEstimate("lead-1", "2026-11-25", { fetchImpl });
+  check("a lead with no estimate gets one", out.created === true && out.estimate === 11500,
+    JSON.stringify(out));
+  check("carrying the lead it belongs to", seen.posts[0]?.body.prospect_id === "lead-1");
+  check("and the move date", seen.posts[0]?.body.service_date === "2026-11-25");
+}
+
+{
+  const { fetchImpl, seen } = fakeEstimates([]);
+  await startEstimate("lead-1", null, { fetchImpl });
+  check("a lead with no date still gets an estimate",
+    seen.posts.length === 1, "no estimate means no follow-up, date or not");
+  check("and no empty date is sent with it",
+    !("service_date" in (seen.posts[0]?.body ?? {})),
+    "an empty date on the estimate sorts the job to the wrong end of the board");
+}
+
+{
+  /* Zapier retries. A second estimate in front of the sales team is worse than
+     the retry itself. */
+  const { fetchImpl, seen } = fakeEstimates([]);
+  await startEstimate("lead-1", "2026-11-25", { fetchImpl });
+  check("the create is keyed on the lead so a retry cannot double it",
+    seen.posts[0]?.headers["idempotency-key"] === "estcreate-lead-1");
+}
+
+{
+  const DRAFT = { id: "est-1", estimate_number: 11440, status: "draft",
+                  service_date: null, updated_at: "2026-10-27T10:00:00Z" };
+  const { fetchImpl, seen } = fakeEstimates([DRAFT]);
+  const out = await startEstimate("lead-1", "2026-11-25", { fetchImpl });
+  check("an estimate that already exists is dated, not duplicated",
+    out.created === false && seen.posts.length === 0 && seen.patches.length === 1,
+    JSON.stringify(out));
+}
+
+{
+  const WORKED = { id: "est-1", estimate_number: 11440, status: "saved",
+                   service_date: "2026-12-01", updated_at: "2026-10-27T10:00:00Z" };
+  const { fetchImpl, seen } = fakeEstimates([WORKED]);
+  const out = await startEstimate("lead-1", "2026-11-25", { fetchImpl });
+  check("one the office has already worked is left completely alone",
+    seen.posts.length === 0 && seen.patches.length === 0 && out.created === false);
+}
+
+{
+  const { fetchImpl } = fakeEstimates([], { onPost: () => reply(500, { error: "boom" }) });
+  const r = await createLead(
+    { FullName: "Still Lands", Email: "s@example.com", PhoneNumber: "2193183639",
+      MoveDate: `${mm} ${dd} ${yy}` }, { fetchImpl });
+  check("a lead still lands when the estimate cannot be raised", r.id === "lead-1");
+  check("and the failure is reported rather than swallowed",
+    r.warnings.some(w => w.startsWith("estimate not started")), JSON.stringify(r.warnings));
 }
 
 console.log("\n" + "=".repeat(58));

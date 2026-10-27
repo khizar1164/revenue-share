@@ -279,11 +279,22 @@ export async function createLead(payload, opts = {}) {
   });
   const id = r.data?.id ?? null;
 
-  /* The estimate is deliberately not touched here. MoveitPro does not raise it
-     at the same moment as the lead — a lead created at 13:39 still had none
-     minutes later — so there is nothing to write to yet, and waiting for one
-     would hold Zapier's request open for a timer that usually expires empty.
-     The lead-dates job picks it up once it exists. */
+  /* MoveitPro raises no estimate for a lead created this way, and its own
+     screen says "follow-ups start once an estimate is created". So the lead
+     would sit where no rep is looking. Raise it here rather than in the
+     lead-dates job, because the job can only date an estimate that exists and
+     for these leads one never appears. */
+  let estimate = null;
+  if (id && !r.replayed) {
+    try {
+      const e = await startEstimate(id, body.move_date ?? null, opts);
+      estimate = e.estimate;
+    } catch (e) {
+      /* Never lose a lead over this. The lead is the thing that matters, and
+         the lead-dates job will find an undated estimate later anyway. */
+      warnings.push(`estimate not started: ${e.message}`);
+    }
+  }
 
   return {
     id,
@@ -293,6 +304,7 @@ export async function createLead(payload, opts = {}) {
        dateless lead in MoveitPro means we never read the date or they never
        stored it is otherwise unanswerable from this side. */
     moveDate: body.move_date ?? null,
+    estimate,
     warnings
   };
 }
@@ -317,4 +329,42 @@ export async function dateTheEstimate(leadId, moveDate, opts = {}) {
     { service_date: moveDate },
     { idempotencyKey: `estdate-${estimate.id}-${moveDate}`, ifMatch: estimate.updated_at, ...opts });
   return estimate.estimate_number ?? estimate.id;
+}
+
+/**
+ * Raise the estimate MoveitPro does not raise for an API lead.
+ *
+ * A lead that arrives by phone or through the lead provider webhook gets an
+ * estimate automatically. One created through /v1/leads does not, and
+ * MoveitPro's own screen says why that matters: "follow-ups start once an
+ * estimate is created". No estimate, no follow-up, and the lead sits.
+ *
+ * So raise it ourselves, carrying the move date when we have one. Andrew asked
+ * for this on every social ad lead, which is what phone leads already get.
+ *
+ * Returns { estimate, created } — the number, and whether it is new.
+ */
+export async function startEstimate(leadId, moveDate, opts = {}) {
+  /* If one already exists it is not ours to duplicate: either the office
+     started it, or MoveitPro raised it after all. Date it instead. */
+  const found = await get(
+    `/v1/estimates?limit=5&prospect_id=${encodeURIComponent(leadId)}`, opts);
+  const existing = (Array.isArray(found) ? found : found?.data ?? [])[0];
+  if (existing) {
+    if (moveDate && !existing.service_date && existing.status === "draft") {
+      await patch(`/v1/estimates/${encodeURIComponent(existing.id)}`,
+        { service_date: moveDate },
+        { idempotencyKey: `estdate-${existing.id}-${moveDate}`, ifMatch: existing.updated_at, ...opts });
+      return { estimate: existing.estimate_number ?? existing.id, created: false };
+    }
+    return { estimate: existing.estimate_number ?? existing.id, created: false };
+  }
+
+  /* Keyed on the lead, so a zap retry replays the first response rather than
+     putting a second empty estimate in front of the sales team. */
+  const r = await post("/v1/estimates",
+    { prospect_id: leadId, ...(moveDate ? { service_date: moveDate } : {}) },
+    { idempotencyKey: `estcreate-${leadId}`, ...opts });
+  const made = r.data ?? r;
+  return { estimate: made?.estimate_number ?? made?.id ?? null, created: !r.replayed };
 }
