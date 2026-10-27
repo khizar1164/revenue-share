@@ -32,6 +32,7 @@ import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { syncCrew } from "./sync/crew.js";
+import { syncLeadDates } from "./sync/lead-dates.js";
 import { placeCrewMembers } from "./roster.js";
 import { query, withTransaction } from "./db.js";
 
@@ -312,6 +313,12 @@ export function registerJobs(scheduler) {
     scheduler.add("crew", o => syncCrew(o ?? {}), {
       everyMs: 60 * MIN, runAtStartAfterMs: 120_000 });
   }
+  /* MoveitPro leaves the estimate undated when the lead came through the API,
+     and the estimate is what the sales team see. Quarter-hourly because the
+     estimate appears some minutes after the lead, and a rep looking at a job
+     booked this morning should not have to wait until tomorrow for its date. */
+  scheduler.add("lead-dates", o => syncLeadDates(o ?? {}), {
+    everyMs: 15 * MIN, runAtStartAfterMs: 105_000 });
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }
