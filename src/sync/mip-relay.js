@@ -99,18 +99,58 @@ export const isCancelled = job =>
 
    A manual job has no estimate at all, which is not an error — it is a job
    somebody typed in, and it has only an invoice number. Both fields come back
-   null for those and the caller falls back. */
-async function estimateFor(job, opts) {
+   null for those and the caller falls back.
+
+   Andrew, 29 October: job 11463 reached Discord as "Job #: 9255" with no
+   service type. The lookup below had failed and the caller fell back to the
+   invoice number — quietly, because the catch here returned nulls and said
+   nothing, so a failed fetch looked exactly like a manual job. Three bookings
+   arrived in the same second that evening and two of the three lost their
+   estimate this way; later events on the same job resolved it fine, so it is
+   transient rather than broken.
+
+   Still never throw: a message with a worse number beats no message. But try
+   twice, and say so when it fails, because an hour of logs showed no trace of
+   any of this. */
+async function estimateFor(job, opts = {}) {
+  const { log = console.warn } = opts;
   if (!job.estimate_id) return { serviceType: null, jobNumber: null };
-  try {
-    const e = await getEstimate(job.estimate_id, opts);
-    return {
-      serviceType: e?.service_type ?? null,
-      jobNumber: e?.estimate_number ?? null
-    };
-  } catch {
-    return { serviceType: null, jobNumber: null };  // never lose the message
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const e = await getEstimate(job.estimate_id, opts);
+      return {
+        serviceType: e?.service_type ?? null,
+        jobNumber: e?.estimate_number ?? null
+      };
+    } catch (e) {
+      /* A pause, because the failures came in a burst and an instant retry
+         walks back into whatever turned the first one away. */
+      if (attempt === 1) { await new Promise(r => setTimeout(r, 500)); continue; }
+      log(`moveitpro: estimate ${job.estimate_id} unreadable, ` +
+          `job ${job.invoice_number ?? job.id} loses its number ` +
+          `and service type: ${e.message}`);
+    }
   }
+  return { serviceType: null, jobNumber: null };
+}
+
+/* Claim a job we believe we have never seen.
+ *
+ * "Booked" is the one message decided by a row being absent rather than by two
+ * values differing, so it is the one that duplicates when the same job is
+ * handled twice at once: both handlers read nothing, both post. That is how
+ * Ruchelle Murphy's booking went out twice on 29 October, once as 11463 and
+ * once as 9255.
+ *
+ * The insert is the lock. Whoever creates the row posts; anyone who finds it
+ * already there stays quiet. remember() fills the rest in a moment. */
+async function claimFirstSighting(jobId) {
+  const r = await query(
+    `insert into mip_jobs (job_id) values ($1)
+     on conflict (job_id) do nothing
+     returning job_id`, [jobId]);
+  return r.rows.length > 0;
 }
 
 /* estimate_number is stored as well as invoice_number because the payments
@@ -153,7 +193,7 @@ export async function handleJob(event, opts = {}) {
      Both happened in the channel before this line said to_char. */
   const before = (await query(
     `select to_char(service_date, 'YYYY-MM-DD') as service_date,
-            cancelled_at, status, invoice_number
+            cancelled_at, status, invoice_number, estimate_number
        from mip_jobs where job_id = $1`, [id])).rows[0];
 
   let job;
@@ -165,15 +205,29 @@ export async function handleJob(event, opts = {}) {
   }
 
   const extra = await estimateFor(job, opts);
+  /* A lookup that failed this time does not mean we never knew the number.
+     Once an estimate has been read for a job it is on the row, and the number
+     staff recognise is better taken from there than given up on. */
+  if (extra.jobNumber == null && before?.estimate_number != null) {
+    extra.jobNumber = before.estimate_number;
+  }
   const nowCancelled = isCancelled(job);
   const wasCancelled = isCancelled(before);
   /* Both sides are now plain YYYY-MM-DD. A job with no date on either side has
      not moved, which is why the empty strings have to compare equal. */
   const dateMoved = before && (before.service_date ?? "") !== (job.service_date ?? "");
 
-  let message = null, what = null;
+  let message = null, what = null, duplicate = false;
   if (!before && !nowCancelled) {
-    message = discord.bookedMessage(job, extra); what = "booked";
+    /* Two handlers on the same job both read nothing and both post. Only the
+       one that creates the row gets to say it. The loser still falls through
+       to remember(), because its estimate lookup may have been the one that
+       worked and the coalesce there keeps whichever number we have. */
+    if (await claimFirstSighting(id)) {
+      message = discord.bookedMessage(job, extra); what = "booked";
+    } else {
+      duplicate = true;
+    }
   } else if (nowCancelled && !wasCancelled) {
     message = discord.cancelledMessage(job, extra); what = "cancelled";
   } else if (dateMoved && !nowCancelled) {
@@ -182,6 +236,7 @@ export async function handleJob(event, opts = {}) {
 
   await remember(job, extra.jobNumber);
   const said = extra.jobNumber ?? job.invoice_number ?? id;
+  if (duplicate) return `job ${said}: another handler announced it`;
   if (!message) return `job ${said}: nothing worth posting`;
   await discord.toDispatch(message, opts);
   return `job ${said} ${what}`;
