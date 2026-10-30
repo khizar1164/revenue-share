@@ -120,10 +120,18 @@ const line = (emoji, label, value) => `${emoji} **${label}:** ${esc(value) || "�
  * right in the database and wrong in a channel where Jason answers with
  * "see the #11251 thread". A manual job has no estimate, so the invoice number
  * is still what prints for those.
+ *
+ * Andrew, 31 October: "It just shows customer name but not the company name."
+ * Estimate #11446 was a White Glove delivery out of a commercial address that
+ * reached the channel as "Mary Beth" and nothing else, so nobody reading it
+ * could tell whose job it was. MoveitPro keeps the company apart from the
+ * contact, and the company line prints ONLY when there is one — a residential
+ * booking gaining an empty row would cost every other message a line.
  */
-function jobLines(job, { serviceType, jobNumber } = {}) {
+function jobLines(job, { serviceType, jobNumber, company } = {}) {
   return [
     line("🏷️", "Job #", jobNumber ?? job.invoice_number ?? "—"),
+    ...(company ? [line("🏢", "Company", company)] : []),
     line("👤", "Customer", job.customer_name),
     line("📞", "Phone", job.customer_phone),
     line("📅", "Move Date", day(job.service_date)),
@@ -140,7 +148,12 @@ export function bookedMessage(job, extra) {
 /** Andrew, 9 October: on a reschedule he wants the old date and the new one. */
 export function rescheduledMessage(job, previousDate, extra) {
   const lines = jobLines(job, extra);
-  lines[3] = `📅 **Move Date:** ~~${day(previousDate)}~~ → **${day(job.service_date)}**`;
+  /* Found, not counted to. The company line appears only on commercial jobs,
+     so the date is at position 3 on some messages and 4 on others; a fixed
+     index would strike through the service type on exactly the jobs Andrew
+     asked for the company on. */
+  const i = lines.findIndex(l => l.includes("**Move Date:**"));
+  lines[i] = `📅 **Move Date:** ~~${day(previousDate)}~~ → **${day(job.service_date)}**`;
   return ["🔄 **Job Rescheduled**", "", ...lines].join("\n");
 }
 

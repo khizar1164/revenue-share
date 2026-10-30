@@ -135,6 +135,47 @@ async function estimateFor(job, opts = {}) {
   return { serviceType: null, jobNumber: null };
 }
 
+/* The company, when the customer is a business.
+ *
+ * Andrew, 31 October: "It just shows customer name but not the company name.
+ * Can you have it include the company name also" — estimate #11446, a White
+ * Glove delivery out of a commercial address that reached dispatch as "Mary
+ * Beth" with no sign of which business it was for.
+ *
+ * The job cannot answer this. Its customer_name, customer_email and
+ * customer_phone are as-booked snapshots of the contact and carry no company;
+ * the company is on the customer record, which prospect_id points at. So this
+ * is a second lookup, the same shape as the estimate one above, and it fails
+ * the same way when bookings arrive together.
+ *
+ * Three states, not two, which is why this returns undefined as well as null:
+ *
+ *   a name     the customer is a business and we read it
+ *   null       the customer is a person, so there is no company to print
+ *   undefined  we could not find out, and the caller falls back to what the
+ *              row already knows rather than dropping a line it had before
+ *
+ * Never throws. A booking missing its company line is a good message; no
+ * message at all is not. */
+async function companyFor(job, opts = {}) {
+  const { log = console.warn } = opts;
+  /* A manual job has no customer record behind it, so there is nothing to
+     look up and nothing to be uncertain about. */
+  if (!job.prospect_id) return null;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const c = await getCustomer(job.prospect_id, opts);
+      return c?.company_name?.trim() || null;
+    } catch (e) {
+      if (attempt === 1) { await new Promise(r => setTimeout(r, 500)); continue; }
+      log(`moveitpro: customer ${job.prospect_id} unreadable, ` +
+          `job ${job.invoice_number ?? job.id} loses its company name: ${e.message}`);
+    }
+  }
+  return undefined;
+}
+
 /* Claim a job we believe we have never seen.
  *
  * "Booked" is the one message decided by a row being absent rather than by two
@@ -156,11 +197,11 @@ async function claimFirstSighting(jobId) {
 /* estimate_number is stored as well as invoice_number because the payments
    channel has only a job id to work from and still has to print the number
    staff recognise, without fetching the estimate a second time. */
-async function remember(job, estimateNumber = null) {
+async function remember(job, estimateNumber = null, companyName = null) {
   await query(
     `insert into mip_jobs (job_id, invoice_number, estimate_number, service_date,
-                           cancelled_at, status, customer_name)
-     values ($1,$2,$3,$4,$5,$6,$7)
+                           cancelled_at, status, customer_name, company_name)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)
      on conflict (job_id) do update set
        invoice_number  = excluded.invoice_number,
        /* a later event that cannot reach the estimate must not wipe a number
@@ -170,9 +211,12 @@ async function remember(job, estimateNumber = null) {
        cancelled_at    = excluded.cancelled_at,
        status          = excluded.status,
        customer_name   = excluded.customer_name,
+       /* and the same for the company, for the same reason */
+       company_name    = coalesce(excluded.company_name, mip_jobs.company_name),
        updated_at      = now()`,
     [job.id, job.invoice_number ?? null, estimateNumber, job.service_date ?? null,
-     job.cancelled_at ?? null, job.status ?? null, job.customer_name ?? null]);
+     job.cancelled_at ?? null, job.status ?? null, job.customer_name ?? null,
+     companyName ?? null]);
 }
 
 /**
@@ -193,7 +237,7 @@ export async function handleJob(event, opts = {}) {
      Both happened in the channel before this line said to_char. */
   const before = (await query(
     `select to_char(service_date, 'YYYY-MM-DD') as service_date,
-            cancelled_at, status, invoice_number, estimate_number
+            cancelled_at, status, invoice_number, estimate_number, company_name
        from mip_jobs where job_id = $1`, [id])).rows[0];
 
   let job;
@@ -217,24 +261,36 @@ export async function handleJob(event, opts = {}) {
      not moved, which is why the empty strings have to compare equal. */
   const dateMoved = before && (before.service_date ?? "") !== (job.service_date ?? "");
 
-  let message = null, what = null, duplicate = false;
+  /* Decided before anything is written, so the company lookup below can be
+     skipped on the events that say nothing. */
+  let what = null, duplicate = false;
   if (!before && !nowCancelled) {
     /* Two handlers on the same job both read nothing and both post. Only the
        one that creates the row gets to say it. The loser still falls through
        to remember(), because its estimate lookup may have been the one that
        worked and the coalesce there keeps whichever number we have. */
-    if (await claimFirstSighting(id)) {
-      message = discord.bookedMessage(job, extra); what = "booked";
-    } else {
-      duplicate = true;
-    }
+    if (await claimFirstSighting(id)) what = "booked";
+    else duplicate = true;
   } else if (nowCancelled && !wasCancelled) {
-    message = discord.cancelledMessage(job, extra); what = "cancelled";
+    what = "cancelled";
   } else if (dateMoved && !nowCancelled) {
-    message = discord.rescheduledMessage(job, before.service_date, extra); what = "rescheduled";
+    what = "rescheduled";
   }
 
-  await remember(job, extra.jobNumber);
+  /* Only when something is going out. Most job events change nothing we post
+     about, and an extra customer fetch on every one of them would spend an
+     API we already know turns requests away when three bookings land in the
+     same second. */
+  const found = what ? await companyFor(job, opts) : undefined;
+  extra.company = found === undefined ? (before?.company_name ?? null) : found;
+
+  const message =
+    what === "booked"      ? discord.bookedMessage(job, extra) :
+    what === "cancelled"   ? discord.cancelledMessage(job, extra) :
+    what === "rescheduled" ? discord.rescheduledMessage(job, before.service_date, extra) :
+    null;
+
+  await remember(job, extra.jobNumber, extra.company);
   const said = extra.jobNumber ?? job.invoice_number ?? id;
   if (duplicate) return `job ${said}: another handler announced it`;
   if (!message) return `job ${said}: nothing worth posting`;
