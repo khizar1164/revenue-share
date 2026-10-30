@@ -13,7 +13,7 @@
  * whenever they like, and an endpoint that 500s on one it does not recognise
  * gets retried seven times and then disabled.
  */
-import { query } from "../db.js";
+import { query, hasColumn } from "../db.js";
 import { getJob, getEstimate, getPayment, getCustomer } from "../moveitpro.js";
 import * as discord from "../discord.js";
 
@@ -198,10 +198,24 @@ async function claimFirstSighting(jobId) {
    channel has only a job id to work from and still has to print the number
    staff recognise, without fetching the estimate a second time. */
 async function remember(job, estimateNumber = null, companyName = null) {
+  /* company_name may not be there yet. Render deploys on a push to main and
+     the migration is run by hand, so the code is ahead of the schema for a
+     window that is minutes or days wide. Naming a column that does not exist
+     does not degrade — Postgres rejects the whole statement — and this is the
+     statement every job event ends on, so getting it wrong stops dispatch
+     entirely rather than losing one optional line. */
+  const withCompany = await hasColumn("mip_jobs", "company_name");
+
+  const cols = ["job_id", "invoice_number", "estimate_number", "service_date",
+                "cancelled_at", "status", "customer_name"];
+  const vals = [job.id, job.invoice_number ?? null, estimateNumber,
+                job.service_date ?? null, job.cancelled_at ?? null,
+                job.status ?? null, job.customer_name ?? null];
+  if (withCompany) { cols.push("company_name"); vals.push(companyName ?? null); }
+
   await query(
-    `insert into mip_jobs (job_id, invoice_number, estimate_number, service_date,
-                           cancelled_at, status, customer_name, company_name)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)
+    `insert into mip_jobs (${cols.join(", ")})
+     values (${cols.map((_, i) => `$${i + 1}`).join(",")})
      on conflict (job_id) do update set
        invoice_number  = excluded.invoice_number,
        /* a later event that cannot reach the estimate must not wipe a number
@@ -211,12 +225,9 @@ async function remember(job, estimateNumber = null, companyName = null) {
        cancelled_at    = excluded.cancelled_at,
        status          = excluded.status,
        customer_name   = excluded.customer_name,
-       /* and the same for the company, for the same reason */
-       company_name    = coalesce(excluded.company_name, mip_jobs.company_name),
+       ${withCompany ? "/* and the same for the company, for the same reason */\n       company_name    = coalesce(excluded.company_name, mip_jobs.company_name)," : ""}
        updated_at      = now()`,
-    [job.id, job.invoice_number ?? null, estimateNumber, job.service_date ?? null,
-     job.cancelled_at ?? null, job.status ?? null, job.customer_name ?? null,
-     companyName ?? null]);
+    vals);
 }
 
 /**
@@ -235,9 +246,13 @@ export async function handleJob(event, opts = {}) {
      "Thu Oct 22 2026 ...", which never equals "2026-10-22". Every update then
      looks like a date change, and the old date prints as that whole mouthful.
      Both happened in the channel before this line said to_char. */
+  /* Null until the migration has run, which only costs the fallback that
+     keeps a company name we already read. See remember(). */
+  const companyCol = await hasColumn("mip_jobs", "company_name")
+    ? "company_name" : "null::text as company_name";
   const before = (await query(
     `select to_char(service_date, 'YYYY-MM-DD') as service_date,
-            cancelled_at, status, invoice_number, estimate_number, company_name
+            cancelled_at, status, invoice_number, estimate_number, ${companyCol}
        from mip_jobs where job_id = $1`, [id])).rows[0];
 
   let job;
