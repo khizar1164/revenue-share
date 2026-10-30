@@ -98,6 +98,41 @@ for (const kind of [["rescheduled", rescheduledMessage(PARO, "2026-10-20", { job
   check(`a ${kind[0]} message uses it too`, kind[1].includes("11251") && !kind[1].includes("9194"));
 }
 
+/* Andrew, 31 October: "It just shows customer name but not the company name."
+   Estimate #11446 was a White Glove delivery out of a commercial address that
+   reached the channel as "Mary Beth" and nothing more, so nobody reading it
+   could tell whose job it was. The company goes above the contact when there
+   is one, and the line is absent entirely when there is not — a blank row on
+   every residential booking would be a worse message than no row. */
+console.log("\n2c. THE COMPANY, WHEN THE CUSTOMER IS A BUSINESS");
+const MARYBETH = { ...JOB, invoice_number: 9301, customer_name: "Mary Beth",
+                   customer_phone: "9123476229" };
+const commercial = bookedMessage(MARYBETH,
+  { serviceType: "White Glove Delivery", jobNumber: 11446, company: "Fredericks Furniture" });
+check("the company prints", commercial.includes("Fredericks Furniture"));
+check("and the contact still prints with it", commercial.includes("Mary Beth"),
+  "the company replaces nothing");
+check("company sits above the customer",
+  commercial.indexOf("Fredericks Furniture") < commercial.indexOf("Mary Beth"));
+
+const residential = bookedMessage(JOB, extra);
+check("a job with no company has no company line", !residential.includes("Company"),
+  "not even an em dash");
+
+/* The reschedule used to strike through whichever line sat at index 3. With a
+   company line above it that is the service type, so exactly the jobs Andrew
+   asked for the company on would have had the wrong line struck out. */
+const movedCommercial = rescheduledMessage(MARYBETH, "2026-10-20",
+  { serviceType: "White Glove Delivery", jobNumber: 11446, company: "Fredericks Furniture" });
+check("a rescheduled commercial job strikes through the date",
+  movedCommercial.includes("~~10/20/2026~~") && movedCommercial.includes("**10/26/2026**"));
+check("and leaves the service type alone",
+  movedCommercial.includes("**Service Type:** White Glove Delivery"),
+  "the line index moved when the company appeared");
+check("a cancelled commercial job carries the company too",
+  cancelledMessage(MARYBETH, { jobNumber: 11446, company: "Fredericks Furniture" })
+    .includes("Fredericks Furniture"));
+
 /* A manual job is typed straight into dispatch and never has an estimate, so
    the invoice number is the only number it has. Printing a dash instead would
    be a worse answer than printing the number that exists. */
