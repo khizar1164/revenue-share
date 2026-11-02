@@ -262,6 +262,19 @@ const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&
 const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
   { month: "short", day: "numeric", year: "numeric" });
 
+/* The same date without the year, for the incidents table only.
+ *
+ * In two columns the "What happened" cell is about 190px wide, and "Late — 104
+ * min (tardy log)" does not fit on one line at that width. Every row that
+ * wrapped cost a second line, and on Julio's fifteen-incident notice that put
+ * page 1 fourteen pixels over and stopped the document being built at all.
+ *
+ * The year is the cheapest thing on the row to give up: the period it covers
+ * is already stated twice above the table, so "Sep 4, 2026" says nothing that
+ * "Sep 4" does not. Nothing is abbreviated that the reader needs. */
+const tableDay = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
+  { month: "short", day: "numeric" });
+
 /**
  * The incidents table.
  *
@@ -273,29 +286,69 @@ const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
  * Six, not ten: nine rows in one column turned out to be taller than fifteen
  * in two, which is how an eight-incident notice ran longer than Jayson's.
  */
-function incidentTable(incidents, lostSigned) {
+/* Past this much, the table stops sharing page 1 and takes a page of its own.
+ *
+ * A note prints on its own line under the reason it belongs to, so it costs as
+ * much height as another incident. Counting both is what separates Julio's
+ * fifteen rows with one note, which fitted with 30px to spare, from Ethan's
+ * fourteen with two, which did not fit at all. */
+const tableWeight = incidents =>
+  incidents.length + incidents.filter(i => i.note).length;
+
+const TABLE_FITS_PAGE_ONE = 12;
+
+function incidentTable(incidents, lostSigned, foot) {
   /* The note a manager typed when the points were entered, under the reason it
      belongs to. Andrew, 21 October: so the person knows what it was for. The
      reason above it is still the only thing anything reads — the impact
      paragraph and the policy reference are keyed off that text, never this. */
   const row = i =>
-    `<tr><td>${day(i.date)}</td><td>${esc(i.reason)}` +
+    `<tr><td>${tableDay(i.date)}</td><td>${esc(i.reason)}` +
     (i.note ? `<span class="inote">${esc(i.note)}</span>` : "") + `</td>` +
     `<td class="n pts">${i.delta > 0 ? "+" : "−"}${Math.abs(i.delta)}</td></tr>`;
-  const head = '<thead><tr><th style="width:110px">Date</th><th>What happened</th>' +
+  const head = '<thead><tr><th style="width:62px">Date</th><th>What happened</th>' +
                '<th class="n" style="width:46px">Pts</th></tr></thead>';
   const table = rows => `<table>${head}<tbody>${rows.map(row).join("")}</tbody></table>`;
 
+  let body;
   if (incidents.length <= 6) {
-    return "  " + table(incidents).replace("</table>",
+    body = "  " + table(incidents).replace("</table>",
       `<tfoot><tr><td colspan="2">Total lost in this period</td>` +
       `<td class="n">${lostSigned}</td></tr></tfoot></table>`);
+  } else {
+    const half = Math.ceil(incidents.length / 2);
+    body = `  <div class="cols2">${table(incidents.slice(0, half))}` +
+           `${table(incidents.slice(half))}</div>` + "\n" +
+           `  <div class="ttot"><span>Total lost in this period</span><span>${lostSigned}</span></div>`;
   }
-  const half = Math.ceil(incidents.length / 2);
-  return `  <div class="cols2">${table(incidents.slice(0, half))}` +
-         `${table(incidents.slice(half))}</div>
-` +
-         `  <div class="ttot"><span>Total lost in this period</span><span>${lostSigned}</span></div>`;
+
+  const heading = "  <h2>The incidents</h2>\n";
+  if (tableWeight(incidents) <= TABLE_FITS_PAGE_ONE) return heading + body;
+
+  /* Too tall to share page 1. Close that page here, with the footer it would
+     have had, and give the table a page of its own; the template's own footer
+     and </section> then close this one.
+
+     This is not cosmetic. A field's page is taken from which section it sits
+     in, so a section that prints as two pages stops the document being built
+     at all — which is exactly what Matthew hit on Julio's notice. Letting the
+     table have its own section keeps sections and pages equal however long
+     the list gets, instead of shaving the type until the next person
+     overflows it again. */
+  return `  <div class="pagefoot">
+    <span>Immediate Movers &amp; Storage &middot; Disciplinary Action Notice</span>
+    <span>${foot}</span>
+  </div>
+</section>
+
+<section class="page">
+
+  <div class="mast">
+    <div class="co">Immediate Movers <em>&amp;</em> Storage</div>
+    <div class="doc">Disciplinary Action Notice</div>
+  </div>
+
+` + heading + body;
 }
 
 /* The supervisor's three boxes, as the generator worked them out. In a flat
@@ -362,7 +415,12 @@ export function fill(data, opts = {}) {
     POINTS_NOW: String(data.pointsNow),
     WINDOW_FROM: day(data.windowFrom),
     WINDOW_TO: day(data.windowTo),
-    INCIDENT_TABLE: incidentTable(data.incidents, "−" + String(Math.abs(lost))),
+    /* The footer is passed in rather than left as a token: substitution runs
+       once through the map in order, so a {{EMPLOYEE_NAME}} emitted from here
+       would already have been passed over and would trip the unfilled-token
+       check below. */
+    INCIDENT_TABLE: incidentTable(data.incidents, "−" + String(Math.abs(lost)),
+      `${esc(data.employee)} &middot; ${day(data.issued)}`),
     POLICY_REF: esc(policyFor(data.incidents)[0]),
     POLICY_TEXT: policyFor(data.incidents)[1]
       ? `<p class="polq">${esc(policyFor(data.incidents)[1])}</p>` : "",
