@@ -51,7 +51,7 @@ export async function ingestReport(months, { now = new Date() } = {}) {
     if (!row) { results.push({ period, action: "not in report" }); continue; }
 
     const last = (await query(
-      `select completed_revenue::float8 as revenue, completed_jobs
+      `select completed_revenue::float8 as revenue, completed_jobs, source
          from revenue_snapshots where period = $1::date
         order by captured_at desc limit 1`, [period])).rows[0];
 
@@ -60,6 +60,29 @@ export async function ingestReport(months, { now = new Date() } = {}) {
       (last.completed_jobs ?? null) === (row.completed_jobs ?? null);
 
     if (same) { results.push({ period, action: "unchanged", revenue: row.completed_revenue }); continue; }
+
+    /* A figure somebody set by hand stands until somebody sets it again.
+     *
+     * Andrew, 3 November: "I think the revenue number updated after you
+     * manually changed it." October had been set to 195,000 by hand at 12:47
+     * and the report put it back to 120,646.92 at 17:33 the same day, because
+     * the newest reading wins everywhere that reads this table.
+     *
+     * That rule was right while the report was the whole truth. It is not any
+     * more: bookings moved to MoveitPro, so SmartMoving has counted no new
+     * completed job since 26 October and has been sending the same figure ever
+     * since — one that now understates October by about 74,000. A hand-entered
+     * figure is a correction to exactly that, so the report no longer gets to
+     * undo it.
+     *
+     * Held, not merged: the report's own figure is already in the history
+     * above this row, and nothing is deleted. To hand the month back to the
+     * report, enter its figure by hand once and the next report matches it. */
+    if (last && last.source === "manual") {
+      results.push({ period, action: "held by a manual entry",
+        revenue: last.revenue, reported: row.completed_revenue });
+      continue;
+    }
 
     await query(
       `insert into revenue_snapshots
