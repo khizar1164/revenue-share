@@ -96,6 +96,10 @@
   .ik{font-family:var(--head);font-weight:700;font-size:8.6pt;color:var(--ink);
     display:block;margin-bottom:1px}
   .imp p{margin:0;font-size:10pt;line-height:1.5;color:#1a1a1a}
+  /* The manager's own words, quoted. Set apart from the line above it so it
+     reads as a record of what was written at the time rather than as more of
+     the document's own voice. */
+  .imp p.impnote{margin:5px 0 0;font-size:9.2pt;font-style:italic;color:#4a4a4a}
   .lede{font-size:9.8pt;margin-bottom:6px}
   .hint{font-size:8.4pt;color:var(--grey);margin:-2px 0 4px}
   .record{margin:0 0 4px;padding-left:17px}
@@ -214,7 +218,7 @@
     <div><span class="k">Points now</span><span class="n">{{POINTS_NOW}}</span></div>
     <div class="note">Everyone starts each month on 15 points. Discipline is measured
       on a rolling 60 days, not the calendar month, so this covers
-      {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}</div>
+      {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}{{BASIS_NOTE}}</div>
   </div>
 
 {{INCIDENT_TABLE}}

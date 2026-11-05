@@ -884,10 +884,19 @@ Tyler Johnston  44.25"></textarea>
 
   function renderSignIns(d){
     var people = d.people || [];
-    var inAt = people.filter(function(p){ return p.last_at; });
+    /* Counted against the people who could actually be invited. Andrew, 3
+       November: the button said 17 and this said 6 of 19, and nothing on the
+       page explained the difference. It was the two with no email on file,
+       who can never sign in because no link can reach them. Say that out
+       loud rather than leaving two numbers to disagree. */
+    var gone = d.no_email || [];
     $("signInSummary").textContent = people.length
-      ? inAt.length + " of " + people.length + " have signed in at least once"
-        + (d.never ? ", " + d.never + " never have" : "")
+      ? d.signed_in + " of " + d.invited + " invited have signed in at least once"
+        + (d.invited - d.signed_in ? ", " + (d.invited - d.signed_in) + " never have" : "")
+        + (gone.length
+            ? " · " + gone.length + " have no email and cannot be sent a link: "
+              + gone.map(function(p){ return p.full_name; }).join(", ")
+            : "")
       : "";
 
     $("signInTbl").innerHTML =

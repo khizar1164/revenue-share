@@ -122,6 +122,54 @@ export async function findUser({ email, name }, opts = {}) {
   return null;
 }
 
+/* ------------------------------------------------------- private messages --- */
+
+/**
+ * Who a private message is sent as.
+ *
+ * Connecteam calls it a custom publisher, and a private message has to have
+ * one. There is no API to create one, so if the account has none this returns
+ * null and the caller says so rather than failing somewhere less obvious.
+ */
+export async function findPublisher(name = process.env.CONNECTEAM_PUBLISHER, opts = {}) {
+  const r = await call("/publishers/v1/publishers", opts);
+  const all = r?.data?.publishers ?? r?.data ?? [];
+  if (!all.length) return null;
+  const want = (name || "").trim().toLowerCase();
+  return (want && all.find(p => (p.name || "").toLowerCase() === want)) || all[0];
+}
+
+/**
+ * A private Connecteam message to one person.
+ *
+ * Andrew, 3 November: only six of nineteen movers had ever signed in, and he
+ * wanted the rest chased — his suggestion was Connecteam, because a message
+ * there reaches a phone that an email does not.
+ *
+ * Updates, the feature he demoed, has no API at all. The endpoint list is
+ * task, jobs, scheduler, daily-info, time-clock, chat, time-off, me, users,
+ * attachments and publishers, with courses and documents marked coming soon.
+ * Chat does have one, and it lands as the same push notification, so that is
+ * what this uses. Worth knowing it will look like a message rather than an
+ * update on their phones.
+ *
+ * Gated behind writingEnabled() like every other write here: a reminder run
+ * that goes off during a test would message real crew.
+ */
+export async function sendPrivateMessage({ userId, text, publisherId }, opts = {}) {
+  if (!writingEnabled()) {
+    return { sent: false, why: "Connecteam writing is off (CONNECTEAM_WRITE)" };
+  }
+  const pub = publisherId ?? (await findPublisher(undefined, opts))?.id;
+  if (!pub) {
+    return { sent: false, why: "no custom publisher on the account, which a private message needs" };
+  }
+  await call(`/chat/v1/conversations/privatemessage/${encodeURIComponent(userId)}`, {
+    ...opts, method: "POST", body: { publisherId: pub, text }
+  });
+  return { sent: true, publisherId: pub };
+}
+
 export async function listBoards(opts = {}) {
   const r = await call("/tasks/v1/taskboards", opts);
   /* The reply has been seen shaped both ways in the wild, so take either. */

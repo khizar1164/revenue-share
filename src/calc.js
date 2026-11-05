@@ -14,7 +14,7 @@
  *            rises to absorb the gap, so the pool always pays out in full.
  */
 
-import { query, pointNote } from "./db.js";
+import { query, pointNote, hasColumn } from "./db.js";
 
 export const RULES = {
   commissionRate: 0.02,      // 2% of completed revenue
@@ -45,10 +45,22 @@ async function gather(period) {
       order by captured_at desc
       limit 1`, [period]);
 
+  /* By the month the claim was settled, not the month of the job.
+     Andrew, 3 November: a claim is often "not resolved for a month to two
+     months later", and attributing it to the job's month reopened a month
+     whose pool had already been quoted. Three claims did exactly that to
+     October after he had approved it, taking the pool down $374.50 with
+     nothing announcing it. occurred_on still says which job it was. */
+  /* resolved_on is named only once it exists. Render deploys on a push and
+     nothing runs the migrations, so there is always a window where the code is
+     ahead of the schema, and Postgres rejects a whole statement that names a
+     column it does not have. Falling back to occurred_on is the old behaviour,
+     which is wrong in the way described above but not broken. */
+  const claimMonth = await hasColumn("claims", "resolved_on") ? "resolved_on" : "occurred_on";
   const claims = await query(
     `select coalesce(sum(amount), 0)::float8 as total, count(*)::int as n
        from claims
-      where date_trunc('month', occurred_on) = $1::date`, [period]);
+      where date_trunc('month', ${claimMonth}) = $1::date`, [period]);
 
   /* one row per employee with everything they earned this month */
   const people = await query(
@@ -80,11 +92,20 @@ async function gather(period) {
             /* demo rows set a points figure for a comparison; they are not
                anything the person did, so they never count as discipline —
                and the 60-day window would otherwise carry them into a live month */
+            /* The window ends today, or at month end for a month already over.
+               Andrew, 3 November: Julio read 21 points in October and 11 in
+               November, "which isn't true". Counting back 60 days from the end
+               of the selected month puts that end in the future while the month
+               is still running, which drags the start forward and hides
+               September. least() pins it to today instead, so the current month
+               tells the truth and a closed month still shows the window as it
+               stood when it closed, rather than shifting under anyone. */
             coalesce((select -sum(pe.delta) from point_events pe
                        where pe.employee_id = e.id and pe.delta < 0
                          and pe.recorded_by is distinct from 'demo'
-                         and pe.occurred_on > ($1::date + interval '1 month' - ($2 || ' days')::interval)
-                         and pe.occurred_on < ($1::date + interval '1 month')), 0)::int
+                         and pe.occurred_on >  least($1::date + interval '1 month', current_date)
+                                               - ($2 || ' days')::interval
+                         and pe.occurred_on <= least($1::date + interval '1 month', current_date)), 0)::int
               as discipline_lost
 
        from employees e

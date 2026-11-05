@@ -17,7 +17,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
-import { query, loadEnv, safeTarget, hasColumn, pointNote } from "./db.js";
+import { query, loadEnv, safeTarget, hasColumn, pointNote, withTransaction } from "./db.js";
+import { tipOfTheDay } from "./tips.js";
+import { writeTip } from "./tip-writer.js";
 import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
@@ -239,8 +241,61 @@ app.get("/api/board/:token", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   res.set("cache-control", "no-store");
   const [m, y] = await Promise.all([monthly(year, month), ytd(year, month)]);
-  res.json({ ...boardView(m, y), version: BUILD });
+  res.json({ ...boardView(m, y), learning: await learningPage(), version: BUILD });
 }));
+
+/* What we are learning: the claims, and what to do differently.
+ *
+ * Andrew wanted the claims on the wall so "the crew knows where we have more
+ * room for improvement", and wanted it not to read as a list of failures. So
+ * the tip leads and the claim is the evidence behind it.
+ *
+ * Code names only. That is already the board's rule everywhere else and
+ * Andrew restated it: "the mover's name should be private on the dashboard."
+ * Six code names will not fit a row on a wall-mounted screen, so the row
+ * carries the first three and a count of the rest.
+ *
+ * The pool is every claim that has a tip, not this month's. Andrew: "if there
+ * are two claims in a month, the tip will change every day." Two claims would
+ * empty a monthly page in two days, and a lesson from October is still a
+ * lesson in December.
+ */
+async function learningPage() {
+  if (!await hasColumn("claim_tips", "tip")) return null;
+
+  const linked = await hasColumn("point_events", "claim_id");
+  const rows = (await query(
+    `select c.id, c.job_number, c.amount::float8 as amount, c.reason,
+            to_char(c.occurred_on, 'Mon DD') as on_day, t.tip
+       ${linked ? `, coalesce((select array_agg(e.code_name order by e.code_name)
+                                 from point_events pe
+                                 join employees e on e.id = pe.employee_id
+                                where pe.claim_id = c.id), '{}') as crew` : ""}
+       from claims c join claim_tips t on t.claim_id = c.id
+      order by c.occurred_on desc`)).rows;
+
+  if (!rows.length) return null;
+
+  const today = tipOfTheDay(rows);
+  const shown = c => {
+    const crew = c.crew ?? [];
+    return {
+      tip: c.tip, reason: c.reason, amount: c.amount,
+      job_number: c.job_number, on_day: c.on_day,
+      crew: crew.slice(0, 3),
+      crew_more: Math.max(0, crew.length - 3)
+    };
+  };
+
+  return {
+    today: shown(today),
+    /* The rest, so the page is not one sentence on a large screen. Eight
+       fills the lower third in two columns without reaching the footer; it
+       is a glance, not a list to be studied. */
+    others: rows.filter(r => r.id !== today.id).slice(0, 8).map(shown),
+    total: rows.length
+  };
+}
 
 /* ------------------------------------------------------------- sign in ---- */
 
@@ -582,23 +637,122 @@ app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
 }));
 
 /* claims, adjustments and hours all follow the same shape */
+/* A claim, and in one go the points it costs the crew who were on the job.
+ *
+ * Andrew, 3 November: six people on a job meant seven separate actions, with
+ * the job number and the note retyped each time. "Maybe if I could just select
+ * here and it automatically adds it over here with the reason and adds it as a
+ * claim."
+ *
+ * One transaction, because a claim that docked three of six people and then
+ * failed is worse than one that did not happen: the pool has moved, half the
+ * crew are carrying points, and nothing on any screen says so.
+ */
 app.post("/api/admin/claims", wrap(async (req, res) => {
-  const { occurred_on, job_number, reason, amount } = req.body ?? {};
+  const { occurred_on, resolved_on, job_number, reason, amount } = req.body ?? {};
   if (!(Number(amount) > 0)) return res.status(400).json({ error: "amount must be greater than zero" });
+
+  const crew = Array.isArray(req.body?.crew) ? req.body.crew.filter(Boolean) : [];
+  /* -3 is what every claim has cost a person so far, so it is the default
+     rather than a rule. A claim with nobody on it is allowed and normal: the
+     pool still takes the hit when the crew is not yet known. */
+  const delta = Number.isInteger(req.body?.delta) && req.body.delta < 0 ? req.body.delta : -3;
+
+  const linkable = crew.length && await hasColumn("point_events", "claim_id");
+  const dated = await hasColumn("claims", "resolved_on");
+  const noteable = await hasColumn("point_events", "note");
+
+  const out = await withTransaction(async c => {
+    const claim = (await c.query(
+      `insert into claims (occurred_on, job_number, reason, amount, recorded_by
+                          ${dated ? ", resolved_on" : ""})
+       values ($1,$2,$3,$4,$5${dated ? ",$6" : ""}) returning id`,
+      [occurred_on || new Date(), job_number || null, reason || "Claim", amount,
+       req.body.recorded_by || "admin",
+       ...(dated ? [resolved_on || new Date()] : [])])).rows[0];
+
+    /* The deduction is dated to the job, not to the settlement. Who pays for a
+       claim is a question about the pool; when somebody was careless is a
+       question about their record, and that was the day of the job. */
+    for (const employee_id of crew) {
+      await c.query(
+        `insert into point_events (employee_id, occurred_on, delta, reason, job_number,
+                                   recorded_by${noteable ? ", note" : ""}${linkable ? ", claim_id" : ""})
+         values ($1,$2,$3,$4,$5,$6${noteable ? ",$7" : ""}${linkable ? `,$${noteable ? 8 : 7}` : ""})`,
+        [employee_id, occurred_on || new Date(), delta, "Claim", job_number || null,
+         req.body.recorded_by || "admin",
+         ...(noteable ? [String(reason ?? "").trim().slice(0, 300) || null] : []),
+         ...(linkable ? [claim.id] : [])]);
+    }
+    return claim;
+  });
+
+  /* The lesson, written now rather than each morning, so the wording stays put
+     and can be read before it reaches a screen in the break room. Outside the
+     transaction and never fatal: a claim that recorded correctly must not fail
+     because the board would have been one sentence short. */
+  let tip = null, tipSource = "none";
+  if (await hasColumn("claim_tips", "tip")) {
+    ({ tip, source: tipSource } = await writeTip({ reason, note: reason }));
+    if (tip) {
+      await query(
+        `insert into claim_tips (claim_id, tip) values ($1,$2)
+         on conflict (claim_id) do nothing`, [out.id, tip]).catch(e =>
+        console.warn(`claim ${out.id} recorded, tip not stored: ${e.message}`));
+    }
+  }
+
+  /* Returned so the form can show it back straight away. Andrew has just
+     typed the reason, so this is the one moment he can read the sentence and
+     fix it with the incident still in his head. */
+  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0,
+                         tip, tip_source: tipSource });
+}));
+
+/* Andrew's own words, over whatever was generated.
+ *
+ * A sentence going on a screen in front of the crew has to be correctable by
+ * the person who has to stand behind it. edited_by is what makes it stick:
+ * nothing generated ever overwrites a tip somebody chose.
+ */
+app.put("/api/admin/claims/:id/tip", wrap(async (req, res) => {
+  if (!await hasColumn("claim_tips", "tip")) {
+    return res.status(503).json({ error: "tips are not set up on this database yet" });
+  }
+  const tip = String(req.body?.tip ?? "").trim().slice(0, 400);
+  if (!tip) return res.status(400).json({ error: "a tip cannot be empty" });
+
   const r = await query(
-    `insert into claims (occurred_on, job_number, reason, amount, recorded_by)
-     values ($1,$2,$3,$4,$5) returning id`,
-    [occurred_on || new Date(), job_number || null, reason || "Claim", amount, req.body.recorded_by || "admin"]);
-  res.status(201).json(r.rows[0]);
+    `insert into claim_tips (claim_id, tip, edited_by, updated_at)
+     values ($1, $2, $3, now())
+     on conflict (claim_id) do update
+        set tip = excluded.tip, edited_by = excluded.edited_by, updated_at = now()
+     returning claim_id, tip, edited_by`,
+    [req.params.id, tip, req.body?.edited_by || "admin"]);
+  res.json(r.rows[0]);
 }));
 
 app.get("/api/admin/claims", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   const period = `${year}-${String(month).padStart(2, "0")}-01`;
+  const dated = await hasColumn("claims", "resolved_on");
   const r = await query(
-    `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on, job_number, reason, amount::float8 as amount, recorded_by
-       from claims where date_trunc('month', occurred_on) = $1::date
-      order by occurred_on desc, id desc`, [period]);
+    /* Listed under the month that bears the cost, which is when it was
+       resolved. The job date comes back too, because on a claim settled weeks
+       later the two differ and the difference is the thing worth seeing.
+       Named only once the column exists: the code reaches Render before the
+       migration does, and a select naming a missing column fails outright. */
+    dated
+      ? `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on,
+                to_char(resolved_on, 'YYYY-MM-DD') as resolved_on,
+                job_number, reason, amount::float8 as amount, recorded_by
+           from claims where date_trunc('month', resolved_on) = $1::date
+          order by resolved_on desc, id desc`
+      : `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on,
+                null as resolved_on,
+                job_number, reason, amount::float8 as amount, recorded_by
+           from claims where date_trunc('month', occurred_on) = $1::date
+          order by occurred_on desc, id desc`, [period]);
   res.json(r.rows);
 }));
 
@@ -850,6 +1004,20 @@ app.get("/tv/:token", (req, res) => {
   res.sendFile(join(root, "public", "tv.html"));
 });
 
+/* What we are learning, on its own screen.
+ *
+ * A page rather than another slot in the board's rotation, which is what
+ * Andrew asked for. It also means the two can be shown at once on two
+ * screens, or one left up on its own, without the standings cycling past
+ * every twenty seconds while somebody is still reading.
+ *
+ * Same token as the board, because it is the same wall and the same
+ * audience, and a second secret to keep would be a second thing to lose. */
+app.get("/learning/:token", (req, res) => {
+  if (!tvTokenOk(req.params.token)) return res.status(404).send("Not found");
+  res.sendFile(join(root, "public", "learning.html"));
+});
+
 /* Andrew and Nicole. Email sign-in goes in front of this before it is public —
    until then it is reachable only on the local machine. */
 app.get("/admin", (_req, res) => res.sendFile(join(root, "public", "admin.html")));
@@ -966,6 +1134,18 @@ app.get("/api/admin/sign-ins", wrap(async (req, res) => {
       where e.is_mover and e.status = 'active'
       order by s.last_at desc nulls last, e.full_name`);
 
+  /* Andrew, 3 November: the button offered to write to 17 people while this
+     panel said 6 of 19. Both were right and neither said so. The invite needs
+     an email address and this list did not ask for one, so the gap is exactly
+     the people with none — Jason Plummer and Landon Rodriguez at the time.
+     They can never sign in, because no link can reach them, and they sat in
+     the never column making take-up look worse than it was.
+     The same reasoning the comment above applies to leavers applies to them:
+     report against who could actually be invited, and say plainly why anyone
+     is missing rather than leaving two numbers to disagree on screen. */
+  const reachable = people.rows.filter(p => p.email !== "");
+  const unreachable = people.rows.filter(p => p.email === "");
+
   const recent = await query(
     `select s.at, e.full_name, e.code_name, e.status, s.user_agent
        from sign_ins s
@@ -977,7 +1157,14 @@ app.get("/api/admin/sign-ins", wrap(async (req, res) => {
     now: new Date().toISOString(),
     people: people.rows,
     recent: recent.rows,
-    never: people.rows.filter(p => !p.last_at).length
+    never: people.rows.filter(p => !p.last_at).length,
+
+    /* Take-up measured against who could be invited, plus the people who
+       could not, by name. The panel can then state its own arithmetic
+       instead of disagreeing with the invite button. */
+    invited:     reachable.length,
+    signed_in:   reachable.filter(p => p.last_at).length,
+    no_email:    unreachable.map(p => ({ full_name: p.full_name, code_name: p.code_name }))
   });
 }));
 
