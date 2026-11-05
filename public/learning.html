@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What we are learning</title>
+<style>
+  /* A page of its own, not a slot on the standings board.
+   *
+   * Andrew, 3 November: the claims should go on the break-room wall so the
+   * crew can see "where we have more room for improvement", and in the same
+   * breath, "I don't want it so highlighted on 'hey, this is everything we're
+   * doing wrong'". So the tip is the page and the claim is the small print
+   * underneath it. A list of failures with advice attached is still a list of
+   * failures; advice with its evidence attached is training.
+   *
+   * Built for one 1920x1080 screen read from across a room, and scaled to
+   * whatever it actually lands on, the same way tv.html does it. The tip is
+   * set at a size that can be read at four or five metres, which is the far
+   * side of the break room.
+   */
+  :root{
+    --plane:#111214; --ink:#f6f4f1; --ink-2:#cfcbc4; --ink-3:#8b867e;
+    --seam:#26282c; --crit:#ff5500; --good:#39b06a;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --head:"Segoe UI Semibold",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--plane);color:var(--ink-2);
+    font-family:var(--sans);overflow:hidden}
+  #wrap{width:100vw;height:100vh;overflow:hidden}
+  #page{width:1920px;height:1080px;transform-origin:top left;padding:26px 44px;
+    display:flex;flex-direction:column;gap:20px;background:var(--plane)}
+
+  .top{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2px solid var(--seam);padding-bottom:14px}
+  .brand{font-family:var(--head);font-size:30px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--ink)}
+  .brand em{color:var(--crit);font-style:normal}
+  .title{margin-left:20px;font-size:27px;color:var(--ink-3)}
+  .clock{font-family:var(--head);font-size:30px;color:var(--ink)}
+
+  /* The tip is the point of the page, so it gets the room. */
+  .main{flex:0 0 auto;padding:40px 0 10px}
+  .tip{font-size:64px;line-height:1.2;font-weight:600;color:var(--ink);
+    letter-spacing:-0.5px;max-width:1680px}
+  .from{margin-top:26px;font-size:27px;color:var(--ink-3)}
+  .from b{color:var(--ink-2);font-weight:600}
+  .from .amt{color:var(--crit);font-weight:700}
+
+  /* The others, small, so one sentence is not alone on a large screen. They
+     are there to be glanced at, not studied. */
+  .rest{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;
+    gap:14px 56px;align-content:start;padding-top:18px;
+    border-top:2px solid var(--seam)}
+  .row{display:flex;gap:16px;align-items:baseline;font-size:24px;
+    color:var(--ink-3);line-height:1.35}
+  .row .a{color:var(--crit);font-weight:600;white-space:nowrap;min-width:116px}
+  .row .t{color:var(--ink-2)}
+
+  .foot{flex:0 0 auto;display:flex;justify-content:space-between;
+    font-size:22px;color:var(--ink-3);
+    border-top:2px solid var(--seam);padding-top:14px}
+
+  /* Nothing to show is good news and should read like it, not like a page
+     that failed to load. */
+  .empty{font-size:48px;color:var(--good);font-weight:600;padding:60px 0}
+  #err{position:fixed;left:0;right:0;bottom:0;background:#3a1d14;color:#ffd9c7;
+    font-size:20px;padding:10px 20px;display:none}
+</style>
+</head>
+<body>
+
+<div id="wrap"><div id="page">
+  <div class="top">
+    <div><span class="brand">Immediate Movers <em>&amp;</em> Storage</span>
+         <span class="title">What we are learning</span></div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <div class="main">
+    <div class="tip" id="tip">&mdash;</div>
+    <div class="from" id="from"></div>
+  </div>
+
+  <div class="rest" id="rest"></div>
+
+  <div class="foot">
+    <span id="foot"></span>
+    <span id="stamp"></span>
+  </div>
+</div></div>
+<div id="err"></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c];
+    });
+  };
+  var usd = function (n) {
+    return "$" + Number(n || 0).toLocaleString("en-US",
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  /* The token is in the path, the same as the board: /learning/:token. It is
+     the only thing protecting this page, so it is never put in a query string
+     where it would end up in a log. */
+  var TOKEN = location.pathname.split("/").filter(Boolean).pop() || "";
+
+  function fit() {
+    var s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    var p = $("page");
+    p.style.transform = "scale(" + s + ")";
+    p.style.marginLeft = Math.max(0, (innerWidth - 1920 * s) / 2) + "px";
+  }
+  addEventListener("resize", fit);
+
+  function clock() {
+    var n = new Date(), h = n.getHours(), m = n.getMinutes();
+    var ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+    $("clock").textContent = h + ":" + (m < 10 ? "0" : "") + m + " " + ap;
+  }
+
+  function render(L) {
+    if (!L || !L.today) {
+      $("tip").innerHTML = '<span class="empty">No claims on record. Nothing to put right.</span>';
+      $("from").textContent = "";
+      $("rest").innerHTML = "";
+      $("foot").textContent = "";
+      return;
+    }
+    var t = L.today;
+    $("tip").textContent = t.tip;
+
+    /* Code names only. That is the board's rule everywhere and the one Andrew
+       restated: "the mover's name should be private on the dashboard." Three
+       and a count of the rest, because six will not fit a line at this size
+       and a line that wraps on a wall is a line nobody reads. */
+    var bits = [];
+    if (t.on_day) bits.push(esc(t.on_day));
+    if (t.job_number) bits.push("job " + esc(t.job_number));
+    if (t.amount) bits.push('<span class="amt">' + usd(t.amount) + "</span>");
+    var who = (t.crew || []).join(", ") + (t.crew_more ? " +" + t.crew_more + " more" : "");
+    if (who.trim()) bits.push("<b>" + esc(who) + "</b>");
+    $("from").innerHTML = bits.length ? "From: " + bits.join(" &middot; ") : "";
+
+    $("rest").innerHTML = (L.others || []).map(function (o) {
+      return '<div class="row"><span class="a">' + usd(o.amount) + "</span>"
+           + '<span class="t">' + esc(o.reason) + "</span></div>";
+    }).join("");
+
+    $("foot").textContent = L.total
+      ? L.total + (L.total === 1 ? " claim on record. " : " claims on record. ")
+        + "A different one each day."
+      : "";
+    fit();
+  }
+
+  var failures = 0;
+  function load() {
+    fetch("/api/board/" + encodeURIComponent(TOKEN), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (d) {
+        failures = 0;
+        $("err").style.display = "none";
+        render(d.learning);
+        $("stamp").textContent = "updated " + new Date().toLocaleTimeString(undefined,
+          { hour: "numeric", minute: "2-digit" });
+      })
+      .catch(function (e) {
+        /* One bad request must not blank a wall. The page keeps whatever it
+           last showed and only says something after it has failed repeatedly,
+           because a screen that flickers an error every minute teaches people
+           to ignore it. */
+        if (++failures >= 3) {
+          $("err").textContent = "Cannot reach the server (" + e.message + "). Showing the last update.";
+          $("err").style.display = "block";
+        }
+      });
+  }
+
+  clock(); fit(); load();
+  setInterval(clock, 15000);
+  /* Every five minutes. The tip only changes at midnight, so this is really
+     about picking up a new claim the same day it is recorded. */
+  setInterval(load, 5 * 60 * 1000);
+})();
+</script>
+</body>
+</html>

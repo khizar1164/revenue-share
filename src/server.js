@@ -289,8 +289,10 @@ async function learningPage() {
 
   return {
     today: shown(today),
-    /* The rest, so the page is not one sentence on a large screen. */
-    others: rows.filter(r => r.id !== today.id).slice(0, 5).map(shown),
+    /* The rest, so the page is not one sentence on a large screen. Eight
+       fills the lower third in two columns without reaching the footer; it
+       is a glance, not a list to be studied. */
+    others: rows.filter(r => r.id !== today.id).slice(0, 8).map(shown),
     total: rows.length
   };
 }
@@ -1000,6 +1002,20 @@ app.use("/static", express.static(join(root, "public"), { maxAge: "1h" }));
 app.get("/tv/:token", (req, res) => {
   if (!tvTokenOk(req.params.token)) return res.status(404).send("Not found");
   res.sendFile(join(root, "public", "tv.html"));
+});
+
+/* What we are learning, on its own screen.
+ *
+ * A page rather than another slot in the board's rotation, which is what
+ * Andrew asked for. It also means the two can be shown at once on two
+ * screens, or one left up on its own, without the standings cycling past
+ * every twenty seconds while somebody is still reading.
+ *
+ * Same token as the board, because it is the same wall and the same
+ * audience, and a second secret to keep would be a second thing to lose. */
+app.get("/learning/:token", (req, res) => {
+  if (!tvTokenOk(req.params.token)) return res.status(404).send("Not found");
+  res.sendFile(join(root, "public", "learning.html"));
 });
 
 /* Andrew and Nicole. Email sign-in goes in front of this before it is public —
