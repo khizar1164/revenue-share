@@ -48,7 +48,12 @@ export const TIP_LIBRARY = [
   [/floor|carpet|scratch/i,
    "Floor protection goes down before the first item comes in, across the whole path, not just the doorway. Runners cost minutes and floor repairs cost hundreds."],
 
-  [/window|storm/i,
+  /* Not a bare /window/. An arrival window is a time, not a pane of glass,
+     and "arrived three hours outside the window" was matching this and
+     putting advice about storm covers on the wall. A pattern that is wrong is
+     worse than one that misses: a miss shows no tip, a false match shows
+     confident nonsense. */
+  [/storm window|window cover|window pane|windowpane|glass|glazing/i,
    "Storm windows and covers break because they are in the path and nobody moved them. Walk the route first and take off what is in the way before carrying anything through it."],
 
   [/dolly|strap|shoulder|equipment/i,

@@ -18,7 +18,8 @@ import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
 import { query, loadEnv, safeTarget, hasColumn, pointNote, withTransaction } from "./db.js";
-import { tipFor, tipOfTheDay } from "./tips.js";
+import { tipOfTheDay } from "./tips.js";
+import { writeTip } from "./tip-writer.js";
 import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
@@ -688,9 +689,9 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
      and can be read before it reaches a screen in the break room. Outside the
      transaction and never fatal: a claim that recorded correctly must not fail
      because the board would have been one sentence short. */
-  let tip = null;
+  let tip = null, tipSource = "none";
   if (await hasColumn("claim_tips", "tip")) {
-    tip = tipFor({ reason, note: reason });
+    ({ tip, source: tipSource } = await writeTip({ reason, note: reason }));
     if (tip) {
       await query(
         `insert into claim_tips (claim_id, tip) values ($1,$2)
@@ -699,7 +700,34 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
     }
   }
 
-  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0, tip });
+  /* Returned so the form can show it back straight away. Andrew has just
+     typed the reason, so this is the one moment he can read the sentence and
+     fix it with the incident still in his head. */
+  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0,
+                         tip, tip_source: tipSource });
+}));
+
+/* Andrew's own words, over whatever was generated.
+ *
+ * A sentence going on a screen in front of the crew has to be correctable by
+ * the person who has to stand behind it. edited_by is what makes it stick:
+ * nothing generated ever overwrites a tip somebody chose.
+ */
+app.put("/api/admin/claims/:id/tip", wrap(async (req, res) => {
+  if (!await hasColumn("claim_tips", "tip")) {
+    return res.status(503).json({ error: "tips are not set up on this database yet" });
+  }
+  const tip = String(req.body?.tip ?? "").trim().slice(0, 400);
+  if (!tip) return res.status(400).json({ error: "a tip cannot be empty" });
+
+  const r = await query(
+    `insert into claim_tips (claim_id, tip, edited_by, updated_at)
+     values ($1, $2, $3, now())
+     on conflict (claim_id) do update
+        set tip = excluded.tip, edited_by = excluded.edited_by, updated_at = now()
+     returning claim_id, tip, edited_by`,
+    [req.params.id, tip, req.body?.edited_by || "admin"]);
+  res.json(r.rows[0]);
 }));
 
 app.get("/api/admin/claims", wrap(async (req, res) => {
