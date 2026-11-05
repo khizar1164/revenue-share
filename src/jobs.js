@@ -33,6 +33,8 @@ import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { syncCrew } from "./sync/crew.js";
 import { syncLeadDates } from "./sync/lead-dates.js";
+import { sendReminders } from "./sync/reminders.js";
+import { writingEnabled } from "./connecteam.js";
 import { placeCrewMembers } from "./roster.js";
 import { query, withTransaction } from "./db.js";
 
@@ -319,6 +321,17 @@ export function registerJobs(scheduler) {
      booked this morning should not have to wait until tomorrow for its date. */
   scheduler.add("lead-dates", o => syncLeadDates(o ?? {}), {
     everyMs: 15 * MIN, runAtStartAfterMs: 105_000 });
+  /* Nudging people towards their own numbers. Once a day at a civilised hour,
+     because the job decides who is due from when they were last messaged
+     rather than from when it runs: a daily pass is enough to honour a weekly
+     and a two-day cadence both. 9:30 rather than overnight, since a push that
+     wakes somebody at three in the morning is the fastest way to get the
+     channel muted. Only where there is a key, and still gated behind
+     CONNECTEAM_WRITE below that. */
+  if (process.env.CONNECTEAM_API_KEY) {
+    scheduler.add("reminders", () => sendReminders({ dryRun: !writingEnabled() }),
+      { dailyAt: "09:30" });
+  }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
   return scheduler;
 }
