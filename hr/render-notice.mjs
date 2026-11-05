@@ -444,6 +444,18 @@ export function fill(data, opts = {}) {
     POINTS_NOW: String(data.pointsNow),
     WINDOW_FROM: day(data.windowFrom),
     WINDOW_TO: day(data.windowTo),
+
+    /* Which of the two documents this is.
+     *
+     * A notice raised on a date is the record of a threshold being crossed,
+     * and its figures are the ones frozen at that moment -- which is the whole
+     * reason the window above may not match today's count. One issued on
+     * request is a conversation somebody chose to have. Both are legitimate
+     * and they are not the same thing, so whoever is holding it can tell. */
+    BASIS_NOTE: data.raisedOn
+      ? ` These are the figures as they stood on ${day(data.raisedOn)}, when ${esc(data.lostAtCrossing)} `
+        + `points were lost and this notice was raised. They do not change afterwards.`
+      : ` No threshold was crossed; this notice was issued on request and shows the position today.`,
     /* The footer is passed in rather than left as a token: substitution runs
        once through the map in order, so a {{EMPLOYEE_NAME}} emitted from here
        would already have been passed over and would trip the unfilled-token

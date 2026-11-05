@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
 import { query, loadEnv, safeTarget, hasColumn, pointNote, withTransaction } from "./db.js";
+import { tipFor, tipOfTheDay } from "./tips.js";
 import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
@@ -239,8 +240,59 @@ app.get("/api/board/:token", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   res.set("cache-control", "no-store");
   const [m, y] = await Promise.all([monthly(year, month), ytd(year, month)]);
-  res.json({ ...boardView(m, y), version: BUILD });
+  res.json({ ...boardView(m, y), learning: await learningPage(), version: BUILD });
 }));
+
+/* What we are learning: the claims, and what to do differently.
+ *
+ * Andrew wanted the claims on the wall so "the crew knows where we have more
+ * room for improvement", and wanted it not to read as a list of failures. So
+ * the tip leads and the claim is the evidence behind it.
+ *
+ * Code names only. That is already the board's rule everywhere else and
+ * Andrew restated it: "the mover's name should be private on the dashboard."
+ * Six code names will not fit a row on a wall-mounted screen, so the row
+ * carries the first three and a count of the rest.
+ *
+ * The pool is every claim that has a tip, not this month's. Andrew: "if there
+ * are two claims in a month, the tip will change every day." Two claims would
+ * empty a monthly page in two days, and a lesson from October is still a
+ * lesson in December.
+ */
+async function learningPage() {
+  if (!await hasColumn("claim_tips", "tip")) return null;
+
+  const linked = await hasColumn("point_events", "claim_id");
+  const rows = (await query(
+    `select c.id, c.job_number, c.amount::float8 as amount, c.reason,
+            to_char(c.occurred_on, 'Mon DD') as on_day, t.tip
+       ${linked ? `, coalesce((select array_agg(e.code_name order by e.code_name)
+                                 from point_events pe
+                                 join employees e on e.id = pe.employee_id
+                                where pe.claim_id = c.id), '{}') as crew` : ""}
+       from claims c join claim_tips t on t.claim_id = c.id
+      order by c.occurred_on desc`)).rows;
+
+  if (!rows.length) return null;
+
+  const today = tipOfTheDay(rows);
+  const shown = c => {
+    const crew = c.crew ?? [];
+    return {
+      tip: c.tip, reason: c.reason, amount: c.amount,
+      job_number: c.job_number, on_day: c.on_day,
+      crew: crew.slice(0, 3),
+      crew_more: Math.max(0, crew.length - 3)
+    };
+  };
+
+  return {
+    today: shown(today),
+    /* The rest, so the page is not one sentence on a large screen. */
+    others: rows.filter(r => r.id !== today.id).slice(0, 5).map(shown),
+    total: rows.length
+  };
+}
 
 /* ------------------------------------------------------------- sign in ---- */
 
@@ -632,7 +684,22 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
     return claim;
   });
 
-  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0 });
+  /* The lesson, written now rather than each morning, so the wording stays put
+     and can be read before it reaches a screen in the break room. Outside the
+     transaction and never fatal: a claim that recorded correctly must not fail
+     because the board would have been one sentence short. */
+  let tip = null;
+  if (await hasColumn("claim_tips", "tip")) {
+    tip = tipFor({ reason, note: reason });
+    if (tip) {
+      await query(
+        `insert into claim_tips (claim_id, tip) values ($1,$2)
+         on conflict (claim_id) do nothing`, [out.id, tip]).catch(e =>
+        console.warn(`claim ${out.id} recorded, tip not stored: ${e.message}`));
+    }
+  }
+
+  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0, tip });
 }));
 
 app.get("/api/admin/claims", wrap(async (req, res) => {
