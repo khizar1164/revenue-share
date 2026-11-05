@@ -39,9 +39,40 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
   if (!who.rowCount) throw new Error("no such person");
   const person = who.rows[0];
 
-  const windowTo = day(issued ?? new Date().toISOString());
-  const from = new Date(new Date(windowTo).getTime() - days * 864e5);
-  const windowFrom = day(from.toISOString());
+  /* The window comes from the open notice when there is one.
+   *
+   * Andrew, 3 November: "if I don't do the write up that day and points fall
+   * off, what date does it end up going by?" He cannot always write somebody
+   * up the same day -- "we haven't seen the mover come back from a job yet" --
+   * and recomputing the window at the moment the button is pressed means the
+   * document understates whatever triggered it. Julio crossed on 30 October at
+   * 18 points over a window opening 31 August; by 5 November the live count
+   * read 23 over a window opening 6 September, and the early-September
+   * incidents that caused it had aged out.
+   *
+   * discipline_notices has recorded every crossing since 3 October, with the
+   * points and the window frozen as they were. Nothing new had to be captured;
+   * the document was reading the wrong number. So it reads the notice, and
+   * Matthew can print it today or in three weeks and get what actually
+   * happened.
+   *
+   * Without an open notice it still builds, from the live window, for an
+   * informal conversation. The two are stamped differently so nobody has to
+   * guess which they are holding. */
+  const open = issued ? { rowCount: 0, rows: [] } : await query(
+    `select level, lost, window_from::text as f, window_to::text as t,
+            raised_at::date::text as raised
+       from discipline_notices
+      where employee_id = $1 and cleared_at is null
+      order by case level when 'termination' then 3 when 'suspension' then 2 else 1 end desc,
+               raised_at desc
+      limit 1`, [employeeId]);
+  const notice = open.rows[0] ?? null;
+
+  const windowTo = notice ? notice.t : day(issued ?? new Date().toISOString());
+  const windowFrom = notice
+    ? notice.f
+    : day(new Date(new Date(windowTo).getTime() - days * 864e5).toISOString());
 
   /* Every deduction in the window, oldest first, which is how the table on
      page 1 reads: a sequence rather than a league table. */
@@ -88,7 +119,15 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
     pointsNow: Number(now.rows[0].pts) + RULES.startPoints,
     windowFrom, windowTo,
     incidents, claims,
-    value: valueFor(incidents)
+    value: valueFor(incidents),
+
+    /* Which of the two documents this is. A notice raised on a date is the
+       record of a threshold being crossed; one issued on request is a
+       conversation somebody chose to have. Both are legitimate and they are
+       not the same thing, so the document says which. */
+    raisedOn: notice ? notice.raised : null,
+    lostAtCrossing: notice ? Number(notice.lost) : null,
+    basis: notice ? "raised" : "requested"
   };
 }
 
