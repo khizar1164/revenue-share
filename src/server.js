@@ -966,6 +966,18 @@ app.get("/api/admin/sign-ins", wrap(async (req, res) => {
       where e.is_mover and e.status = 'active'
       order by s.last_at desc nulls last, e.full_name`);
 
+  /* Andrew, 3 November: the button offered to write to 17 people while this
+     panel said 6 of 19. Both were right and neither said so. The invite needs
+     an email address and this list did not ask for one, so the gap is exactly
+     the people with none — Jason Plummer and Landon Rodriguez at the time.
+     They can never sign in, because no link can reach them, and they sat in
+     the never column making take-up look worse than it was.
+     The same reasoning the comment above applies to leavers applies to them:
+     report against who could actually be invited, and say plainly why anyone
+     is missing rather than leaving two numbers to disagree on screen. */
+  const reachable = people.rows.filter(p => p.email !== "");
+  const unreachable = people.rows.filter(p => p.email === "");
+
   const recent = await query(
     `select s.at, e.full_name, e.code_name, e.status, s.user_agent
        from sign_ins s
@@ -977,7 +989,14 @@ app.get("/api/admin/sign-ins", wrap(async (req, res) => {
     now: new Date().toISOString(),
     people: people.rows,
     recent: recent.rows,
-    never: people.rows.filter(p => !p.last_at).length
+    never: people.rows.filter(p => !p.last_at).length,
+
+    /* Take-up measured against who could be invited, plus the people who
+       could not, by name. The panel can then state its own arithmetic
+       instead of disagreeing with the invite button. */
+    invited:     reachable.length,
+    signed_in:   reachable.filter(p => p.last_at).length,
+    no_email:    unreachable.map(p => ({ full_name: p.full_name, code_name: p.code_name }))
   });
 }));
 

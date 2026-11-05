@@ -80,11 +80,20 @@ async function gather(period) {
             /* demo rows set a points figure for a comparison; they are not
                anything the person did, so they never count as discipline —
                and the 60-day window would otherwise carry them into a live month */
+            /* The window ends today, or at month end for a month already over.
+               Andrew, 3 November: Julio read 21 points in October and 11 in
+               November, "which isn't true". Counting back 60 days from the end
+               of the selected month puts that end in the future while the month
+               is still running, which drags the start forward and hides
+               September. least() pins it to today instead, so the current month
+               tells the truth and a closed month still shows the window as it
+               stood when it closed, rather than shifting under anyone. */
             coalesce((select -sum(pe.delta) from point_events pe
                        where pe.employee_id = e.id and pe.delta < 0
                          and pe.recorded_by is distinct from 'demo'
-                         and pe.occurred_on > ($1::date + interval '1 month' - ($2 || ' days')::interval)
-                         and pe.occurred_on < ($1::date + interval '1 month')), 0)::int
+                         and pe.occurred_on >  least($1::date + interval '1 month', current_date)
+                                               - ($2 || ' days')::interval
+                         and pe.occurred_on <= least($1::date + interval '1 month', current_date)), 0)::int
               as discipline_lost
 
        from employees e

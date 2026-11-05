@@ -101,7 +101,27 @@ export const IMPACT_LIBRARY = [
   [/policy violation/i, "Policies set consistent expectations for safety, service, accountability and fairness. When they are disregarded it creates inconsistency, and it tells coworkers that the standards are optional."]
 ];
 
-const impactFor = reason => (IMPACT_LIBRARY.find(([re]) => re.test(reason)) ?? [, null])[1];
+/* What an incident is matched against.
+ *
+ * Andrew, 3 November: "can it take into consideration what the note is on
+ * these?" His example was a claim whose reason is just "Claim" while the note
+ * reads "customer alleges inefficient and slow crew performance". Matching the
+ * reason alone saw "Claim", printed the generic line, and left every useful
+ * word in the note unread.
+ *
+ * The note joins the text the patterns are tested against, so a detailed note
+ * can pull a more specific impact line and policy section. Deliberately still
+ * a lookup: this document goes in somebody's file and can end up in a dispute,
+ * so every sentence in it stays one we wrote rather than one generated on the
+ * spot. Andrew's side of that bargain, in his words, is to "be very detailed
+ * with my reasons when I put them in".
+ */
+const matchText = i => [i.reason, i.note].filter(Boolean).join(" — ");
+
+const impactFor = incident => {
+  const text = typeof incident === "string" ? incident : matchText(incident);
+  return (IMPACT_LIBRARY.find(([re]) => re.test(text)) ?? [, null])[1];
+};
 
 /**
  * The impact section.
@@ -122,10 +142,10 @@ export function impactNarrative(incidents, limit = 3) {
     .sort((a, b) => a.delta - b.delta);          // worst first
   const seen = new Set(), rows = [];
   for (const i of bad) {
-    const text = impactFor(i.reason);
+    const text = impactFor(i);
     if (!text || seen.has(text)) continue;
     seen.add(text);
-    rows.push([i.reason, text]);
+    rows.push([i.reason, text, i.note ?? null]);
     if (rows.length >= limit) break;
   }
   return rows;
@@ -241,8 +261,11 @@ export function policyFor(incidents) {
   const bad = incidents.filter(i => i.delta < 0);
   if (!bad.length) return ["6.1 Standards of Conduct", null];
   const worst = Math.min(...bad.map(i => i.delta));
-  const reason = bad.find(i => i.delta === worst).reason;
-  return (POLICY_LIBRARY.find(([re]) => re.test(reason)) ?? [, ["6.1 Standards of Conduct", null]])[1];
+  /* Reason and note together, for the same reason impactFor uses both: the
+     reason on a claim is only ever the word "Claim", and everything that says
+     which policy it touches is in the note. */
+  const text = matchText(bad.find(i => i.delta === worst));
+  return (POLICY_LIBRARY.find(([re]) => re.test(text)) ?? [, ["6.1 Standards of Conduct", null]])[1];
 }
 
 /** Points lost decides the level, so the document cannot contradict its own figures. */
@@ -398,8 +421,14 @@ export function fill(data, opts = {}) {
     LVL_SUSPENSION:  level === "suspension"  ? "on" : "",
     LVL_TERMINATION: level === "termination" ? "on" : "",
     NEXT_ACTION: nextActionText(level),
-    IMPACT_ROWS: impactNarrative(data.incidents).map(([reason, text]) =>
-      `    <div class="imp"><span class="ik">${esc(reason)}</span><p>${esc(text)}</p></div>`).join("\n"),
+    /* The note is quoted, not paraphrased, and attributed as a record rather
+       than stated as fact. What a manager typed at the time is often the most
+       specific thing on the page, and rewriting it would be this document
+       putting words round somebody's conduct that nobody approved. */
+    IMPACT_ROWS: impactNarrative(data.incidents).map(([reason, text, note]) =>
+      `    <div class="imp"><span class="ik">${esc(reason)}</span><p>${esc(text)}</p>` +
+      (note ? `<p class="impnote">Recorded at the time: &ldquo;${esc(note)}&rdquo;</p>` : "") +
+      `</div>`).join("\n"),
     RECORD_ROWS: recordShows(data.incidents, data.claims)
       .map(t => `    <li>${esc(t)}</li>`).join("\n") || "    <li>No countable pattern in the record.</li>",
     ACTUAL: esc(data.actual ?? ""),
