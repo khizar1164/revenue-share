@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
-import { query, loadEnv, safeTarget, hasColumn, pointNote } from "./db.js";
+import { query, loadEnv, safeTarget, hasColumn, pointNote, withTransaction } from "./db.js";
 import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
@@ -582,23 +582,80 @@ app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
 }));
 
 /* claims, adjustments and hours all follow the same shape */
+/* A claim, and in one go the points it costs the crew who were on the job.
+ *
+ * Andrew, 3 November: six people on a job meant seven separate actions, with
+ * the job number and the note retyped each time. "Maybe if I could just select
+ * here and it automatically adds it over here with the reason and adds it as a
+ * claim."
+ *
+ * One transaction, because a claim that docked three of six people and then
+ * failed is worse than one that did not happen: the pool has moved, half the
+ * crew are carrying points, and nothing on any screen says so.
+ */
 app.post("/api/admin/claims", wrap(async (req, res) => {
-  const { occurred_on, job_number, reason, amount } = req.body ?? {};
+  const { occurred_on, resolved_on, job_number, reason, amount } = req.body ?? {};
   if (!(Number(amount) > 0)) return res.status(400).json({ error: "amount must be greater than zero" });
-  const r = await query(
-    `insert into claims (occurred_on, job_number, reason, amount, recorded_by)
-     values ($1,$2,$3,$4,$5) returning id`,
-    [occurred_on || new Date(), job_number || null, reason || "Claim", amount, req.body.recorded_by || "admin"]);
-  res.status(201).json(r.rows[0]);
+
+  const crew = Array.isArray(req.body?.crew) ? req.body.crew.filter(Boolean) : [];
+  /* -3 is what every claim has cost a person so far, so it is the default
+     rather than a rule. A claim with nobody on it is allowed and normal: the
+     pool still takes the hit when the crew is not yet known. */
+  const delta = Number.isInteger(req.body?.delta) && req.body.delta < 0 ? req.body.delta : -3;
+
+  const linkable = crew.length && await hasColumn("point_events", "claim_id");
+  const dated = await hasColumn("claims", "resolved_on");
+  const noteable = await hasColumn("point_events", "note");
+
+  const out = await withTransaction(async c => {
+    const claim = (await c.query(
+      `insert into claims (occurred_on, job_number, reason, amount, recorded_by
+                          ${dated ? ", resolved_on" : ""})
+       values ($1,$2,$3,$4,$5${dated ? ",$6" : ""}) returning id`,
+      [occurred_on || new Date(), job_number || null, reason || "Claim", amount,
+       req.body.recorded_by || "admin",
+       ...(dated ? [resolved_on || new Date()] : [])])).rows[0];
+
+    /* The deduction is dated to the job, not to the settlement. Who pays for a
+       claim is a question about the pool; when somebody was careless is a
+       question about their record, and that was the day of the job. */
+    for (const employee_id of crew) {
+      await c.query(
+        `insert into point_events (employee_id, occurred_on, delta, reason, job_number,
+                                   recorded_by${noteable ? ", note" : ""}${linkable ? ", claim_id" : ""})
+         values ($1,$2,$3,$4,$5,$6${noteable ? ",$7" : ""}${linkable ? `,$${noteable ? 8 : 7}` : ""})`,
+        [employee_id, occurred_on || new Date(), delta, "Claim", job_number || null,
+         req.body.recorded_by || "admin",
+         ...(noteable ? [String(reason ?? "").trim().slice(0, 300) || null] : []),
+         ...(linkable ? [claim.id] : [])]);
+    }
+    return claim;
+  });
+
+  res.status(201).json({ ...out, crew: crew.length, delta: crew.length ? delta : 0 });
 }));
 
 app.get("/api/admin/claims", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
   const period = `${year}-${String(month).padStart(2, "0")}-01`;
+  const dated = await hasColumn("claims", "resolved_on");
   const r = await query(
-    `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on, job_number, reason, amount::float8 as amount, recorded_by
-       from claims where date_trunc('month', occurred_on) = $1::date
-      order by occurred_on desc, id desc`, [period]);
+    /* Listed under the month that bears the cost, which is when it was
+       resolved. The job date comes back too, because on a claim settled weeks
+       later the two differ and the difference is the thing worth seeing.
+       Named only once the column exists: the code reaches Render before the
+       migration does, and a select naming a missing column fails outright. */
+    dated
+      ? `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on,
+                to_char(resolved_on, 'YYYY-MM-DD') as resolved_on,
+                job_number, reason, amount::float8 as amount, recorded_by
+           from claims where date_trunc('month', resolved_on) = $1::date
+          order by resolved_on desc, id desc`
+      : `select id, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on,
+                null as resolved_on,
+                job_number, reason, amount::float8 as amount, recorded_by
+           from claims where date_trunc('month', occurred_on) = $1::date
+          order by occurred_on desc, id desc`, [period]);
   res.json(r.rows);
 }));
 
