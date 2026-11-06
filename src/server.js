@@ -18,8 +18,7 @@ import { dirname, join } from "node:path";
 import { monthly, forEmployee, ytd } from "./calc.js";
 import { boardView, reportView, adminView } from "./views.js";
 import { query, loadEnv, safeTarget, hasColumn, pointNote, withTransaction } from "./db.js";
-import { tipOfTheDay } from "./tips.js";
-import { writeTip } from "./tip-writer.js";
+import { writeTip, tipsEnabled } from "./tip-writer.js";
 import { matchableRoster, likelyDuplicates, mergeEmployees } from "./roster.js";
 import { createScheduler } from "./scheduler.js";
 import { registerJobs } from "./jobs.js";
@@ -261,39 +260,46 @@ app.get("/api/board/:token", wrap(async (req, res) => {
  * lesson in December.
  */
 async function learningPage() {
-  if (!await hasColumn("claim_tips", "tip")) return null;
-
   const linked = await hasColumn("point_events", "claim_id");
+  const withTips = tipsEnabled() && await hasColumn("claim_tips", "tip");
+
+  /* Andrew, 6 November: "For claims can we include job numbers, dates,
+     amounts, and the code names for the crew that was on the job?" So the
+     page is the claims themselves, most recent first, and the tip that used
+     to lead it is off until he has decided what it should say.
+     Not filtered to a month: which month bears a claim is an accounting
+     question, and the crew reading this want to know what has been going
+     wrong lately. */
   const rows = (await query(
     `select c.id, c.job_number, c.amount::float8 as amount, c.reason,
-            to_char(c.occurred_on, 'Mon DD') as on_day, t.tip
-       ${linked ? `, coalesce((select array_agg(e.code_name order by e.code_name)
-                                 from point_events pe
-                                 join employees e on e.id = pe.employee_id
-                                where pe.claim_id = c.id), '{}') as crew` : ""}
-       from claims c join claim_tips t on t.claim_id = c.id
-      order by c.occurred_on desc`)).rows;
+            to_char(c.occurred_on, 'Mon DD') as on_day
+            ${withTips ? ", t.tip" : ", null::text as tip"}
+            ${linked ? `, coalesce((select array_agg(e.code_name order by e.code_name)
+                                      from point_events pe
+                                      join employees e on e.id = pe.employee_id
+                                     where pe.claim_id = c.id), '{}') as crew`
+                     : ", '{}'::text[] as crew"}
+       from claims c
+       ${withTips ? "left join claim_tips t on t.claim_id = c.id" : ""}
+      order by c.occurred_on desc, c.id desc
+      limit 12`)).rows;
 
-  if (!rows.length) return null;
+  if (!rows.length) return { claims: [], total: 0 };
 
-  const today = tipOfTheDay(rows);
-  const shown = c => {
-    const crew = c.crew ?? [];
-    return {
-      tip: c.tip, reason: c.reason, amount: c.amount,
-      job_number: c.job_number, on_day: c.on_day,
-      crew: crew.slice(0, 3),
-      crew_more: Math.max(0, crew.length - 3)
-    };
-  };
+  const total = (await query(`select count(*)::int as n from claims`)).rows[0].n;
 
   return {
-    today: shown(today),
-    /* The rest, so the page is not one sentence on a large screen. Eight
-       fills the lower third in two columns without reaching the footer; it
-       is a glance, not a list to be studied. */
-    others: rows.filter(r => r.id !== today.id).slice(0, 8).map(shown),
-    total: rows.length
+    claims: rows.map(c => ({
+      reason: c.reason, amount: c.amount,
+      job_number: c.job_number, on_day: c.on_day,
+      /* Code names only, which is the board's rule and the one Andrew
+         restated. All of them here rather than three and a count: this is a
+         list now, not a headline, so a row has the width for them. */
+      crew: c.crew ?? [],
+      tip: c.tip ?? null
+    })),
+    total,
+    tips_on: withTips
   };
 }
 
@@ -691,8 +697,8 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
      and can be read before it reaches a screen in the break room. Outside the
      transaction and never fatal: a claim that recorded correctly must not fail
      because the board would have been one sentence short. */
-  let tip = null, tipSource = "none";
-  if (await hasColumn("claim_tips", "tip")) {
+  let tip = null, tipSource = "off";
+  if (tipsEnabled() && await hasColumn("claim_tips", "tip")) {
     ({ tip, source: tipSource } = await writeTip({ reason, note: reason }));
     if (tip) {
       await query(
@@ -1013,7 +1019,7 @@ app.get("/tv/:token", (req, res) => {
  *
  * Same token as the board, because it is the same wall and the same
  * audience, and a second secret to keep would be a second thing to lose. */
-app.get("/learning/:token", (req, res) => {
+app.get(["/claims/:token", "/learning/:token"], (req, res) => {
   if (!tvTokenOk(req.params.token)) return res.status(404).send("Not found");
   res.sendFile(join(root, "public", "learning.html"));
 });
