@@ -28,6 +28,14 @@ import { tipFor, claimText } from "./tips.js";
 
 export const configured = () => Boolean((process.env.ANTHROPIC_API_KEY || "").trim());
 
+/* Andrew, 6 November: "Lets leave off the tips for now until I can provide
+   better instructions on that". Off by default rather than removed: the
+   wording is what he wants to think about, not the machinery, and when he
+   comes back to it this is one environment variable rather than a rebuild.
+   Off also means nothing is generated, so it costs nothing while it waits. */
+export const tipsEnabled = () =>
+  /^(on|true|1|yes)$/i.test((process.env.CLAIM_TIPS || "").trim());
+
 /* House style, and the boundaries. The crew read this on a wall, so it has to
    be short, specific and about what to do rather than what went wrong. The
    last two lines matter most: this is a page about improving, not a notice

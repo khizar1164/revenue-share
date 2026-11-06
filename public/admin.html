@@ -357,8 +357,21 @@ Tyler Johnston  44.25"></textarea>
         <div style="max-width:110px"><label for="clJob">Job #</label><input type="text" id="clJob"></div>
         <div><label for="clNote">Reason</label><input type="text" id="clNote" placeholder="What happened"></div>
         <div style="max-width:105px"><label for="clAmt">Amount</label><input type="number" id="clAmt" min="0" step="25" value="1000"></div>
+        <div style="max-width:92px"><label for="clPts">Points ea.</label><input type="number" id="clPts" max="-1" step="1" value="-3"></div>
         <button id="clSave">Add</button>
       </div>
+
+      <!-- Andrew, 3 November: "six people on this job, instead of me having to
+           come over here and do this for six different people". Ticking them
+           here writes the claim and every deduction in one go, and removing
+           the claim later takes the points back with it. Nobody ticked is
+           fine and normal: the pool still takes the hit when the crew is not
+           known yet. -->
+      <label style="margin-top:14px;display:block">Who was on the job
+        <span class="hint" id="clCrewN"></span></label>
+      <div class="chips" id="clCrew"></div>
+      <p class="hint" id="clCrewHint">Nobody ticked &mdash; the pool takes the claim, no one takes points.</p>
+
       <div class="tblwrap scrolly" style="margin-top:16px"><table id="clTbl"></table></div>
     </div>
     <div class="panel">
@@ -426,7 +439,7 @@ Tyler Johnston  44.25"></textarea>
   var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
     return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
 
-  var STATE = { tv:"", month:"", summary:null, roster:[], reviews:[], points:[], claims:[], revCrew:[], settings:null, view:"month" };
+  var STATE = { tv:"", month:"", summary:null, roster:[], reviews:[], points:[], claims:[], revCrew:[], clCrew:[], settings:null, view:"month" };
 
   function toast(msg, bad){
     var t = $("toast");
@@ -656,6 +669,26 @@ Tyler Johnston  44.25"></textarea>
       }).join("");
   }
 
+  /* The same chips, for the claim form. Separate selection from the review
+     one: somebody half way through entering a claim must not have their
+     ticks changed by a job number typed into the panel above. */
+  function renderClaimChips(){
+    var names = shortNames(STATE.roster);
+    $("clCrew").innerHTML = STATE.roster.slice()
+      .sort(function(a, b){ return String(names[a.id]).localeCompare(String(names[b.id])); })
+      .map(function(e){
+        var on = STATE.clCrew.indexOf(e.id) >= 0;
+        return '<button type="button" data-cc="'+e.id+'" aria-pressed="'+on+'" title="'
+             + esc(e.full_name + " · " + e.code_name) + '">' + esc(names[e.id]) + '</button>';
+      }).join("");
+
+    var n = STATE.clCrew.length, pts = Number($("clPts").value) || -3;
+    $("clCrewN").textContent = n ? "— " + n + " selected" : "";
+    $("clCrewHint").textContent = n
+      ? n + (n === 1 ? " person takes " : " people each take ") + pts + " points, and the pool takes the claim."
+      : "Nobody ticked — the pool takes the claim, no one takes points.";
+  }
+
   /* --------------------------------------------------------------- load --- */
 
   function ago(t){
@@ -789,7 +822,7 @@ Tyler Johnston  44.25"></textarea>
         $("rosterDek").innerHTML = 'Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.';
         renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
       }
-      renderReviews(); renderCrewChips(); renderJobs(r[4]); renderRevenue(r[5]);
+      renderReviews(); renderCrewChips(); renderClaimChips(); renderJobs(r[4]); renderRevenue(r[5]);
       loadSignIns(); loadDuplicates();
     }).catch(function(e){ toast(e.message, true); });
   }
@@ -1204,6 +1237,15 @@ Tyler Johnston  44.25"></textarea>
     if (i >= 0) STATE.revCrew.splice(i,1); else STATE.revCrew.push(id);
     renderCrewChips();
   });
+  $("clCrew").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-cc]"); if (!b) return;
+    var id = b.getAttribute("data-cc"), i = STATE.clCrew.indexOf(id);
+    if (i >= 0) STATE.clCrew.splice(i,1); else STATE.clCrew.push(id);
+    renderClaimChips();
+  });
+  /* The hint says how many points how many people are about to take, so
+     changing the figure has to redraw it. */
+  $("clPts").addEventListener("input", renderClaimChips);
   $("rvSave").addEventListener("click", function(){
     if (!STATE.revCrew.length) return toast("Credit at least one mover.", true);
     api("/api/admin/reviews", { method:"POST", body: JSON.stringify({
@@ -1273,9 +1315,23 @@ Tyler Johnston  44.25"></textarea>
   $("clSave").addEventListener("click", function(){
     api("/api/admin/claims", { method:"POST", body: JSON.stringify({
       occurred_on: $("clDate").value, job_number: $("clJob").value.trim(),
-      reason: $("clNote").value.trim() || "Claim", amount: Number($("clAmt").value)
-    })}).then(function(){ toast("Claim added."); $("clJob").value=""; $("clNote").value=""; load(); })
-      .catch(function(e){ toast(e.message, true); });
+      reason: $("clNote").value.trim() || "Claim", amount: Number($("clAmt").value),
+      crew: STATE.clCrew.slice(),
+      delta: Number($("clPts").value) || -3
+    })}).then(function(r){
+      /* Say what it actually did. "Claim added" after ticking six people
+         leaves you wondering whether the points went in, and the whole point
+         of the form is that you only press the button once. */
+      toast(r.crew
+        ? "Claim added, " + r.crew + (r.crew === 1 ? " person" : " people") + " docked " + r.delta + "."
+        : "Claim added.");
+      /* The tip is shown back because this is the one moment anybody will
+         read it: the incident is still in mind and it can be corrected. */
+      if (r.tip) toast("Tip for the board: " + r.tip);
+      $("clJob").value = ""; $("clNote").value = "";
+      STATE.clCrew = []; renderClaimChips();
+      load();
+    }).catch(function(e){ toast(e.message, true); });
   });
 
   $("ajSave").addEventListener("click", function(){

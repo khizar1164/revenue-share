@@ -3,25 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>What we are learning</title>
+<title>Claims</title>
 <style>
-  /* A page of its own, not a slot on the standings board.
+  /* The claims, on their own screen.
    *
-   * Andrew, 3 November: the claims should go on the break-room wall so the
-   * crew can see "where we have more room for improvement", and in the same
-   * breath, "I don't want it so highlighted on 'hey, this is everything we're
-   * doing wrong'". So the tip is the page and the claim is the small print
-   * underneath it. A list of failures with advice attached is still a list of
-   * failures; advice with its evidence attached is training.
+   * Andrew, 3 November, wanted them on the break-room wall so the crew can
+   * see "where we have more room for improvement". On 6 November he said what
+   * that should look like: "For claims can we include job numbers, dates,
+   * amounts, and the code names for the crew that was on the job?"
+   *
+   * It led with a generated tip until he asked for that to come off -- "until
+   * I can provide better instructions on that" -- so this is the list itself,
+   * read as a record rather than as a lesson. The tip machinery is still
+   * there behind CLAIM_TIPS and the row has a place for one.
    *
    * Built for one 1920x1080 screen read from across a room, and scaled to
-   * whatever it actually lands on, the same way tv.html does it. The tip is
-   * set at a size that can be read at four or five metres, which is the far
-   * side of the break room.
+   * whatever it lands on, the same way tv.html does it.
    */
   :root{
     --plane:#111214; --ink:#f6f4f1; --ink-2:#cfcbc4; --ink-3:#8b867e;
-    --seam:#26282c; --crit:#ff5500; --good:#39b06a;
+    --seam:#26282c; --rule:#1c1e21; --crit:#ff5500; --good:#39b06a;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --head:"Segoe UI Semibold",system-ui,sans-serif;
   }
@@ -30,7 +31,7 @@
     font-family:var(--sans);overflow:hidden}
   #wrap{width:100vw;height:100vh;overflow:hidden}
   #page{width:1920px;height:1080px;transform-origin:top left;padding:26px 44px;
-    display:flex;flex-direction:column;gap:20px;background:var(--plane)}
+    display:flex;flex-direction:column;gap:18px;background:var(--plane)}
 
   .top{display:flex;align-items:baseline;justify-content:space-between;
     border-bottom:2px solid var(--seam);padding-bottom:14px}
@@ -40,31 +41,31 @@
   .title{margin-left:20px;font-size:27px;color:var(--ink-3)}
   .clock{font-family:var(--head);font-size:30px;color:var(--ink)}
 
-  /* The tip is the point of the page, so it gets the room. */
-  .main{flex:0 0 auto;padding:40px 0 10px}
-  .tip{font-size:64px;line-height:1.2;font-weight:600;color:var(--ink);
-    letter-spacing:-0.5px;max-width:1680px}
-  .from{margin-top:26px;font-size:27px;color:var(--ink-3)}
-  .from b{color:var(--ink-2);font-weight:600}
-  .from .amt{color:var(--crit);font-weight:700}
+  table{width:100%;border-collapse:collapse;table-layout:fixed}
+  thead th{font-family:var(--head);font-size:20px;letter-spacing:1.2px;
+    text-transform:uppercase;color:var(--ink-3);text-align:left;
+    padding:0 0 12px;font-weight:600}
+  tbody td{padding:15px 0;border-top:1px solid var(--rule);
+    font-size:27px;color:var(--ink-2);vertical-align:top}
+  /* Fixed widths so the columns line up down the page and the eye can run
+     straight down the amounts, which is the column that matters. */
+  .cDate{width:118px} .cJob{width:132px} .cAmt{width:158px;text-align:right}
+  .cCrew{width:430px}
+  td.cAmt{color:var(--crit);font-weight:700;font-variant-numeric:tabular-nums}
+  td.cDate{color:var(--ink-3)}
+  td.cJob{color:var(--ink-3);font-variant-numeric:tabular-nums}
+  td.cWhat{padding-right:40px;color:var(--ink)}
+  td.cCrew{color:var(--ink-2);font-size:25px}
+  .none{color:var(--ink-3);font-style:italic}
+  .tip{display:block;margin-top:7px;font-size:22px;color:var(--ink-3)}
 
-  /* The others, small, so one sentence is not alone on a large screen. They
-     are there to be glanced at, not studied. */
-  .rest{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;
-    gap:14px 56px;align-content:start;padding-top:18px;
-    border-top:2px solid var(--seam)}
-  .row{display:flex;gap:16px;align-items:baseline;font-size:24px;
-    color:var(--ink-3);line-height:1.35}
-  .row .a{color:var(--crit);font-weight:600;white-space:nowrap;min-width:116px}
-  .row .t{color:var(--ink-2)}
-
-  .foot{flex:0 0 auto;display:flex;justify-content:space-between;
-    font-size:22px;color:var(--ink-3);
-    border-top:2px solid var(--seam);padding-top:14px}
+  .foot{margin-top:auto;display:flex;justify-content:space-between;
+    font-size:21px;color:var(--ink-3);
+    border-top:2px solid var(--seam);padding-top:13px}
 
   /* Nothing to show is good news and should read like it, not like a page
      that failed to load. */
-  .empty{font-size:48px;color:var(--good);font-weight:600;padding:60px 0}
+  .clear{font-size:52px;color:var(--good);font-weight:600;padding:80px 0}
   #err{position:fixed;left:0;right:0;bottom:0;background:#3a1d14;color:#ffd9c7;
     font-size:20px;padding:10px 20px;display:none}
 </style>
@@ -74,16 +75,11 @@
 <div id="wrap"><div id="page">
   <div class="top">
     <div><span class="brand">Immediate Movers <em>&amp;</em> Storage</span>
-         <span class="title">What we are learning</span></div>
+         <span class="title">Claims</span></div>
     <div class="clock" id="clock">--:--</div>
   </div>
 
-  <div class="main">
-    <div class="tip" id="tip">&mdash;</div>
-    <div class="from" id="from"></div>
-  </div>
-
-  <div class="rest" id="rest"></div>
+  <div id="body"></div>
 
   <div class="foot">
     <span id="foot"></span>
@@ -105,9 +101,8 @@
       { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  /* The token is in the path, the same as the board: /learning/:token. It is
-     the only thing protecting this page, so it is never put in a query string
-     where it would end up in a log. */
+  /* The token is in the path, never a query string, where it would end up in
+     a log: /claims/:token, or /learning/:token which is the older name. */
   var TOKEN = location.pathname.split("/").filter(Boolean).pop() || "";
 
   function fit() {
@@ -125,37 +120,43 @@
   }
 
   function render(L) {
-    if (!L || !L.today) {
-      $("tip").innerHTML = '<span class="empty">No claims on record. Nothing to put right.</span>';
-      $("from").textContent = "";
-      $("rest").innerHTML = "";
+    var rows = (L && L.claims) || [];
+    if (!rows.length) {
+      $("body").innerHTML = '<div class="clear">No claims on record. Nothing to put right.</div>';
       $("foot").textContent = "";
       return;
     }
-    var t = L.today;
-    $("tip").textContent = t.tip;
 
-    /* Code names only. That is the board's rule everywhere and the one Andrew
-       restated: "the mover's name should be private on the dashboard." Three
-       and a count of the rest, because six will not fit a line at this size
-       and a line that wraps on a wall is a line nobody reads. */
-    var bits = [];
-    if (t.on_day) bits.push(esc(t.on_day));
-    if (t.job_number) bits.push("job " + esc(t.job_number));
-    if (t.amount) bits.push('<span class="amt">' + usd(t.amount) + "</span>");
-    var who = (t.crew || []).join(", ") + (t.crew_more ? " +" + t.crew_more + " more" : "");
-    if (who.trim()) bits.push("<b>" + esc(who) + "</b>");
-    $("from").innerHTML = bits.length ? "From: " + bits.join(" &middot; ") : "";
+    $("body").innerHTML =
+      '<table><thead><tr>'
+      + '<th class="cDate">Date</th><th class="cJob">Job</th>'
+      + '<th>What happened</th>'
+      + '<th class="cCrew">Crew on the job</th>'
+      + '<th class="cAmt">Amount</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(function (c) {
+          /* No crew is said rather than left blank. A gap in a table reads as
+             a bug; "not recorded" reads as what it is, which for anything
+             entered before the crew picker existed is simply the truth. */
+          var who = (c.crew && c.crew.length)
+            ? esc(c.crew.join(", "))
+            : '<span class="none">not recorded</span>';
+          return '<tr>'
+            + '<td class="cDate">' + esc(c.on_day) + '</td>'
+            + '<td class="cJob">' + (c.job_number ? esc(c.job_number) : "&mdash;") + '</td>'
+            + '<td class="cWhat">' + esc(c.reason)
+            + (c.tip ? '<span class="tip">' + esc(c.tip) + '</span>' : "")
+            + '</td>'
+            + '<td class="cCrew">' + who + '</td>'
+            + '<td class="cAmt">' + usd(c.amount) + '</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table>';
 
-    $("rest").innerHTML = (L.others || []).map(function (o) {
-      return '<div class="row"><span class="a">' + usd(o.amount) + "</span>"
-           + '<span class="t">' + esc(o.reason) + "</span></div>";
-    }).join("");
-
-    $("foot").textContent = L.total
-      ? L.total + (L.total === 1 ? " claim on record. " : " claims on record. ")
-        + "A different one each day."
-      : "";
+    var shown = rows.length, total = L.total || shown;
+    $("foot").textContent = total > shown
+      ? "Showing the " + shown + " most recent of " + total + " claims."
+      : total + (total === 1 ? " claim on record." : " claims on record.");
     fit();
   }
 
@@ -171,10 +172,10 @@
           { hour: "numeric", minute: "2-digit" });
       })
       .catch(function (e) {
-        /* One bad request must not blank a wall. The page keeps whatever it
-           last showed and only says something after it has failed repeatedly,
-           because a screen that flickers an error every minute teaches people
-           to ignore it. */
+        /* One bad request must not blank a wall. The page keeps what it last
+           showed and only says anything after it has failed repeatedly: a
+           screen that flickers an error every minute teaches people to stop
+           looking at it. */
         if (++failures >= 3) {
           $("err").textContent = "Cannot reach the server (" + e.message + "). Showing the last update.";
           $("err").style.display = "block";
@@ -184,8 +185,6 @@
 
   clock(); fit(); load();
   setInterval(clock, 15000);
-  /* Every five minutes. The tip only changes at midnight, so this is really
-     about picking up a new claim the same day it is recorded. */
   setInterval(load, 5 * 60 * 1000);
 })();
 </script>

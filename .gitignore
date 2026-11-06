@@ -19,3 +19,6 @@ pay-cache.json
 months-cache.json
 roster.json
 probe-out.json
+
+# Local preview config — machine-specific, not part of the build.
+.claude/
