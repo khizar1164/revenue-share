@@ -11,8 +11,8 @@
  *
  *   - every job whose service date falls in the month (cancelled ones are
  *     not listed by MoveitPro unless asked for)
- *   - each job's bills: a job is billed once it is signed or closed out; an
- *     unsigned job returns no bill and counts nothing yet
+ *   - each job's bills, once the office has CLOSED THEM OUT. A signed bill
+ *     not yet closed out waits; an unsigned job has no bill at all
  *   - revenue is the bill total LESS sales tax. Tips are not on the bill at
  *     all (they live on payments), so they stay out, as before
  *   - a multi-day move has its bill on the day its paperwork lives on, and its
@@ -43,26 +43,31 @@ function previousPeriod(period) {
 
 /* MoveitPro publishes a rate limit and answers 429 with Retry-After. A month
    is a hundred or so calls, so a burst can hit it; wait and try again rather
-   than report a month short. */
-async function getWithRetry(get, path, tries = 5) {
+   than report a month short. The key is shared with the Discord relay and
+   lead dating, so the wait honours Retry-After and the calls are paced:
+   finishing a revenue run a minute later costs nothing, starving a booking
+   notification does. Tests pass pauseMs: 0. */
+export async function getWithRetry(get, path, { tries = 8, pauseMs = 250, sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  if (pauseMs) await sleep(pauseMs);
   for (let i = 0; ; i++) {
     try { return await get(path); }
     catch (e) {
       if (e.status !== 429 || i >= tries - 1) throw e;
-      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+      const asked = Number(e.retryAfter) > 0 ? Number(e.retryAfter) * 1000 : 0;
+      await sleep(Math.min(Math.max(asked, 5000 * (i + 1)), 120_000));
     }
   }
 }
 
 /** Every job with a service date in the month, following the cursor. */
-async function jobsInMonth(period, get) {
+async function jobsInMonth(period, get, retry) {
   const [from, to] = monthRange(period);
   const jobs = [];
   let cursor = "";
   for (let page = 0; page < 50; page++) {
     const path = `/v1/jobs?limit=100&service_date_from=${from}&service_date_to=${to}` +
       (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
-    const res = await getWithRetry(get, path);
+    const res = await getWithRetry(get, path, retry);
     const list = Array.isArray(res) ? res : res?.data ?? [];
     jobs.push(...list);
     cursor = res?.next_cursor ?? res?.pagination?.next_cursor ?? "";
@@ -75,17 +80,24 @@ async function jobsInMonth(period, get) {
  * One month's completed revenue from MoveitPro.
  * `get` is injectable so the arithmetic can be checked without the network.
  */
-export async function mipMonth(period, { get = rawGet } = {}) {
-  const jobs = await jobsInMonth(period, get);
+export async function mipMonth(period, { get = rawGet, retry } = {}) {
+  const jobs = await jobsInMonth(period, get, retry);
   let totalCents = 0, taxCents = 0;
   const billedJobs = new Set();
-  let bills = 0, unsigned = 0;
+  let bills = 0, unsigned = 0, awaitingCloseout = 0;
 
   for (const job of jobs) {
-    const list = await getWithRetry(get, `/v1/jobs/${job.id}/charges`);
+    const list = await getWithRetry(get, `/v1/jobs/${job.id}/charges`, retry);
     const arr = Array.isArray(list) ? list : list?.data ?? [];
     if (!arr.length) { unsigned++; continue; }
     for (const b of arr) {
+      /* Closed out only. A signed bill can still be adjusted by the office
+         before closeout, and MoveitPro's own Job Profitability report counts
+         closed-out jobs only. Reconciled 11 November: November to date
+         matched that report to the cent on all 25 closed jobs; the one
+         difference was a three-day move signed but not closed out ($12,494.72),
+         which arrives here the moment the office closes it. */
+      if (b.status !== "closed_out") { awaitingCloseout++; continue; }
       totalCents += Number(b.total_cents) || 0;
       taxCents += Number(b.tax_cents) || 0;
       bills++;
@@ -99,7 +111,7 @@ export async function mipMonth(period, { get = rawGet } = {}) {
     completed_jobs: billedJobs.size,
     total_tips: null,
     total_taxes: Math.round(taxCents) / 100,
-    detail: { jobs_listed: jobs.length, bills, without_bill: unsigned }
+    detail: { jobs_listed: jobs.length, bills, without_bill: unsigned, awaiting_closeout: awaitingCloseout }
   };
 }
 
@@ -117,6 +129,7 @@ async function rawGet(path) {
   if (!res.ok) {
     const err = new Error(`MoveitPro GET ${path} → ${res.status}: ${text.slice(0, 200)}`);
     err.status = res.status;
+    err.retryAfter = res.headers.get("retry-after");
     throw err;
   }
   return json;
@@ -130,9 +143,9 @@ export const mipIsRevenueSource = () =>
  * The scheduled job: this month and last month from MoveitPro, stored under
  * the same rules as the email. Returns the line the admin panel shows.
  */
-export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = ingestReport } = {}) {
+export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = ingestReport, retry } = {}) {
   const current = periodInZone(now);
-  const months = [await mipMonth(current, { get }), await mipMonth(previousPeriod(current), { get })];
+  const months = [await mipMonth(current, { get, retry }), await mipMonth(previousPeriod(current), { get, retry })];
   const { results } = await ingest(months, { now });
 
   return results.map(r => {
@@ -141,7 +154,7 @@ export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = 
     const fig = r.revenue != null ? ` $${Number(r.revenue).toLocaleString("en-US")}` : "";
     const held = r.reported != null ? ` (MoveitPro says $${Number(r.reported).toLocaleString("en-US")})` : "";
     const was = r.was != null ? ` (was $${Number(r.was).toLocaleString("en-US")})` : "";
-    const counts = m ? ` · ${m.completed_jobs} jobs, ${m.detail.without_bill} without a bill yet` : "";
+    const counts = m ? ` · ${m.completed_jobs} jobs, ${m.detail.awaiting_closeout} signed awaiting closeout` : "";
     return head + fig + held + was + counts;
   }).join("; ") + " · from MoveitPro";
 }

@@ -22,7 +22,7 @@ const jobs = Array.from({ length: 101 }, (_, i) => ({ id: `j${i}`, estimate_id: 
 jobs[100].estimate_id = "e99";                       // second day of a two-day move
 const bills = {
   j0: [{ total_cents: 50267, tax_cents: 277, status: "closed_out" }],
-  j1: [{ total_cents: 67250, tax_cents: 0, status: "signed" }],
+  j1: [{ total_cents: 67250, tax_cents: 0, status: "signed" }],           // not closed out: waits
   j2: [{ total_cents: 100000, tax_cents: 700, status: "closed_out" },     // billed by phase
        { total_cents: 20000, tax_cents: 140, status: "closed_out" }],
   j99: [{ total_cents: 30000, tax_cents: 0, status: "closed_out" }]       // j100 shares its move
@@ -50,13 +50,15 @@ check("November runs 1st to 30th", from === "2026-11-01" && to === "2026-11-30")
 check("February knows its length", monthRange("2028-02-01")[1] === "2028-02-29");
 
 console.log("\n2. THE FIGURE");
-const m = await mipMonth("2026-11-01", { get: fakeGet });
-const expected = (50267 - 277 + 67250 + 100000 - 700 + 20000 - 140 + 30000) / 100;
-check("revenue is bill totals less sales tax", m.completed_revenue === expected,
+const fast = { pauseMs: 0, sleep: async () => {} };
+const m = await mipMonth("2026-11-01", { get: fakeGet, retry: fast });
+const expected = (50267 - 277 + 100000 - 700 + 20000 - 140 + 30000) / 100;
+check("revenue is closed-out bill totals less sales tax", m.completed_revenue === expected,
   `${m.completed_revenue} vs ${expected}`);
+check("a signed bill not yet closed out waits", m.detail.awaiting_closeout === 1);
 check("tax is kept separately", m.total_taxes === (277 + 700 + 140) / 100);
 check("tips are not invented", m.total_tips === null);
-check("a phased move is one job, not two", m.completed_jobs === 4, `${m.completed_jobs} jobs`);
+check("a phased move is one job, not two", m.completed_jobs === 3, `${m.completed_jobs} jobs`);
 check("both pages of jobs were read", m.detail.jobs_listed === 101);
 check("jobs without a bill are counted, not summed", m.detail.without_bill === 97);
 check("a 429 was waited out rather than dropped", rateLimitedOnce && m.completed_revenue === expected);
@@ -65,7 +67,7 @@ console.log("\n3. WHAT IT HANDS ON");
 let handed = null;
 const line = await syncMipRevenue({
   now: new Date("2026-11-11T15:00:00Z"),
-  get: fakeGet,
+  get: fakeGet, retry: fast,
   ingest: async (months) => { handed = months; return { results: [
     { period: "2026-11-01", action: "updated", revenue: months[0].completed_revenue, was: 0 },
     { period: "2026-10-01", action: "held by a manual entry", revenue: 195000, reported: months[1].completed_revenue }
