@@ -101,6 +101,19 @@ export async function ingestReport(months, { now = new Date() } = {}) {
 
 /** Everything from an email body to a stored figure, recorded as a run. */
 export async function handleReportEmail({ body, url, subject } = {}) {
+  /* Once revenue comes from MoveitPro, SmartMoving's email is still received
+     (the Zap keeps sending it until somebody turns it off) but it no longer
+     touches a figure. Without this the two would take turns: MoveitPro writes
+     November at $66k, the 5am email writes it back to $0, and the board
+     flickers between them. Logged under its own name so it never counts as a
+     revenue reading in the freshness check. */
+  if ((process.env.REVENUE_SOURCE || "").trim().toLowerCase() === "moveitpro") {
+    await query(
+      `insert into sync_runs (kind, ended_at, ok, detail)
+       values ('revenue-smartmoving', now(), true, 'received and ignored: revenue now comes from MoveitPro')`);
+    return { ok: true, ignored: true, reason: "revenue now comes from MoveitPro (REVENUE_SOURCE=moveitpro)" };
+  }
+
   const run = (await query(`insert into sync_runs (kind) values ('revenue') returning id`)).rows[0].id;
   try {
     const link = url || extractReportLink(body);
