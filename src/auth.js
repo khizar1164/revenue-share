@@ -15,6 +15,11 @@ import { randomBytes, createHash, createHmac, timingSafeEqual } from "node:crypt
 import { query } from "./db.js";
 
 const LINK_MINUTES   = 20;
+/* An invite is read when somebody gets a minute between jobs, not the minute
+   it is sent. On 11 November sixteen went out at 7:29am with twenty minutes on
+   them: four people got in, twelve found an expired link. A link someone asked
+   for themselves stays short, because they are looking at the page waiting. */
+export const INVITE_MINUTES = 7 * 24 * 60;
 const SESSION_DAYS   = 30;
 const COOKIE         = "rs_session";
 
@@ -63,7 +68,7 @@ export const STILL_HAS_ACCESS = `
        and ended_on is not null
        and ended_on >= (date_trunc('month', current_date) - interval '1 month')::date))`;
 
-export async function issueLoginToken(email, { ip } = {}) {
+export async function issueLoginToken(email, { ip, minutes = LINK_MINUTES } = {}) {
   const addr = normEmail(email);
   if (!addr || !addr.includes("@")) return null;
 
@@ -83,9 +88,24 @@ export async function issueLoginToken(email, { ip } = {}) {
   await query(
     `insert into login_tokens (token_hash, employee_id, email, expires_at, requested_ip)
      values ($1, $2, $3, now() + ($4 || ' minutes')::interval, $5)`,
-    [hash(token), employee.id, addr, String(LINK_MINUTES), ip ?? null]);
+    [hash(token), employee.id, addr, String(minutes), ip ?? null]);
 
-  return { token, employee, expiresInMinutes: LINK_MINUTES };
+  return { token, employee, expiresInMinutes: minutes };
+}
+
+/** Is this link still good, without spending it.
+ *
+ * Opening a link must not be what signs somebody in. Mail scanners and link
+ * previews open every link in a message to check it, and when that open spent
+ * the link, the mover tapping it seconds later was told it had already been
+ * used. Bison, 11 November: both links spent within seconds by something with
+ * no browser name. So the link shows a button, and pressing it signs in. */
+export async function peekLoginToken(token) {
+  if (!token) return false;
+  const r = await query(
+    `select 1 from login_tokens
+      where token_hash = $1 and used_at is null and expires_at > now()`, [hash(token)]);
+  return r.rowCount > 0;
 }
 
 /** Spend a link and open a session. Returns null if it is bad, old or used. */

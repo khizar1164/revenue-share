@@ -24,7 +24,7 @@
  *     should choose to have rather than one a script starts.
  *   - anyone not a mover: the office is not on the programme.
  */
-import { issueLoginToken } from "../src/auth.js";
+import { issueLoginToken, INVITE_MINUTES } from "../src/auth.js";
 import { sendInvite, sendingEnabled, mailStatus, allowedRecipients } from "../src/mail.js";
 import { query, close, loadEnv } from "../src/db.js";
 
@@ -87,7 +87,7 @@ try {
   let sent = 0, failed = 0;
   for (const p of people) {
     try {
-      const issued = await issueLoginToken(p.email);
+      const issued = await issueLoginToken(p.email, { minutes: INVITE_MINUTES });
       if (!issued) { console.log(`  SKIP ${p.full_name} — no sign-in allowed for that address`); continue; }
       await sendInvite({
         to: issued.employee.email,

@@ -166,6 +166,14 @@ Immediate Movers & Storage`;
  * before they look. Told that up front and shown where to get another, that is
  * a non-event. Not told, it is sixteen people saying the link is broken.
  */
+/* "10080 minutes" helps nobody. */
+export function lasts(minutes) {
+  const m = Number(minutes) || 0;
+  if (m >= 1440 && m % 1440 === 0) return `${m / 1440} day${m === 1440 ? "" : "s"}`;
+  if (m >= 60 && m % 60 === 0) return `${m / 60} hour${m === 60 ? "" : "s"}`;
+  return `${m} minutes`;
+}
+
 export function inviteEmail({ name, url, minutes, base }) {
   const first = String(name || "").split(" ")[0] || "there";
   const me = `${base}/me`;
@@ -177,7 +185,7 @@ Andrew has set up a page where you can see your own revenue share: your points, 
 
 ${url}
 
-That link works once and lasts ${minutes} minutes, so it may already have expired by the time you open this. If it has, go to ${me}, type in this email address, and a fresh one will arrive.
+That link works once and lasts ${lasts(minutes)}. Open it on the phone you want to use, and tap "Sign me in". If it ever stops working, go to ${me}, type in this email address, and a fresh one will arrive.
 
 Any questions, ask Matthew or Andrew.
 
@@ -213,10 +221,11 @@ Immediate Movers & Storage`;
           </a>
         </td></tr>
         <tr><td style="padding:0 26px 26px;color:#6b6459;font-size:13.5px;line-height:1.55;">
-          <p style="margin:0 0 12px;"><b style="color:#1a1815;">If that link has expired</b>, and it
-             may well have, go to <a href="${esc(me)}" style="color:#c2561c;">${esc(me)}</a>,
-             type in this email address, and a fresh one will arrive. It works once and lasts
-             ${minutes} minutes.</p>
+          <p style="margin:0 0 12px;">The link works once and lasts ${lasts(minutes)}. Open it on
+             the phone you want to use, and tap <b style="color:#1a1815;">Sign me in</b>.</p>
+          <p style="margin:0 0 12px;"><b style="color:#1a1815;">If it ever stops working</b>, go to
+             <a href="${esc(me)}" style="color:#c2561c;">${esc(me)}</a>, type in this email
+             address, and a fresh one will arrive.</p>
           <p style="margin:0 0 12px;">Any questions, ask Matthew or Andrew.</p>
           <p style="margin:0;word-break:break-all;color:#8b857a;font-size:12px;">
             Button not working? Paste this in: ${esc(url)}

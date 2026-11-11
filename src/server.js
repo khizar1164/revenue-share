@@ -30,7 +30,7 @@ import {
 import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { chromePath } from "../hr/make-fillable.mjs";
-import { issueLoginToken, consumeLoginToken, sessionFor, endSession,
+import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
          setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
@@ -340,16 +340,51 @@ app.post("/api/auth/request", wrap(async (req, res) => {
   res.json(said);
 }));
 
-/** Spend the link, start a session, land on the report. */
+/** Opening the link shows a button; it does not sign anyone in.
+ *
+ * Mail scanners and link previews open links to check them. When opening was
+ * enough to spend the link, they spent it first and the mover got "already
+ * used" — see peekLoginToken. A scanner opens pages; it does not press
+ * buttons, so the link is still there when the person taps. */
 app.get("/auth/:token", wrap(async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.set("Referrer-Policy", "no-referrer");
+  res.set("X-Robots-Tag", "noindex");
+  if (!(await peekLoginToken(req.params.token))) {
+    return res.redirect("/me?expired=1");
+  }
+  const action = `/auth/${encodeURIComponent(req.params.token)}`;
+  res.type("html").send(`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Sign in · Revenue Share</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:#100f0d;color:#c9c3b6;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;box-sizing:border-box}
+  .card{width:100%;max-width:380px;background:#1a1815;border:1px solid #2e2a24;border-radius:13px;
+    padding:28px 24px;text-align:center}
+  h1{margin:0 0 8px;color:#fff;font-size:22px;letter-spacing:.06em;text-transform:uppercase}
+  p{margin:0 0 22px;font-size:15px;line-height:1.5}
+  button{width:100%;border:0;border-radius:9px;background:#f0762e;color:#1a0e05;font-size:17px;
+    font-weight:700;padding:15px;cursor:pointer}
+</style></head>
+<body><form class="card" method="post" action="${action}">
+  <h1>Your Revenue Share</h1>
+  <p>Tap the button to open your page on this phone.</p>
+  <button type="submit">Sign me in</button>
+</form></body></html>`);
+}));
+
+/** Spend the link, start a session, land on the report. */
+app.post("/auth/:token", wrap(async (req, res) => {
   const session = await consumeLoginToken(req.params.token, {
     userAgent: req.headers["user-agent"]
   });
   if (!session) {
-    return res.redirect("/me?expired=1");
+    return res.redirect(303, "/me?expired=1");
   }
   setSessionCookie(res, session.token, { secure: PUBLIC_URL.startsWith("https") });
-  res.redirect("/me");
+  res.redirect(303, "/me");
 }));
 
 app.post("/api/auth/logout", wrap(async (req, res) => {
@@ -592,7 +627,7 @@ app.post("/api/admin/invite", wrap(async (req, res) => {
   const sent = [], failed = [];
   for (const p of people) {
     try {
-      const issued = await issueLoginToken(p.email);
+      const issued = await issueLoginToken(p.email, { minutes: INVITE_MINUTES });
       if (!issued) { failed.push({ name: p.full_name, why: "no sign-in allowed for that address" }); continue; }
       await sendInvite({
         to: issued.employee.email,
