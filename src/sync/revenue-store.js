@@ -1,14 +1,12 @@
-/* The daily Revenue Forecast, received by email and forwarded by Zapier.
+/* How a month's completed revenue is stored, whatever reads it.
  *
- *   SmartMoving emails the report at 5am Central
- *     → a Zap watching Gmail posts that email here
- *     → we pull out the download link, fetch the spreadsheet, parse it
- *     → the pool updates
+ * Until November 2026 the figure came from SmartMoving's daily Revenue Forecast
+ * email. It now comes from MoveitPro's job bills (see mip-revenue.js), and the
+ * email path is gone. The rules below were written for the email and still
+ * hold, because they are about protecting a figure people are paid from, not
+ * about where it came from.
  *
- * The dashboard never holds a mailbox password. Zapier holds the Gmail
- * connection; we hold only the secret that proves a request came from the Zap.
- *
- * Which months a report may change:
+ * Which months a reading may change:
  *
  *   this month      yes — this is the whole point
  *   last month      yes, if the figure moved — a job completed late on the
@@ -23,7 +21,6 @@
  */
 
 import { query } from "../db.js";
-import { extractReportLink, fetchReport } from "./revenue-report.js";
 import { TZ } from "../scheduler.js";
 
 /** The month as it is in La Porte, not on the server. A report arriving at
@@ -99,65 +96,22 @@ export async function ingestReport(months, { now = new Date() } = {}) {
   return { current, results };
 }
 
-/** Everything from an email body to a stored figure, recorded as a run. */
-export async function handleReportEmail({ body, url, subject } = {}) {
-  /* Once revenue comes from MoveitPro, SmartMoving's email is still received
-     (the Zap keeps sending it until somebody turns it off) but it no longer
-     touches a figure. Without this the two would take turns: MoveitPro writes
-     November at $66k, the 5am email writes it back to $0, and the board
-     flickers between them. Logged under its own name so it never counts as a
-     revenue reading in the freshness check. */
-  if ((process.env.REVENUE_SOURCE || "").trim().toLowerCase() === "moveitpro") {
-    await query(
-      `insert into sync_runs (kind, ended_at, ok, detail)
-       values ('revenue-smartmoving', now(), true, 'received and ignored: revenue now comes from MoveitPro')`);
-    return { ok: true, ignored: true, reason: "revenue now comes from MoveitPro (REVENUE_SOURCE=moveitpro)" };
-  }
-
-  const run = (await query(`insert into sync_runs (kind) values ('revenue') returning id`)).rows[0].id;
-  try {
-    const link = url || extractReportLink(body);
-    if (!link) throw new Error("no download link found in the email");
-
-    const report = await fetchReport(link);
-    const ingested = await ingestReport(report.months);
-
-    const summary = ingested.results.map(r =>
-      r.action === "unchanged" || r.action === "not in report"
-        ? `${r.period.slice(0, 7)} ${r.action}`
-        : `${r.period.slice(0, 7)} $${Number(r.revenue).toLocaleString("en-US")}` +
-          (r.jobs != null ? ` / ${r.jobs} jobs` : "") +
-          (r.was != null ? ` (was $${Number(r.was).toLocaleString("en-US")})` : "")
-    ).join("; ");
-
-    const detail = `${summary} · from ${report.host}`;
-    await query(`update sync_runs set ended_at = now(), ok = true, detail = $2 where id = $1`, [run, detail]);
-    return { ok: true, ...ingested, host: report.host, months_in_report: report.months.length, detail };
-  } catch (e) {
-    await query(`update sync_runs set ended_at = now(), ok = false, detail = $2 where id = $1`,
-      [run, String(e.message).slice(0, 500)]);
-    throw e;
-  }
-}
-
 /**
- * The scheduled check. Ingestion happens whenever the email arrives, so this
- * job no longer fetches anything — it answers "has the report been arriving?"
- * and fails loudly when it has not, so the health page and the admin panel
- * show a stale feed instead of a quietly frozen pool.
+ * The scheduled check. The MoveitPro read runs under the name "revenue"; this
+ * answers "has it been succeeding?" and fails loudly when it has not, so the
+ * health page and the admin panel show a stale figure instead of a quietly
+ * frozen pool.
  */
-export async function reportFreshness({ maxHours = 30 } = {}) {
+export async function revenueFreshness({ maxHours = 6 } = {}) {
   const r = (await query(
     `select started_at, ok, detail from sync_runs
       where kind = 'revenue' and ok = true
       order by started_at desc limit 1`)).rows[0];
-  if (!r) {
-    throw new Error("the Revenue Forecast report has never been received — check the Zap and the SmartMoving schedule");
-  }
+  if (!r) throw new Error("revenue has never been read from MoveitPro yet");
   const hours = (Date.now() - new Date(r.started_at).getTime()) / 3600e3;
   if (hours > maxHours) {
-    throw new Error(`no Revenue Forecast report for ${Math.round(hours)} hours — ` +
-      `the daily email or the Zap may have stopped (last: ${r.detail ?? "?"})`);
+    throw new Error(`revenue not read from MoveitPro for ${Math.round(hours)} hours ` +
+      `(last: ${r.detail ?? "?"})`);
   }
-  return `last report ${Math.round(hours)}h ago — ${r.detail ?? ""}`;
+  return `last read ${Math.round(hours)}h ago, ${r.detail ?? ""}`;
 }

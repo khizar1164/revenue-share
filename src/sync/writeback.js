@@ -6,7 +6,7 @@
  *      month, overwritten each night.
  *
  *   2. A backup of everything a person typed. Revenue, jobs and crew can all be
- *      rebuilt from SmartMoving if the database were lost — but point events,
+ *      rebuilt from MoveitPro if the database were lost — but point events,
  *      reviews, claims, hours and adjustments exist nowhere else. Render's
  *      point-in-time recovery covers three days; this covers everything older,
  *      in a form Andrew can read without a database client.
@@ -167,7 +167,7 @@ export async function buildBackup() {
   return {
     rows: [
       [`Everything entered by hand — backup, written nightly`],
-      [`These records exist nowhere else. Revenue, jobs and crew can be rebuilt from SmartMoving; these cannot.`],
+      [`These records exist nowhere else. Revenue, jobs and crew can be rebuilt from MoveitPro; these cannot.`],
       [],
       cols, ...rows
     ],

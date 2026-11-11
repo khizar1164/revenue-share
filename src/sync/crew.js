@@ -40,7 +40,7 @@ import { listUsers, configured, status as ctStatus } from "../connecteam.js";
 
 const DEPARTMENT = process.env.CONNECTEAM_CREW_GROUP || "Operations";
 
-/* Shared with the SmartMoving roster so the two never collide on a name. */
+/* The pool code names are drawn from; it must not repeat a name already used. */
 const NAME_POOL = ["RANGER","JAGUAR","LYNX","BEAR","BISON","RHINO","WOLF","OTTER",
   "FALCON","HERON","BADGER","MARTEN","STOAT","OSPREY","KESTREL","RAVEN","HAWK",
   "EAGLE","PUMA","TIGER","COBRA","VIPER","MAMBA","DINGO","JACKAL","CARIBOU",

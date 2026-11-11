@@ -7,7 +7,7 @@
  * Three properties matter more than cleverness here, because nobody is watching
  * it at 2am:
  *
- *   - a job never overlaps itself. A slow SmartMoving sync must not have a
+ *   - a job never overlaps itself. A slow MoveitPro sync must not have a
  *     second copy started on top of it.
  *   - a job that throws does not take the process, or any other job, with it.
  *   - every run is recorded in sync_runs, so "when did hours last come in"

@@ -1,4 +1,4 @@
-/* Completed revenue, read from MoveitPro instead of SmartMoving's email.
+/* Completed revenue, read from MoveitPro. The only source since November 2026.
  *
  * Why this exists. Bookings moved to MoveitPro in October, so the SmartMoving
  * Revenue Forecast stopped counting new jobs on 26 October and has reported
@@ -20,14 +20,14 @@
  *     into exactly one month
  *
  * What it does NOT change is how a month is protected. The figures go through
- * the same ingestReport() the email used: only this month and last month can
+ * the same ingestReport() the SmartMoving email used to: only this month and last month can
  * move, an identical reading is not stored twice, and a figure entered by
  * hand holds until somebody enters one again. October is held at Andrew's
  * $195,000 that way and this will not touch it.
  */
 
 import * as mip from "../moveitpro.js";
-import { ingestReport, periodInZone } from "./report-hook.js";
+import { ingestReport, periodInZone } from "./revenue-store.js";
 
 /** First and last day of a month, as YYYY-MM-DD. */
 export function monthRange(period) {
@@ -117,7 +117,7 @@ export async function mipMonth(period, { get = rawGet, retry } = {}) {
 
 /* The shared client returns json.data, which drops next_cursor. Pagination
    needs the whole body, so list calls go through this instead. */
-async function rawGet(path) {
+export async function rawGet(path) {
   if (!mip.configured()) throw new Error(mip.status());
   const base = (process.env.MOVEITPRO_BASE || "https://api.moveitpro.com").replace(/\/+$/, "");
   const res = await fetch(base + path, {
@@ -135,13 +135,9 @@ async function rawGet(path) {
   return json;
 }
 
-/** Is MoveitPro the revenue source. SmartMoving stays the default until switched. */
-export const mipIsRevenueSource = () =>
-  (process.env.REVENUE_SOURCE || "").trim().toLowerCase() === "moveitpro";
-
 /**
  * The scheduled job: this month and last month from MoveitPro, stored under
- * the same rules as the email. Returns the line the admin panel shows.
+ * the same protective rules. Returns the line the admin panel shows.
  */
 export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = ingestReport, retry } = {}) {
   const current = periodInZone(now);

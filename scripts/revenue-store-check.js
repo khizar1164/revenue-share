@@ -9,7 +9,7 @@
  * clears those rows again whether it passes or fails.
  */
 import { query, close } from "../src/db.js";
-import { ingestReport, periodInZone } from "../src/sync/report-hook.js";
+import { ingestReport, periodInZone } from "../src/sync/revenue-store.js";
 
 const NOW = new Date("2099-06-15T12:00:00Z");
 const THIS = "2099-06-01";

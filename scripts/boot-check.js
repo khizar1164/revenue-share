@@ -30,7 +30,7 @@ const child = spawn(process.execPath, [join(root, "src", "server.js")], {
   cwd: root,
   env: {
     ...process.env,
-    RUN_SCHEDULER: "off",      /* nothing should reach SmartMoving or a sheet */
+    RUN_SCHEDULER: "off",      /* nothing should reach MoveitPro or a sheet */
     NODE_ENV: "test",          /* evaluate everything, bind nothing */
     SEND_EMAILS: "off",
     CONNECTEAM_TASKS: "off"
