@@ -25,7 +25,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { query, pointNote } from "./db.js";
+import { query, pointNote, hasColumn } from "./db.js";
 import { RULES } from "./calc.js";
 import { fill, valueFor, fieldValues } from "../hr/render-notice.mjs";
 import { makeFillable } from "../hr/make-fillable.mjs";
@@ -89,14 +89,20 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
     .map(i => ({ ...i, delta: Number(i.delta) }));
 
   /* Claims on jobs this person crewed. The join is the only link that exists:
-     claims carry a job number, and SmartMoving says who was on that job. */
+     claims carry a job number, and job_crew says who was on that job, from
+     MoveitPro and from SmartMoving's history. The old tables are read only
+     until migration 021 has been run. */
+  const crewJoin = await hasColumn("job_crew", "job_ref")
+    ? `join job_crew jc on jc.job_number = c.job_number
+       join employees e on e.id = jc.employee_id`
+    : `join sm_jobs j        on j.job_number = c.job_number
+       join sm_job_crew jc   on jc.job_id = j.job_id
+       join employees e      on e.sm_crew_id = jc.sm_crew_id`;
   const claims = (await query(
     `select distinct to_char(c.occurred_on, 'YYYY-MM-DD') as date,
             c.job_number, c.amount, c.reason
        from claims c
-       join sm_jobs j        on j.job_number = c.job_number
-       join sm_job_crew jc   on jc.job_id = j.job_id
-       join employees e      on e.sm_crew_id = jc.sm_crew_id
+       ${crewJoin}
       where e.id = $1
         and c.occurred_on >  $2::date
         and c.occurred_on <= $3::date

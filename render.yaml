@@ -27,7 +27,7 @@ services:
         value: production
 
       # Turns the background jobs on. Off everywhere else so a local run never
-      # starts hitting SmartMoving or rewriting Andrew's sheet.
+      # starts hitting MoveitPro or rewriting Andrew's sheet.
       - key: RUN_SCHEDULER
         value: "on"
 
@@ -92,8 +92,6 @@ services:
         sync: false
       - key: TV_TOKEN
         sync: false
-      - key: SMARTMOVING_API_KEY
-        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
@@ -128,14 +126,6 @@ services:
       # cash is. Change this without a deploy if the first week says otherwise.
       - key: MIP_PAYMENT_SURFACES
         value: bol
-
-      # Where completed revenue comes from. Unset (or "smartmoving") keeps the
-      # daily SmartMoving email. "moveitpro" reads the job bills from MoveitPro
-      # every two hours and makes the SmartMoving email a no-op, so the two
-      # never fight over the same month. Set in the dashboard, not here, so it
-      # can be flipped back without a deploy. Manual figures still hold either way.
-      - key: REVENUE_SOURCE
-        sync: false
 
       # Meta lead ads reach MoveitPro through Zapier and this server, because
       # Zapier cannot sign a MoveitPro write and a Code step would put the API

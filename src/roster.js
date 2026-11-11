@@ -182,9 +182,11 @@ export async function mergeEmployees(loserId, keeperId) {
   if (!loserId || !keeperId) throw refuse("two accounts are needed to merge");
   if (loserId === keeperId) throw refuse("that is one account, not two");
 
+  const withMip = await hasColumn("employees", "mip_employee_id");
   return withTransaction(async c => {
     const r = await c.query(
-      `select id, code_name, full_name, email, sm_crew_id, is_mover, merged_into
+      `select id, code_name, full_name, email, sm_crew_id, is_mover, merged_into,
+              ${withMip ? "mip_employee_id" : "null::uuid as mip_employee_id"}
          from employees where id = any($1::uuid[]) for update`, [[loserId, keeperId]]);
     const keeper = r.rows.find(x => x.id === keeperId);
     const loser  = r.rows.find(x => x.id === loserId);
@@ -243,6 +245,8 @@ export async function mergeEmployees(loserId, keeperId) {
        of its own; when it already has one, the spare row keeps its own and goes
        on absorbing that second SmartMoving identity. */
     const crewTaken = !keeper.sm_crew_id && !!loser.sm_crew_id;
+    /* The same for the MoveitPro employee id, which is how job_crew finds them. */
+    const mipTaken = withMip && !keeper.mip_employee_id && !!loser.mip_employee_id;
 
     /* The spare row gives these up before the kept one takes them: both
        columns are unique, so setting them on the keeper while the row being
@@ -255,6 +259,11 @@ export async function mergeEmployees(loserId, keeperId) {
          sm_crew_id  = case when $3 then null else sm_crew_id end,
          updated_at  = now()
        where id = $1`, [loserId, keeperId, crewTaken]);
+    if (mipTaken) {
+      await c.query(`update employees set mip_employee_id = null where id = $1`, [loserId]);
+      await c.query(`update employees set mip_employee_id = $2 where id = $1`,
+        [keeperId, loser.mip_employee_id]);
+    }
 
     await c.query(
       `update employees set
@@ -275,73 +284,4 @@ export async function mergeEmployees(loserId, keeperId) {
       also_repointed: chained.rows.map(x => x.code_name)
     };
   });
-}
-
-/**
- * Which SmartMoving crew members are already here, and which are genuinely new.
- *
- * This is the door that made two Landons. It used to ask one question — is
- * this sm_crew_id on the roster? — and somebody brought across from Connecteam
- * has no sm_crew_id at all, so their first job enrolled them a second time.
- *
- * Adoption is deliberately strict: the same name once case and punctuation are
- * out, and nothing looser. A loose match is how the hours and review logs are
- * read, and it is the right rule there, because the worst case is a figure
- * landing on the wrong row and being corrected. Here the worst case is two
- * people welded into one account with one set of pay, which is harder to
- * notice and much harder to undo. So a near miss is reported for somebody to
- * look at instead, and the duplicates panel asks the same question later
- * against the rows themselves.
- */
-export async function placeCrewMembers(members) {
-  const merged = await hasColumn("employees", "merged_into")
-    ? "merged_into" : "null::uuid as merged_into";
-  const roster = (await query(
-    `select id, code_name, full_name, sm_crew_id, ${merged} from employees`)).rows;
-  return placeAgainstRoster(members, roster);
-}
-
-/** The decision itself, against a roster already read. Pure, so it is tested. */
-export function placeAgainstRoster(members, roster) {
-  const known = new Set(roster.filter(r => r.sm_crew_id).map(r => r.sm_crew_id));
-  /* An account already merged into another one must never pick up a crew id:
-     it carries the same name as the account that was kept, and the jobs would
-     attach to the row nobody reads instead of the person. The office can,
-     which is the point of migration 004 — Matthew known and not a mover beats
-     Matthew enrolled again on his next job. */
-  const free  = roster.filter(r => !r.sm_crew_id && !r.merged_into);
-  const byName = new Map(free.map(r => [normaliseName(r.full_name), r]));
-
-  const initial = n => {
-    const parts = normaliseName(n).split(" ").filter(Boolean);
-    return parts.length >= 2 ? `${parts[0]} ${parts[parts.length - 1][0]}` : null;
-  };
-  const byInitial = new Map();
-  for (const r of free) {
-    const k = initial(r.full_name);
-    if (k) byInitial.set(k, byInitial.has(k) ? null : r);    // null = two people fit
-  }
-
-  const taken = new Set();              // a name claimed earlier in this same run
-  const adopt = [], add = [], maybe = [];
-  let already = 0;
-
-  for (const member of members) {
-    if (known.has(member.id)) { already++; continue; }
-
-    const exact = byName.get(normaliseName(member.name));
-    if (exact && !taken.has(exact.id)) {
-      taken.add(exact.id);
-      adopt.push({ member, employee: exact });
-      continue;
-    }
-
-    const close = byInitial.get(initial(member.name) ?? "");
-    if (close && !taken.has(close.id)) {
-      maybe.push(`${member.name} looks like ${close.full_name} (${close.code_name})`);
-    }
-    add.push(member);
-  }
-
-  return { adopt, add, maybe, already };
 }

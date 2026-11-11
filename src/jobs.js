@@ -3,32 +3,31 @@
  * Cadences are set by how fast each source really changes, not by how fast we
  * could ask:
  *
- *   smartmoving  every 4 hours   ~20 calls a run, so about 4,500 a month
- *                                against SmartMoving's free 20,000 allowance.
- *                                Job assignments change through the day but
- *                                not by the minute, and there is a per-minute
- *                                rate limit that makes anything faster pointless.
+ *   crew-jobs    hourly          who worked each job, from MoveitPro. Crews
+ *                                are set the day before and adjusted on the
+ *                                day; an hour is soon enough for a review or a
+ *                                claim logged that afternoon.
  *
  *   hours        every 10 min    Matthew pastes weekly, but when he does, the
  *                                board should move while he is still looking
  *                                at it. Reading a small sheet is nearly free.
  *
- *   revenue      daily 06:00     the Revenue Forecast report is emailed daily.
+ *   revenue      every 2 hours   closed-out job bills from MoveitPro. A bill
+ *                                is closed out in the office through the day.
  *
  *   writeback    daily 02:15     quiet hour, and after the day's jobs have
  *                                landed, so the sheet reflects a settled day.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { createClient, monthBounds, buildJobCrewIndex } from "./sync/smartmoving.js";
 import { syncSameDayPoints } from "./sync/points.js";
 import { importHours } from "./sync/hours.js";
 import { importWeeklyHours } from "./sync/hours-weekly.js";
 import { writeBack, reformatAll } from "./sync/writeback.js";
 import { createGoogleClient, loadCredentials } from "./sync/google.js";
-import { parseReportFile } from "./sync/revenue-report.js";
-import { reportFreshness } from "./sync/report-hook.js";
-import { syncMipRevenue, mipIsRevenueSource } from "./sync/mip-revenue.js";
+import { revenueFreshness } from "./sync/revenue-store.js";
+import { syncMipRevenue } from "./sync/mip-revenue.js";
+import { syncJobCrew } from "./sync/mip-crew.js";
+import { configured as moveitproConfigured } from "./moveitpro.js";
 import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
@@ -36,108 +35,13 @@ import { syncCrew } from "./sync/crew.js";
 import { syncLeadDates } from "./sync/lead-dates.js";
 import { sendReminders } from "./sync/reminders.js";
 import { writingEnabled } from "./connecteam.js";
-import { placeCrewMembers } from "./roster.js";
-import { query, withTransaction } from "./db.js";
-
-/* In production the key is an environment variable. SMARTMOVING_KEY_FILE is a
-   local convenience only — it lets a developer keep the key out of their shell
-   history without it ever being committed. */
-export const smartmovingKey = () => {
-  if (process.env.SMARTMOVING_API_KEY) return process.env.SMARTMOVING_API_KEY.trim();
-  const file = process.env.SMARTMOVING_KEY_FILE;
-  return file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
-};
+import { query } from "./db.js";
 
 const thisMonth = () => {
   const d = new Date();
   return { year: d.getFullYear(), month: d.getMonth() + 1,
            period: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01` };
 };
-
-/* ----------------------------------------------------------- smartmoving --- */
-
-const NAME_POOL = ["RANGER","JAGUAR","LYNX","BEAR","BISON","RHINO","WOLF","OTTER",
-  "TITAN","FALCON","HAWK","BADGER","MOOSE","COBRA","EAGLE","VIPER","RAVEN","STAG",
-  "PUMA","OSPREY","HERON","MARLIN","KODIAK","SABLE","ORYX","IBEX"];
-
-export async function syncSmartMoving({ year, month } = {}) {
-  const key = smartmovingKey();
-  if (!key) throw new Error("no SmartMoving API key configured");
-
-  const now = thisMonth();
-  const y = year ?? now.year, m = month ?? now.month;
-  const period = `${y}-${String(m).padStart(2, "0")}-01`;
-
-  const client = createClient({ apiKey: key, log: () => {} });
-  const { from, to } = monthBounds(y, m);
-  const index = await buildJobCrewIndex(client, { from, to, log: () => {} });
-
-  await withTransaction(async c => {
-    for (const j of index.jobs) {
-      await c.query(
-        `insert into sm_jobs (job_id, job_number, opportunity_id, service_date, completed_at, service_type)
-         values ($1,$2,$3,$4,$5,$6)
-         on conflict (job_id) do update set
-           job_number = excluded.job_number, service_date = excluded.service_date,
-           completed_at = excluded.completed_at, synced_at = now()`,
-        [j.job_id, j.job_number, j.opportunity_id, j.service_date, j.completed_at, j.service_type]);
-    }
-    /* rebuild the links for jobs we just saw, so a mover taken off a job
-       actually loses the credit rather than keeping it forever */
-    for (const [jobId, ids] of index.crewByJob) {
-      await c.query(`delete from sm_job_crew where job_id = $1`, [jobId]);
-      for (const id of ids) {
-        await c.query(
-          `insert into sm_job_crew (job_id, sm_crew_id) values ($1,$2) on conflict do nothing`,
-          [jobId, id]);
-      }
-    }
-  });
-
-  /* Working a job is what makes someone a mover, so the roster follows the
-     jobs. Office and sales never appear because they never work one.
-     Somebody set up in Connecteam first is already here without a crew id, and
-     this is where that id is attached to them rather than to a second account
-     in their name — see placeCrewMembers and Andrew's two Landons. */
-  const worked = new Set();
-  for (const ids of index.crewByJob.values()) for (const id of ids) worked.add(id);
-
-  const placed = await placeCrewMembers(index.crew.filter(m => worked.has(m.id)));
-
-  const recognised = [];
-  for (const { member, employee } of placed.adopt) {
-    const r = await query(
-      `update employees set sm_crew_id = $1, updated_at = now()
-        where id = $2 and sm_crew_id is null returning code_name`, [member.id, employee.id]);
-    if (r.rowCount) recognised.push(`${member.name} is ${r.rows[0].code_name}`);
-  }
-
-  const added = [];
-  for (const member of placed.add) {
-    const taken = new Set((await query(`select code_name from employees`)).rows.map(r => r.code_name));
-    const code = NAME_POOL.find(n => !taken.has(n)) ?? `CREW${taken.size + 1}`;
-    await query(
-      `insert into employees (code_name, full_name, sm_crew_id, status)
-       values ($1,$2,$3,'active') on conflict (sm_crew_id) do nothing`,
-      [code, member.name, member.id]);
-    added.push(`${member.name} as ${code}`);
-  }
-
-  /* only sweeps up after the old automatic rule now — see sync/points.js */
-  const sd = await syncSameDayPoints(period);
-
-  return {
-    period,
-    jobs: index.jobs.length,
-    crew: index.crew.length,
-    enrolled: added,
-    recognised,
-    check_these: placed.maybe,
-    day_off_rows_removed: sd.removed,
-    day_off_points_removed: sd.points,
-    api_calls: client.callCount
-  };
-}
 
 /* ------------------------------------------------------------------ hours --- */
 
@@ -191,36 +95,6 @@ export async function syncHours({ period } = {}) {
   }
 
   return parts.join("; ") || "nothing to read";
-}
-
-/* ---------------------------------------------------------------- revenue --- */
-
-/**
- * Read the Revenue Forecast report and record the month's completed revenue.
- *
- * The live path is the daily email SmartMoving sends: it carries a signed
- * download link rather than an attachment. Until that mailbox is wired, this
- * reads a file at REVENUE_REPORT so the job is exercised on the same code
- * path — only where the bytes come from changes.
- */
-export async function syncRevenue({ file } = {}) {
-  const path = file ?? process.env.REVENUE_REPORT;
-  if (!path || !existsSync(path)) {
-    throw new Error("no Revenue Forecast report available — set REVENUE_REPORT " +
-                    "or connect the daily report email");
-  }
-  const months = parseReportFile(path);
-  const { period } = thisMonth();
-  const row = months.find(m => m.period === period);
-  if (!row) return `report read (${months.length} months) but nothing for ${period} yet`;
-
-  await query(
-    `insert into revenue_snapshots
-       (period, completed_revenue, completed_jobs, total_tips, total_taxes, source)
-     values ($1,$2,$3,$4,$5,'report')`,
-    [row.period, row.completed_revenue, row.completed_jobs, row.total_tips, row.total_taxes]);
-
-  return `${period}: $${row.completed_revenue.toLocaleString("en-US")} from ${row.completed_jobs} jobs`;
 }
 
 /* ------------------------------------------------------------ tardy log --- */
@@ -279,25 +153,28 @@ export async function syncWriteBack({ all = false } = {}) {
 
 export function registerJobs(scheduler) {
   const MIN = 60_000;
-  scheduler.add("smartmoving", o => syncSmartMoving(o ?? {}), {
-    everyMs: 4 * 60 * MIN, runAtStartAfterMs: 20_000 });
+  /* Who worked each job, from MoveitPro. A manual run can be given
+     { from: "2026-10-01" } to catch up a range. The sweep after it is the old
+     same-day rule's clean-up, kept from the SmartMoving sync that used to run
+     it; see sync/points.js. */
+  if (moveitproConfigured()) {
+    scheduler.add("crew-jobs", async o => {
+      const line = await syncJobCrew(o ?? {});
+      await syncSameDayPoints(thisMonth().period);
+      return line;
+    }, { everyMs: 60 * MIN, runAtStartAfterMs: 20_000 });
+  }
   scheduler.add("hours", o => syncHours(o), {
     everyMs: 10 * MIN, runAtStartAfterMs: 45_000 });
-  /* The report is ingested whenever its email arrives (via the Zap), so this
-     is a watch, not a fetch. It runs under its own name: were it logged as
-     "revenue" it would count as a report arriving and declare the feed healthy
-     for ever. Fails loudly if nothing has come in for over a day. */
-  scheduler.add("revenue-watch", () => reportFreshness({ maxHours: 26 }), {
-    everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60_000 });
-  /* Completed revenue from MoveitPro's job bills, once REVENUE_SOURCE says so.
-     Named "revenue" on purpose: each run is a revenue reading, so the watch
-     above sees it and stays quiet while it is working. Every two hours is
-     about two hundred calls a month's worth; a bill is signed on the doorstep
-     and the pool should show it the same afternoon, not the next morning. */
-  if (mipIsRevenueSource()) {
+  /* Completed revenue from MoveitPro's closed-out job bills. Named "revenue"
+     so each run counts as a reading; the watch below runs under its own name,
+     or it would declare the figure fresh for ever. */
+  if (moveitproConfigured()) {
     scheduler.add("revenue", () => syncMipRevenue(), {
       everyMs: 2 * 60 * MIN, runAtStartAfterMs: 150_000 });
   }
+  scheduler.add("revenue-watch", () => revenueFreshness({ maxHours: 6 }), {
+    everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60 * MIN });
   /* Matthew updates his log through the day; half-hourly keeps the board
      current without reading the sheet for no reason */
   if (process.env.TARDY_SHEET_ID) {

@@ -192,7 +192,7 @@
   <div class="col">
     <div class="panel">
       <h2>Log a review</h2>
-      <p class="dek">Type the job number and the crew who worked it fills in from SmartMoving. Tap a name to add or drop them.</p>
+      <p class="dek">Type the estimate number and the crew who worked it fills in from MoveitPro. Tap a name to add or drop them.</p>
       <div class="frow">
         <div style="max-width:130px"><label for="rvDate">Date</label><input type="date" id="rvDate"></div>
         <div style="max-width:130px"><label for="rvJob">Job #</label><input type="text" id="rvJob" placeholder="10122-1" autocomplete="off"></div>
@@ -385,7 +385,7 @@ Tyler Johnston  44.25"></textarea>
           <div style="max-width:110px"><label for="revJobs">Jobs</label><input type="number" id="revJobs" min="0" step="1" placeholder="26"></div>
           <button id="revSave">Update</button>
         </div>
-        <p class="hint">From SmartMoving's Revenue Forecast report. Once the daily report email is connected this fills itself in, and its figure takes over.</p>
+        <p class="hint">Read from MoveitPro every two hours: closed-out jobs, without sales tax or tips. A figure typed here holds until someone types another, and the MoveitPro reading is ignored for that month meanwhile.</p>
       </div>
       <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
         <label class="switch"><input type="checkbox" id="gateWaive">
@@ -424,7 +424,7 @@ Tyler Johnston  44.25"></textarea>
 
 <div class="panel" style="margin-top:16px">
   <h2 id="rosterTitle">Roster</h2>
-  <p class="dek" id="rosterDek">Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working. Someone marked <b>Left, gave notice</b> still earns their share for the month they worked &mdash; they stay on this list until the month is over, then drop off on the 1st.</p>
+  <p class="dek" id="rosterDek">Anyone set up in the Operations group in Connecteam is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working. Someone marked <b>Left, gave notice</b> still earns their share for the month they worked &mdash; they stay on this list until the month is over, then drop off on the 1st.</p>
   <div class="tblwrap"><table id="rosterTbl"></table></div>
 </div>
 
@@ -617,7 +617,7 @@ Tyler Johnston  44.25"></textarea>
         + '</td>'
         + '<td class="n" style="color:'+(d<0?"var(--crit)":"var(--good)")+'"><b>'+(d>0?"+":"−")+Math.abs(d)+'</b></td>'
         + '<td class="n">'+(p.recorded_by === "system"
-            ? '<span class="auto" title="Added from the SmartMoving schedule">Automatic</span>'
+            ? '<span class="auto" title="Added automatically by the old same-day rule">Automatic</span>'
             : '<button class="sm danger" data-delpt="'+p.id+'" data-what="'+esc(p.full_name+" · "+p.reason)+'">Remove</button>')
         + '</td></tr>';
     });
@@ -819,7 +819,7 @@ Tyler Johnston  44.25"></textarea>
         renderYtd(r[6]);
       } else {
         $("rosterTitle").textContent = "Roster";
-        $("rosterDek").innerHTML = 'Anyone who works a job in SmartMoving is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.';
+        $("rosterDek").innerHTML = 'Anyone set up in the Operations group in Connecteam is added here automatically. Mark someone <b>Left, no notice</b> and their share is forfeited and spread across everyone still working.';
         renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
       }
       renderReviews(); renderCrewChips(); renderClaimChips(); renderJobs(r[4]); renderRevenue(r[5]);
@@ -1012,7 +1012,7 @@ Tyler Johnston  44.25"></textarea>
           + '<td class="n">' + p.points + '</td><td class="n">' + p.reviews + '</td>'
           + '<td class="n">' + (p.hours ? p.hours : "—") + '</td>'
           + '<td class="n">' + p.sign_ins + '</td>'
-          + '<td class="n">' + (p.sm_crew_id ? p.jobs : '<span style="color:var(--ink-3)">—</span>') + '</td>'
+          + '<td class="n">' + (p.jobs ? p.jobs : '<span style="color:var(--ink-3)">—</span>') + '</td>'
           + '</tr>';
       });
 
@@ -1067,8 +1067,8 @@ Tyler Johnston  44.25"></textarea>
            there, and only one can sit on the account kept. Jobs recorded under
            the other one still will not credit anybody, so say so rather than
            letting it look finished. */
-        if (r.crew_id_kept) notes.push(r.merged.code_name + " had a SmartMoving crew id of its "
-          + "own and keeps it, so jobs recorded under that id do not count towards "
+        if (r.crew_id_kept) notes.push(r.merged.code_name + " had an old SmartMoving crew id of its "
+          + "own and keeps it, so August to October jobs recorded under that id do not count towards "
           + r.kept.code_name);
       });
       toast("Merged into " + keep.code_name + ". " + moved + " record(s) moved."
@@ -1226,8 +1226,8 @@ Tyler Johnston  44.25"></textarea>
         STATE.revCrew = j.found ? j.crew.map(function(c){ return c.id; }) : [];
         renderCrewChips();
         $("rvHint").innerHTML = j.found
-          ? "Job <b>"+esc(j.job_number)+"</b> — SmartMoving has <b>"+j.crew.length+"</b> on it. Tap a name to add or drop."
-          : "Job <b>"+esc(v)+"</b> isn’t in SmartMoving. Pick the crew by hand.";
+          ? "Job <b>"+esc(j.job_number)+"</b> has <b>"+j.crew.length+"</b> on it in MoveitPro. Tap a name to add or drop."
+          : "Job <b>"+esc(v)+"</b> has no crew in MoveitPro yet. Pick the crew by hand.";
       }).catch(function(e){ toast(e.message, true); });
     }, 320);
   });

@@ -79,8 +79,8 @@ try {
   console.log("\n5. JOB NUMBER LOOKUP");
   {
     const known = (await query(
-      `select j.job_number from sm_jobs j join sm_job_crew jc on jc.job_id = j.job_id
-        group by j.job_number having count(*) >= 3 limit 1`)).rows[0]?.job_number;
+      `select job_number from job_crew where job_number is not null
+        group by job_number having count(distinct employee_id) >= 3 limit 1`)).rows[0]?.job_number;
     const r = await get(`/api/admin/job/${known}`);
     check("a known job returns its crew", r.body?.found === true && r.body?.crew?.length >= 3,
       `${known} → ${r.body?.crew?.length} movers`);
@@ -104,8 +104,8 @@ try {
   console.log("\n7. WRITING A REVIEW END TO END");
   {
     const known = (await query(
-      `select j.job_number from sm_jobs j join sm_job_crew jc on jc.job_id = j.job_id
-        group by j.job_number having count(*) >= 3 limit 1`)).rows[0].job_number;
+      `select job_number from job_crew where job_number is not null
+        group by job_number having count(distinct employee_id) >= 3 limit 1`)).rows[0].job_number;
     const lookup = await get(`/api/admin/job/${known}`);
     const crew = lookup.body.crew.map(c => c.id);
 

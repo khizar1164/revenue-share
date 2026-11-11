@@ -34,7 +34,6 @@ import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, ses
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
          adminConfigured, adminLoginAllowed, checkAdminPassword,
          setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
-import { handleReportEmail } from "./sync/report-hook.js";
 import { verifyDelivery } from "./moveitpro.js";
 import { handleEvent } from "./sync/mip-relay.js";
 import { createLead, keyOk, relayKey } from "./sync/lead-intake.js";
@@ -148,39 +147,14 @@ async function handleMipDelivery(req, res) {
 
 /* ------------------------------------------------ report email webhook ---- */
 /*
- * Zapier posts the SmartMoving report email here. It cannot carry the admin
- * cookie, so it has its own secret — and like every other door here it FAILS
- * CLOSED: with REPORT_HOOK_SECRET unset, nothing is accepted.
- *
- * The secret is only the first check. Even a caller who has it can only point
- * us at a spreadsheet that downloads from SmartMoving's own hosts and has the
- * Revenue Forecast's columns — see fetchReport().
+ * Retired 12 November 2026. Revenue comes from MoveitPro now, not from
+ * SmartMoving's Revenue Forecast email. Answering 410 rather than nothing means
+ * the Zap that still posts here shows a plain reason in its task history, which
+ * is the cue to switch it off.
  */
-app.post("/api/hooks/revenue-report",
-  express.urlencoded({ extended: false, limit: "2mb" }),
-  express.json({ limit: "2mb" }),
-  async (req, res) => {
-    const secret = process.env.REPORT_HOOK_SECRET;
-    if (!secret) return res.status(503).json({ error: "report webhook is not set up — REPORT_HOOK_SECRET is missing" });
-
-    const given = req.get("x-hook-secret") || req.query.key || req.body?.secret;
-    if (!given || !safeEqual(given, secret)) return res.status(401).json({ error: "bad or missing secret" });
-
-    /* Zapier's Gmail step names these fields a few different ways */
-    const b = req.body ?? {};
-    const body = b.body_html || b.html || b.body || b.body_plain || b.text || b.plain || "";
-    const url = b.url || b.link || null;
-
-    try {
-      const r = await handleReportEmail({ body, url, subject: b.subject });
-      res.json(r);
-    } catch (e) {
-      console.error("revenue report webhook:", e.message);
-      /* 422 rather than 500: the request was understood, the report was not
-         usable. Zapier shows this message in its task history. */
-      res.status(422).json({ error: e.message });
-    }
-  });
+app.post("/api/hooks/revenue-report", (_req, res) => {
+  res.status(410).json({ error: "retired: revenue now comes from MoveitPro. Turn this Zap off." });
+});
 
 /* Which month are we showing? Defaults to now, overridable for testing. */
 function askedPeriod(req) {
@@ -444,11 +418,10 @@ app.get("/api/admin/ytd", wrap(async (req, res) => {
 /*
  * Completed revenue, entered by hand.
  *
- * The daily Revenue Forecast email is the intended source, but until it is
- * wired the figure would otherwise sit frozen at whatever was last loaded.
- * A manual entry is recorded as such and never overwrites anything: the most
- * recent reading wins, so the day the report feed starts, its figures simply
- * take over.
+ * MoveitPro's closed-out job bills are the source (sync/mip-revenue.js). A
+ * figure entered here is recorded as manual and holds against that read until
+ * somebody enters another one: October 2026 is held at Andrew's $205,000 this
+ * way while the two-system month is settled.
  */
 app.get("/api/admin/revenue", wrap(async (req, res) => {
   const { year, month } = askedPeriod(req);
@@ -458,18 +431,6 @@ app.get("/api/admin/revenue", wrap(async (req, res) => {
        from revenue_snapshots where period = $1::date
       order by captured_at desc limit 10`, [period]);
   res.json({ period, current: r.rows[0] ?? null, history: r.rows });
-}));
-
-/* The fallback when the Zap is down: paste the Download Report link from the
-   email and it goes through exactly the same checks as the webhook. */
-app.post("/api/admin/revenue/from-link", wrap(async (req, res) => {
-  const url = String(req.body?.url ?? "").trim();
-  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: "paste the full Download Report link" });
-  try {
-    res.json(await handleReportEmail({ url }));
-  } catch (e) {
-    res.status(422).json({ error: e.message });
-  }
 }));
 
 app.post("/api/admin/revenue", wrap(async (req, res) => {
@@ -518,6 +479,10 @@ app.get("/api/admin/roster", wrap(async (_req, res) => {
 app.get("/api/admin/duplicates", wrap(async (_req, res) => {
   const merged = await hasColumn("employees", "merged_into")
     ? "e.merged_into" : "null::uuid as merged_into";
+  const jobsWorked = await hasColumn("job_crew", "job_ref")
+    ? "(select count(distinct (jc.source, jc.job_ref)) from job_crew jc where jc.employee_id = e.id)::int"
+    : `(select count(*) from sm_job_crew jc
+         where e.sm_crew_id is not null and jc.sm_crew_id = e.sm_crew_id)::int`;
   const r = await query(
     `select e.id, e.code_name, e.full_name, e.email, e.sm_crew_id, e.status,
             e.is_mover, ${merged},
@@ -527,8 +492,7 @@ app.get("/api/admin/duplicates", wrap(async (_req, res) => {
             (select count(*) from adjustments a where a.employee_id = e.id)::int as adjustments,
             (select coalesce(sum(h.hours), 0) from hours h where h.employee_id = e.id)::float8 as hours,
             (select count(*) from sign_ins si where si.employee_id = e.id)::int as sign_ins,
-            (select count(*) from sm_job_crew jc
-              where e.sm_crew_id is not null and jc.sm_crew_id = e.sm_crew_id)::int as jobs
+            ${jobsWorked} as jobs
        from employees e
       order by e.code_name`);
 
@@ -548,18 +512,33 @@ app.get("/api/admin/duplicates", wrap(async (_req, res) => {
 /* job number -> the crew who worked it. This is the lookup that makes logging
    a review two fields and a tap. */
 app.get("/api/admin/job/:jobNumber", wrap(async (req, res) => {
-  const r = await query(
-    `select j.job_number, j.service_date, j.completed_at,
-            e.id, e.code_name, e.full_name
-       from sm_jobs j
-       join sm_job_crew jc on jc.job_id = j.job_id
-       join employees e    on e.sm_crew_id = jc.sm_crew_id
-      where j.job_number = $1
-      order by e.full_name`, [req.params.jobNumber]);
+  /* job_crew holds MoveitPro's crews and the SmartMoving history copied into
+     it. The old tables are only read until migration 021 has been run, because
+     Render deploys before anyone runs a migration. A move over several days
+     shares one estimate number, so its crew is everyone who worked any day of
+     it; when both systems know a number, MoveitPro's answer is the one used. */
+  const r = await hasColumn("job_crew", "job_ref")
+    ? await query(
+        `select jc.source, jc.job_number, min(jc.service_date) as service_date,
+                max(jc.completed_at) as completed_at, e.id, e.code_name, e.full_name
+           from job_crew jc
+           join employees e on e.id = jc.employee_id
+          where jc.job_number = $1
+          group by jc.source, jc.job_number, e.id, e.code_name, e.full_name
+          order by e.full_name`, [req.params.jobNumber])
+    : await query(
+        `select 'smartmoving' as source, j.job_number, j.service_date, j.completed_at,
+                e.id, e.code_name, e.full_name
+           from sm_jobs j
+           join sm_job_crew jc on jc.job_id = j.job_id
+           join employees e    on e.sm_crew_id = jc.sm_crew_id
+          where j.job_number = $1
+          order by e.full_name`, [req.params.jobNumber]);
+  if (r.rows.some(x => x.source === "moveitpro")) r.rows = r.rows.filter(x => x.source === "moveitpro");
 
-  if (!r.rowCount) {
+  if (!r.rows.length) {
     return res.json({ job_number: req.params.jobNumber, found: false, crew: [],
-      note: "not in SmartMoving yet — pick the crew by hand" });
+      note: "no crew on that job in MoveitPro yet, pick the crew by hand" });
   }
   res.json({
     job_number: r.rows[0].job_number,
@@ -1326,7 +1305,7 @@ app.get("/healthz", async (_req, res) => {
     const recent = await query(
       `select distinct on (kind) kind, ok, started_at, ended_at, detail
          from sync_runs
-        where kind in ('smartmoving', 'hours', 'revenue', 'writeback', 'tardies', 'reviews', 'discipline', 'crew')
+        where kind in ('crew-jobs', 'hours', 'revenue', 'writeback', 'tardies', 'reviews', 'discipline', 'crew')
         order by kind, started_at desc`);
     out.last_runs = recent.rows;
 
@@ -1337,14 +1316,14 @@ app.get("/healthz", async (_req, res) => {
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
                   : r.kind === "tardies" || r.kind === "reviews"
                     || r.kind === "discipline" ? 2 * 3600e3      // every 30 min
-                  : r.kind === "crew" ? 4 * 3600e3               // hourly
-                  : r.kind === "smartmoving" ? 8 * 3600e3     // every 4 hours
+                  : r.kind === "crew" || r.kind === "crew-jobs" ? 4 * 3600e3   // hourly
+                  : r.kind === "revenue" ? 6 * 3600e3            // every 2 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;
     }).map(r => r.kind);
     if (stale.length) out.stale_jobs = stale;
 
-    const missing = ["smartmoving", "hours", "revenue", "writeback", "discipline",
+    const missing = ["crew-jobs", "hours", "revenue", "writeback", "discipline",
                      ...(process.env.TARDY_SHEET_ID ? ["tardies"] : []),
                      ...(process.env.REVIEW_SHEET_ID ? ["reviews"] : [])]
       .filter(k => !recent.rows.some(r => r.kind === k));
@@ -1374,7 +1353,7 @@ app.get("/", (_req, res) => res.sendFile(join(root, "public", "index.html")));
 
 /* The scheduler lives in this process because the service is always on anyway.
    Off by default outside production so a local run does not start hitting
-   SmartMoving and rewriting Andrew's sheet the moment someone opens a page. */
+   MoveitPro and rewriting Andrew's sheet the moment someone opens a page. */
 let scheduler = null;
 const schedulingWanted = process.env.RUN_SCHEDULER === "on" ||
   (process.env.NODE_ENV === "production" && process.env.RUN_SCHEDULER !== "off");
