@@ -28,6 +28,7 @@ import { writeBack, reformatAll } from "./sync/writeback.js";
 import { createGoogleClient, loadCredentials } from "./sync/google.js";
 import { parseReportFile } from "./sync/revenue-report.js";
 import { reportFreshness } from "./sync/report-hook.js";
+import { syncMipRevenue, mipIsRevenueSource } from "./sync/mip-revenue.js";
 import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
 import { syncDiscipline } from "./sync/discipline.js";
@@ -288,6 +289,15 @@ export function registerJobs(scheduler) {
      for ever. Fails loudly if nothing has come in for over a day. */
   scheduler.add("revenue-watch", () => reportFreshness({ maxHours: 26 }), {
     everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60_000 });
+  /* Completed revenue from MoveitPro's job bills, once REVENUE_SOURCE says so.
+     Named "revenue" on purpose: each run is a revenue reading, so the watch
+     above sees it and stays quiet while it is working. Every two hours is
+     about two hundred calls a month's worth; a bill is signed on the doorstep
+     and the pool should show it the same afternoon, not the next morning. */
+  if (mipIsRevenueSource()) {
+    scheduler.add("revenue", () => syncMipRevenue(), {
+      everyMs: 2 * 60 * MIN, runAtStartAfterMs: 150_000 });
+  }
   /* Matthew updates his log through the day; half-hourly keeps the board
      current without reading the sheet for no reason */
   if (process.env.TARDY_SHEET_ID) {
