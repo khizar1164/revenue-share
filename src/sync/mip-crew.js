@@ -29,7 +29,10 @@ import { query, withTransaction, hasColumn } from "../db.js";
 import { rawGet, getWithRetry, monthRange } from "./mip-revenue.js";
 import { periodInZone } from "./revenue-store.js";
 
-const norm = s => String(s ?? "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+/** First day MoveitPro's crews are used. Before it, job_crew holds SmartMoving's record only. */
+export const MOVEITPRO_CREW_FROM = "2026-11-01";
+
+const norm = s =>String(s ?? "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
 const nameOf = e => norm(e.full_name || e.name || [e.first_name, e.last_name].filter(Boolean).join(" "));
 const isCurrent = e => String(e.employee_status ?? "").toLowerCase() !== "terminated";
 
@@ -96,6 +99,12 @@ export async function syncJobCrew({ from, to, now = new Date(), get = rawGet, re
   const current = periodInZone(now);
   from ??= previousPeriod(current);
   to ??= monthRange(current)[1];
+  /* November 2026 is the first month MoveitPro's crews count. October and
+     earlier stay exactly as SmartMoving recorded them (Khizar, 12 November):
+     those months were worked and settled on that record, so a later read from
+     another system must not rewrite who was on a job. */
+  if (from < MOVEITPRO_CREW_FROM) from = MOVEITPRO_CREW_FROM;
+  if (to < from) return `nothing to do: MoveitPro crews start ${MOVEITPRO_CREW_FROM}`;
 
   /* 1. link movers to MoveitPro employees */
   const mipEmployees = await listAll(get, "/v1/employees?limit=100", retry);
