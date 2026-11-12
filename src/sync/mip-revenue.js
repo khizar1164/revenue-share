@@ -27,6 +27,7 @@
  */
 
 import * as mip from "../moveitpro.js";
+import { query } from "../db.js";
 import { ingestReport, periodInZone } from "./revenue-store.js";
 
 /** First and last day of a month, as YYYY-MM-DD. */
@@ -139,10 +140,25 @@ export async function rawGet(path) {
  * The scheduled job: this month and last month from MoveitPro, stored under
  * the same protective rules. Returns the line the admin panel shows.
  */
-export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = ingestReport, retry } = {}) {
+/** Is the newest figure for a month one somebody typed. Such a month holds
+    whatever MoveitPro says, so reading it would spend requests for nothing. */
+async function heldByHand(period) {
+  const r = (await query(
+    `select source from revenue_snapshots where period = $1::date
+      order by captured_at desc limit 1`, [period])).rows[0];
+  return r?.source === "manual";
+}
+
+export async function syncMipRevenue({ now = new Date(), get = rawGet, ingest = ingestReport, retry,
+                                       isHeld = heldByHand } = {}) {
   const current = periodInZone(now);
-  const months = [await mipMonth(current, { get, retry }), await mipMonth(previousPeriod(current), { get, retry })];
-  const { results } = await ingest(months, { now });
+  const months = [], skipped = [];
+  for (const period of [current, previousPeriod(current)]) {
+    if (await isHeld(period)) { skipped.push(period); continue; }
+    months.push(await mipMonth(period, { get, retry }));
+  }
+  const { results } = months.length ? await ingest(months, { now }) : { results: [] };
+  for (const p of skipped) results.push({ period: p, action: "held by a manual entry, not read" });
 
   return results.map(r => {
     const m = months.find(x => x.period === r.period);
