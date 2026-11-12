@@ -65,17 +65,28 @@ check("a 429 was waited out rather than dropped", rateLimitedOnce && m.completed
 
 console.log("\n3. WHAT IT HANDS ON");
 let handed = null;
+const fakeIngest = async (months) => { handed = months;
+  return { results: months.map(m => ({ period: m.period, action: "updated", revenue: m.completed_revenue, was: 0 })) }; };
 const line = await syncMipRevenue({
   now: new Date("2026-11-11T15:00:00Z"),
-  get: fakeGet, retry: fast,
-  ingest: async (months) => { handed = months; return { results: [
-    { period: "2026-11-01", action: "updated", revenue: months[0].completed_revenue, was: 0 },
-    { period: "2026-10-01", action: "held by a manual entry", revenue: 195000, reported: months[1].completed_revenue }
-  ] }; }
+  get: fakeGet, retry: fast, ingest: fakeIngest, isHeld: async () => false
 });
 check("this month and last month, in that order",
   handed?.map(x => x.period).join(",") === "2026-11-01,2026-10-01");
-check("a held month says what MoveitPro would have said", /held by a manual entry \$195,000 \(MoveitPro says/.test(line), line);
+
+/* MoveitPro's free plan stops at 1,000 requests a day. A month somebody typed
+   a figure for holds whatever MoveitPro says, so it is not read at all. */
+let calls = 0;
+const counting = async p => { calls++; return fakeGet(p); };
+handed = null;
+const held = await syncMipRevenue({
+  now: new Date("2026-11-11T15:00:00Z"),
+  get: counting, retry: fast, ingest: fakeIngest, isHeld: async p => p === "2026-10-01"
+});
+check("a month held by hand is not read from MoveitPro",
+  handed?.map(x => x.period).join(",") === "2026-11-01", handed?.map(x => x.period).join(","));
+check("and the run says so", /2026-10 held by a manual entry, not read/.test(held), held);
+check("so it costs one month of requests, not two", calls > 0 && calls <= 105, `${calls} requests`);
 
 console.log(failures ? `\n${failures} FAILED\n` : "\nall passed\n");
 process.exit(failures ? 1 : 0);

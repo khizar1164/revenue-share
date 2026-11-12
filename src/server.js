@@ -1316,8 +1316,9 @@ app.get("/healthz", async (_req, res) => {
       const limit = r.kind === "hours" ? 60 * 60e3            // every 10 min
                   : r.kind === "tardies" || r.kind === "reviews"
                     || r.kind === "discipline" ? 2 * 3600e3      // every 30 min
-                  : r.kind === "crew" || r.kind === "crew-jobs" ? 4 * 3600e3   // hourly
-                  : r.kind === "revenue" ? 6 * 3600e3            // every 2 hours
+                  : r.kind === "crew" ? 4 * 3600e3                 // hourly
+                  : r.kind === "crew-jobs" ? 8 * 3600e3          // every 3 hours
+                  : r.kind === "revenue" ? 14 * 3600e3           // every 6 hours
                   : 36 * 3600e3;                              // daily
       return age > limit;
     }).map(r => r.kind);
