@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Share — Rules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/admin.css?v=22">
+<style>
+  .pts{font-family:var(--cond);font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}
+  .pts.up{color:var(--good)} .pts.down{color:var(--crit)}
+  td.acts{white-space:nowrap;text-align:right}
+  td.acts button+button{margin-left:6px}
+  #rulesTbl input{padding:6px 8px}
+  .fixed{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .fixed h3{font-family:var(--cond);font-weight:700;font-size:14px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <h1>Revenue Share <em>&middot;</em> Rules</h1>
+  <div class="mo">
+    <a class="back" href="/admin">&larr; Back to admin</a>
+    <a class="nav" href="/admin/writeups">Write-ups</a>
+  </div>
+</header>
+
+<div id="signin" class="note" hidden>You need to be signed in. <a href="/admin" style="color:var(--brand)">Sign in on the admin page</a>, then come back.</div>
+
+<div id="main" hidden>
+  <div class="panel" style="margin-bottom:16px">
+    <h2>Point rules</h2>
+    <p class="dek">The list you pick from when you record points on the admin page.
+      Editing or deleting a rule doesn't change points already recorded: each entry keeps the wording it was given.</p>
+    <div id="notEditable" class="note" hidden>These can be viewed but not changed until the database update is applied.</div>
+    <div class="tblwrap"><table id="rulesTbl"></table></div>
+    <div class="frow" id="addRow">
+      <div><label for="newLabel">New rule</label>
+        <input type="text" id="newLabel" maxlength="120" placeholder="Left the truck unlocked overnight"></div>
+      <div style="max-width:110px"><label for="newPts">Points</label>
+        <input type="number" id="newPts" step="1" value="-1"></div>
+      <button class="go" id="addBtn">Add rule</button>
+    </div>
+    <p class="hint" id="addHint">Use a minus sign for a deduction (&minus;1) and a plain number for a credit (2).</p>
+  </div>
+
+  <div class="panel">
+    <h2>Worked out automatically</h2>
+    <p class="dek">The system applies these by itself. They can't be edited here.</p>
+    <div class="fixed" id="fixed"></div>
+  </div>
+</div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); };
+  var signed = function(n){ n = Number(n); return n > 0 ? "+" + n : "−" + Math.abs(n); };
+
+  function toast(msg, bad){
+    var t = $("toast");
+    t.textContent = msg;
+    t.className = "on" + (bad ? " bad" : "");
+    clearTimeout(t._h);
+    t._h = setTimeout(function(){ t.className = ""; }, 3200);
+  }
+  function api(path, opts){
+    return fetch(path, Object.assign({ headers:{ "content-type":"application/json" } }, opts||{}))
+      .then(function(r){
+        if (r.status === 204) return null;
+        return r.json().then(function(b){
+          if (!r.ok) throw new Error(b && b.error ? b.error : "HTTP " + r.status);
+          return b;
+        });
+      });
+  }
+
+  var STATE = { rules: [], editable: false, editing: -1 };
+
+  function renderRules(){
+    var h = '<thead><tr><th>Rule</th><th class="n">Points</th><th></th></tr></thead><tbody>';
+    if (!STATE.rules.length) h += '<tr><td colspan="3" style="color:var(--ink-3)">No rules yet.</td></tr>';
+    STATE.rules.forEach(function(r){
+      if (r.id != null && STATE.editing === Number(r.id)) {
+        h += '<tr><td><input type="text" id="edLabel" maxlength="120" value="' + esc(r.label) + '"></td>'
+          + '<td class="n" style="width:110px"><input type="number" id="edPts" step="1" value="' + r.points + '"></td>'
+          + '<td class="acts"><button class="sm go" data-save="' + r.id + '">Save</button>'
+          + '<button class="sm" data-cancel="1">Cancel</button></td></tr>';
+        return;
+      }
+      h += '<tr><td>' + esc(r.label) + '</td>'
+        + '<td class="n"><span class="pts ' + (r.points > 0 ? "up" : "down") + '">' + signed(r.points) + '</span></td>'
+        + '<td class="acts">' + (STATE.editable
+            ? '<button class="sm" data-edit="' + r.id + '">Edit</button>'
+            + '<button class="sm danger" data-del="' + r.id + '">Delete</button>'
+            : '') + '</td></tr>';
+    });
+    $("rulesTbl").innerHTML = h + "</tbody>";
+    $("addRow").hidden = !STATE.editable;
+    $("addHint").hidden = !STATE.editable;
+    $("notEditable").hidden = STATE.editable;
+    var ed = $("edLabel"); if (ed) ed.focus();
+  }
+
+  function renderFixed(f){
+    var list = function(items){ return '<table><tbody>' + items.join("") + '</tbody></table>'; };
+    var row = function(a, b){ return '<tr><td>' + a + '</td><td class="n">' + b + '</td></tr>'; };
+    $("fixed").innerHTML =
+        '<div><h3>Tardy log (Matthew’s sheet)</h3>'
+      + list(f.tardyLog.map(function(t){ return row(esc(t.what), '<span class="pts down">' + signed(t.points) + '</span>'); }))
+      + '</div>'
+      + '<div><h3>Write-ups</h3>'
+      + list(f.thresholds.map(function(t){ return row(esc(t.level), t.at + ' points lost'); }))
+      + '<p class="hint">Counted over the last ' + f.window + ' days, not the calendar month.</p></div>'
+      + '<div><h3>Each month</h3>'
+      + list([row("Everyone starts the month on", f.startPoints + " points")])
+      + '</div>';
+  }
+
+  function load(){
+    return api("/api/admin/rules").then(function(d){
+      STATE.rules = d.rules; STATE.editable = d.editable;
+      renderRules(); renderFixed(d.fixed);
+    }).catch(function(e){ toast(e.message, true); });
+  }
+
+  function readRule(labelEl, ptsEl){
+    var label = labelEl.value.trim(), points = Number(ptsEl.value);
+    if (!label) { toast("Say what the rule is.", true); labelEl.focus(); return null; }
+    if (!Number.isInteger(points) || points === 0) { toast("Points must be a whole number other than 0.", true); ptsEl.focus(); return null; }
+    return { label: label, points: points };
+  }
+
+  $("rulesTbl").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.hasAttribute("data-edit")) { STATE.editing = Number(b.getAttribute("data-edit")); renderRules(); return; }
+    if (b.hasAttribute("data-cancel")) { STATE.editing = -1; renderRules(); return; }
+    if (b.hasAttribute("data-save")) {
+      var body = readRule($("edLabel"), $("edPts")); if (!body) return;
+      b.disabled = true;
+      api("/api/admin/rules/" + b.getAttribute("data-save"), { method:"PUT", body: JSON.stringify(body) })
+        .then(function(){ STATE.editing = -1; toast("Rule saved."); load(); })
+        .catch(function(err){ b.disabled = false; toast(err.message, true); });
+      return;
+    }
+    if (b.hasAttribute("data-del")) {
+      var id = Number(b.getAttribute("data-del"));
+      var r = STATE.rules.filter(function(x){ return x.id === id; })[0];
+      if (!confirm("Delete this rule?\n\n" + (r ? r.label + " (" + signed(r.points) + ")" : "")
+          + "\n\nPoints already recorded under it stay as they are.")) return;
+      b.disabled = true;
+      api("/api/admin/rules/" + id, { method:"DELETE" })
+        .then(function(){ toast("Rule deleted."); load(); })
+        .catch(function(err){ b.disabled = false; toast(err.message, true); });
+    }
+  });
+
+  $("rulesTbl").addEventListener("keydown", function(e){
+    if (e.key === "Enter") { var s = document.querySelector("button[data-save]"); if (s) s.click(); }
+    if (e.key === "Escape") { STATE.editing = -1; renderRules(); }
+  });
+
+  $("addBtn").addEventListener("click", function(){
+    var body = readRule($("newLabel"), $("newPts")); if (!body) return;
+    $("addBtn").disabled = true;
+    api("/api/admin/rules", { method:"POST", body: JSON.stringify(body) })
+      .then(function(){ toast("Rule added."); $("newLabel").value = ""; $("newPts").value = "-1"; load(); })
+      .catch(function(err){ toast(err.message, true); })
+      .finally(function(){ $("addBtn").disabled = false; });
+  });
+
+  fetch("/api/admin/whoami").then(function(r){ return r.json(); }).then(function(w){
+    if (!w.admin) { $("signin").hidden = false; return; }
+    $("main").hidden = false;
+    load();
+  }).catch(function(){ toast("Can't reach the server.", true); });
+})();
+</script>
+</body>
+</html>

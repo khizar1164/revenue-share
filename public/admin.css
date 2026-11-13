@@ -1,0 +1,159 @@
+/* The hidden attribute loses to any display: rule, so an element styled
+   display:flex stays on screen when told to hide. That is exactly how the
+   admin sign-in overlay stayed up after a successful sign-in. */
+[hidden]{display:none !important}
+:root{
+  --plane:#100f0d; --panel:#1a1815; --panel-2:#211e1a; --seam:#2e2a24;
+  --hair:rgba(255,255,255,.07);
+  --ink:#fff; --ink-2:#c9c3b6; --ink-3:#8b857a;
+  --brand:#f0762e; --s-points:#3987e5; --s-reviews:#d95926;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"Barlow Condensed","Barlow",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink-2);font-family:var(--sans);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.page{max-width:1360px;margin:0 auto;padding:0 22px 80px}
+
+header{display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+  padding:26px 0 18px;border-bottom:1px solid var(--seam);margin-bottom:22px;flex-wrap:wrap}
+h1{font-family:var(--cond);font-weight:700;font-size:30px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink);margin:0}
+h1 em{color:var(--brand);font-style:normal}
+.mo{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+h2{font-family:var(--cond);font-weight:700;font-size:17px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-2);margin:0 0 4px}
+.dek{font-size:13.5px;color:var(--ink-3);margin:0 0 14px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+.col{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--seam);border-radius:11px;padding:19px 21px}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--seam);border-radius:10px;padding:14px 16px}
+.stat .k{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3)}
+.stat .v{font-family:var(--cond);font-weight:700;font-size:27px;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.15}
+.stat .m{font-size:12.5px;color:var(--ink-3)}
+
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-family:var(--cond);font-weight:600;font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);text-align:left;padding:0 10px 8px 0;
+  border-bottom:1px solid var(--seam);white-space:nowrap}
+td{padding:8px 10px 8px 0;border-bottom:1px solid var(--hair);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.code{font-family:var(--cond);font-weight:700;letter-spacing:.05em;color:var(--ink)}
+.tblwrap{overflow-x:auto}
+.scrolly{max-height:330px;overflow-y:auto}
+
+label{font-size:11.5px;color:var(--ink-3);display:block;margin-bottom:4px;
+  letter-spacing:.07em;text-transform:uppercase;font-weight:600}
+input,select,textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--plane);
+  border:1px solid var(--seam);border-radius:7px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:88px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.frow{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-top:12px}
+.frow>div{flex:1;min-width:110px}
+
+button{font:inherit;font-weight:600;font-size:13.5px;color:var(--ink);background:var(--panel-2);
+  border:1px solid var(--seam);border-radius:7px;padding:8px 14px;cursor:pointer;white-space:nowrap}
+button:hover{border-color:var(--ink-3)}
+button.go{background:var(--brand);border-color:var(--brand);color:#1a0e05}
+button.go:hover{filter:brightness(1.08)}
+button.sm{padding:5px 9px;font-size:12.5px}
+button.danger{color:var(--crit)}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin:11px 0 4px}
+.chips button{font-family:var(--cond);font-weight:700;font-size:12.5px;letter-spacing:.06em;
+  color:var(--ink-3);padding:5px 10px}
+.chips button[aria-pressed="true"]{color:var(--ink);border-color:var(--s-reviews);
+  background:rgba(217,89,38,.16)}
+.hint{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
+.hint b{color:var(--ink-2)}
+
+.pill{display:inline-block;font-family:var(--cond);font-weight:700;font-size:11.5px;
+  letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:5px}
+.pill.ok{color:var(--good);background:rgba(12,163,12,.15)}
+.pill.no{color:var(--crit);background:rgba(208,59,59,.15)}
+.pill.warn{color:var(--warn);background:rgba(250,178,25,.15)}
+
+.note{border-left:3px solid var(--warn);background:rgba(250,178,25,.07);
+  padding:12px 15px;border-radius:0 8px 8px 0;margin:0 0 15px;font-size:13.5px}
+.note b{color:var(--ink)}
+.note.ok{border-left-color:var(--good);background:rgba(12,163,12,.07)}
+
+#toast{position:fixed;right:18px;bottom:18px;background:var(--panel-2);color:var(--ink);
+  border:1px solid var(--seam);border-left:3px solid var(--good);border-radius:9px;
+  padding:12px 18px;font-size:14px;opacity:0;transform:translateY(8px);
+  transition:opacity .18s,transform .18s;pointer-events:none;max-width:380px;z-index:50}
+#toast.on{opacity:1;transform:none}
+#toast.bad{border-left-color:var(--crit)}
+.seg{display:inline-flex;border:1px solid var(--seam);border-radius:8px;overflow:hidden;margin-left:4px}
+.seg button{border:0;border-radius:0;background:transparent;color:var(--ink-3);padding:8px 13px}
+.seg button+button{border-left:1px solid var(--seam)}
+.seg button[aria-pressed="true"]{background:var(--brand);color:#1a0e05}
+.switch{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:14px;color:var(--ink-2)}
+.switch input{width:auto}
+
+/* sign in — the panel shows everyone's pay, so nothing renders until this passes */
+#gate{position:fixed;inset:0;background:var(--plane);display:flex;align-items:center;
+  justify-content:center;z-index:100;padding:20px}
+#gate .box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--seam);
+  border-radius:14px;padding:30px 28px;text-align:center}
+#gate h2{font-family:var(--cond);font-weight:700;font-size:24px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink);margin:0 0 6px}
+#gate p{font-size:14px;color:var(--ink-3);margin:0 0 20px}
+#gate input{font-size:16px;text-align:center;padding:12px}
+#gate button{width:100%;margin-top:11px;padding:12px;font-size:15px}
+#gate .err{color:var(--crit);font-size:13.5px;margin-top:13px;min-height:1em}
+
+/* Without this the browser draws its calendar icon dark-on-dark — there but
+   invisible, which reads as "no calendar". It also darkens the pop-up. */
+input[type="date"]{color-scheme:dark;cursor:pointer}
+input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.85}
+
+/* Month picker. Built by hand because Safari and Firefox have no month
+   input — there it is a bare text box with no calendar at all. */
+.mp{position:relative}
+#monthBtn{min-width:168px;text-align:left;display:flex;justify-content:space-between;gap:12px;align-items:center}
+#monthBtn::after{content:"";width:0;height:0;border:5px solid transparent;border-top-color:var(--ink-3);margin-top:5px}
+.mp-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;background:var(--panel-2);
+  border:1px solid var(--seam);border-radius:11px;padding:12px;width:262px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5)}
+.mp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mp-head b{font-family:var(--cond);font-size:19px;letter-spacing:.06em;color:var(--ink)}
+.mp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mp-grid button{padding:9px 0;font-size:13.5px;background:transparent}
+.mp-grid button[aria-current="true"]{background:var(--brand);border-color:var(--brand);color:#1a0e05}
+.mp-grid button.now{border-color:var(--ink-3)}
+.mp-grid button:disabled{opacity:.3;cursor:default}
+.mp-grid button:disabled:hover{border-color:var(--seam)}
+.auto{font-size:12px;color:var(--ink-3)}
+a.btn{font-weight:600;font-size:13.5px;color:#1a0e05;background:var(--brand);border:1px solid var(--brand);
+  border-radius:7px;padding:8px 14px;text-decoration:none;white-space:nowrap;display:inline-block}
+a.btn:hover{filter:brightness(1.08)}
+
+/* Shared by the Rules and Write-ups pages, and the header links to them. */
+.navlinks{display:inline-flex;gap:6px}
+a.nav{font-weight:600;font-size:13.5px;color:var(--ink);background:var(--panel-2);border:1px solid var(--seam);
+  border-radius:7px;padding:8px 14px;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+a.nav:hover{border-color:var(--ink-3)}
+a.nav .badge{background:var(--crit);color:#fff;border-radius:9px;font-size:11.5px;font-weight:700;
+  padding:0 6px;line-height:18px;min-width:18px;text-align:center}
+.back{font-size:13.5px;color:var(--ink-3);text-decoration:none}
+.back:hover{color:var(--ink)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;
+  z-index:90;padding:20px}
+.modal .box{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--seam);
+  border-left:3px solid var(--crit);border-radius:12px;padding:22px 24px}
+.modal h2{color:var(--ink);font-size:20px;margin-bottom:10px}
+.modal ul{margin:0 0 16px;padding-left:18px;color:var(--ink-2)}
+.modal .acts{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+.pill.lvl-warning{color:var(--warn);background:rgba(250,178,25,.15)}
+.pill.lvl-suspension{color:var(--brand);background:rgba(240,118,46,.16)}
+.pill.lvl-termination{color:var(--crit);background:rgba(208,59,59,.15)}
