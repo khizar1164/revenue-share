@@ -739,7 +739,13 @@ app.post("/api/admin/claims", wrap(async (req, res) => {
        values ($1,$2,$3,$4,$5${dated ? ",$6" : ""}) returning id`,
       [occurred_on || new Date(), job_number || null, reason || "Claim", amount,
        req.body.recorded_by || "admin",
-       ...(dated ? [resolved_on || new Date()] : [])])).rows[0];
+       /* The month a claim counts in is the date typed on the form.
+          Andrew, 13 November: "whatever date that I put here, I want that to
+          be the date that it applies to". This used to default to today, so a
+          claim dated 31 October and entered on 9 November counted in November
+          while the form had been filled in on the October view. He will
+          normally type the day the claim is filed with us. */
+       ...(dated ? [resolved_on || occurred_on || new Date()] : [])])).rows[0];
 
     /* The deduction is dated to the job, not to the settlement. Who pays for a
        claim is a question about the pool; when somebody was careless is a
