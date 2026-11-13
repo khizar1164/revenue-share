@@ -29,6 +29,7 @@ import {
 } from "./connecteam.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
+import { mountAdminPages } from "./admin-pages.js";
 import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
@@ -1097,6 +1098,10 @@ app.get(["/claims/:token", "/learning/:token"], (req, res) => {
 /* Andrew and Nicole. Email sign-in goes in front of this before it is public —
    until then it is reachable only on the local machine. */
 app.get("/admin", (_req, res) => res.sendFile(join(root, "public", "admin.html")));
+/* The Rules and Write-ups pages, 13 November. Same sign-in as the admin page. */
+app.get("/admin/rules", (_req, res) => res.sendFile(join(root, "public", "rules.html")));
+app.get("/admin/writeups", (_req, res) => res.sendFile(join(root, "public", "writeups.html")));
+mountAdminPages(app, wrap);
 
 /* One employee's private report. The id in the path is a placeholder for the
    signed-in person; once sign-in is wired the server decides who you are and
