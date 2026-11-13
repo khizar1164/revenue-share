@@ -35,7 +35,8 @@ import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, ses
          adminConfigured, adminLoginAllowed, checkAdminPassword,
          setAdminCookie, clearAdminCookie, isAdminRequest, safeEqual } from "./auth.js";
 import { verifyDelivery } from "./moveitpro.js";
-import { handleEvent } from "./sync/mip-relay.js";
+import { handleEvent, handleJob } from "./sync/mip-relay.js";
+import { rawGet as mipRawGet } from "./sync/mip-revenue.js";
 import { createLead, keyOk, relayKey } from "./sync/lead-intake.js";
 import { sendSignInLink, sendInvite, sendingEnabled, mailStatus, mailConfigured } from "./mail.js";
 
@@ -431,6 +432,55 @@ app.get("/api/admin/revenue", wrap(async (req, res) => {
        from revenue_snapshots where period = $1::date
       order by captured_at desc limit 10`, [period]);
   res.json({ period, current: r.rows[0] ?? null, history: r.rows });
+}));
+
+/* Post bookings the relay missed.
+ *
+ * 12 November: MoveitPro's daily API allowance ran out, the relay could not
+ * fetch #11602 and three others when their booking events arrived, and they
+ * never reached dispatch-updates. MoveitPro shows deliveries but cannot resend
+ * one, so this is the resend: give it estimate numbers, it finds their jobs and
+ * runs each through the same handler a live booking event uses.
+ *
+ * It only posts a job the relay has no record of, so running it twice, or on a
+ * job that did post, says "already posted" instead of posting again.
+ */
+app.post("/api/admin/mip/replay", wrap(async (req, res) => {
+  const wanted = [...new Set((Array.isArray(req.body?.estimates) ? req.body.estimates : [])
+    .map(n => String(n).replace(/^#/, "").trim()).filter(n => /^\d{3,7}$/.test(n)))];
+  if (!wanted.length || wanted.length > 20) {
+    return res.status(400).json({ error: "send 1 to 20 estimate numbers, e.g. {\"estimates\": [11602]}" });
+  }
+
+  /* estimates from the last 60 days, one or two pages, to turn numbers into ids */
+  const since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const estimates = [];
+  let cursor = "";
+  for (let page = 0; page < 10; page++) {
+    const r = await mipRawGet(`/v1/estimates?limit=100&created_after=${encodeURIComponent(since)}` +
+      (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""));
+    estimates.push(...(r?.data ?? []));
+    cursor = r?.next_cursor ?? r?.pagination?.next_cursor ?? "";
+    if (!cursor) break;
+  }
+
+  const results = [];
+  for (const n of wanted) {
+    const est = estimates.find(e => String(e.estimate_number) === n);
+    if (!est) { results.push({ estimate: n, result: "no estimate with that number in the last 60 days" }); continue; }
+    const jobs = (await mipRawGet(`/v1/jobs?limit=20&estimate_id=${est.id}`))?.data ?? [];
+    if (!jobs.length) { results.push({ estimate: n, result: "the estimate has no job yet (not booked)" }); continue; }
+    for (const job of jobs) {
+      const known = (await query(`select 1 from mip_jobs where job_id = $1`, [job.id])).rowCount;
+      if (known) { results.push({ estimate: n, job: job.id, result: "already posted" }); continue; }
+      try {
+        results.push({ estimate: n, job: job.id, result: await handleJob({ record_id: job.id, type: "job.created" }) });
+      } catch (e) {
+        results.push({ estimate: n, job: job.id, result: `failed: ${e.message}` });
+      }
+    }
+  }
+  res.json({ results });
 }));
 
 app.post("/api/admin/revenue", wrap(async (req, res) => {
