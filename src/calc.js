@@ -508,8 +508,31 @@ export async function forEmployee(year, month, employeeId) {
       where employee_id = $1 and date_trunc('month', occurred_on) = $2::date
       order by occurred_on`, [employeeId, period]);
 
+  /* The entries behind "points lost in the last 60 days". Andrew, 12 November:
+     a mover sees the figure but not which entries make it up. Same window as
+     discipline_lost in monthly(), so the list always adds up to the figure:
+     it ends today, or at month end for a month already over. Each entry drops
+     out of the count 60 days after it happened. */
+  const win = await query(
+    `select to_char(least($1::date + interval '1 month', current_date)
+                    - ($2 || ' days')::interval + interval '1 day', 'YYYY-MM-DD') as from_day,
+            to_char(least($1::date + interval '1 month', current_date), 'YYYY-MM-DD') as to_day`,
+    [period, RULES.disciplineDays]);
+  const counted = await query(
+    `select to_char(occurred_on, 'YYYY-MM-DD') as occurred_on, delta, reason, job_number,
+            ${await pointNote()} as note,
+            to_char(occurred_on + ($3 || ' days')::interval, 'YYYY-MM-DD') as drops_on
+       from point_events
+      where employee_id = $1 and delta < 0
+        and recorded_by is distinct from 'demo'
+        and occurred_on >  least($2::date + interval '1 month', current_date) - ($3 || ' days')::interval
+        and occurred_on <= least($2::date + interval '1 month', current_date)
+      order by occurred_on, id`, [employeeId, period, RULES.disciplineDays]);
+
   return {
     period,
+    discipline_window: { from: win.rows[0].from_day, to: win.rows[0].to_day, days: RULES.disciplineDays },
+    discipline_entries: counted.rows.map(r => ({ ...r, delta: Number(r.delta) })),
     pool: result.pool,
     points_pool: result.points_pool,
     reviews_pool: result.reviews_pool,

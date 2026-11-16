@@ -117,6 +117,16 @@
   .signout{background:none;border:1px solid var(--seam);color:var(--ink-3);font:inherit;
     font-size:13px;border-radius:7px;padding:6px 12px;cursor:pointer}
   .signout:hover{color:var(--ink-2);border-color:var(--ink-3)}
+
+  /* month switcher: Andrew, 12 November, flip between months on one person */
+  .monthrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .monthrow label{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .monthrow select{font:inherit;font-size:15px;font-weight:600;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--seam);border-radius:8px;padding:7px 10px;cursor:pointer}
+  .monthrow select:focus{outline:2px solid var(--brand);outline-offset:1px}
+  .histhead{font-family:var(--cond);font-weight:700;font-size:14px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-2);margin:20px 0 4px}
 </style>
 </head>
 <body>
@@ -144,6 +154,10 @@
     <p class="private">Private &mdash; never shown on the break-room TV</p>
     <div class="who"><h1 id="name">&mdash;</h1><span class="code" id="code">&mdash;</span></div>
     <div class="sub" id="month">&mdash;</div>
+    <div class="monthrow" id="monthRow" hidden>
+      <label for="monthPick">Month</label>
+      <select id="monthPick"></select>
+    </div>
   </header>
 
   <div id="err"></div>
@@ -186,6 +200,9 @@
     <div class="meter" id="meter"></div>
     <div class="ticks"><span>0</span><span>15 · warning</span><span>30 · suspension</span><span>45 · termination</span></div>
     <p style="font-size:13.5px;margin:14px 0 0" id="standNote"></p>
+    <div class="histhead">What makes up this number</div>
+    <p class="dek" id="histDek"></p>
+    <table id="hist"></table>
   </section>
 
   <section class="card">
@@ -218,12 +235,45 @@
     var s = String(d).slice(0,10).split("-");
     return s.length === 3 ? MONTHS[Number(s[1])-1].slice(0,3) + " " + Number(s[2]) : String(d);
   }
+  /* with the year when it isn't the year on screen, so "Jan 15" can't be misread */
+  function dayY(d, period){
+    var y = String(d).slice(0,4);
+    return day(d) + (y !== String(period).slice(0,4) ? ", " + y : "");
+  }
+
+  /* Which way the page was loaded: the signed-in person ("me") or by id (admin
+     and preview). The month switcher reloads the same way. */
+  var mode = "me";
+
+  /* Every month from the start of the programme to now, newest first. */
+  function buildMonths(d){
+    if (!d.program_start) { $("monthRow").hidden = true; return; }
+    var s = String(d.program_start).split("-"), y = +s[0], m = +s[1];
+    var now = new Date(), ey = now.getFullYear(), em = now.getMonth() + 1;
+    var cur = String(d.period).slice(0,7), opts = [];
+    while (y < ey || (y === ey && m <= em)) {
+      opts.push(y + "-" + (m < 10 ? "0" : "") + m);
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    if (opts.indexOf(cur) < 0) opts.push(cur);
+    opts.sort().reverse();
+    $("monthPick").innerHTML = opts.map(function(v){
+      var p = v.split("-");
+      return '<option value="'+v+'"'+(v===cur?" selected":"")+'>'+MONTHS[Number(p[1])-1]+" "+p[0]+'</option>';
+    }).join("");
+    $("monthRow").hidden = false;
+  }
+
+  function reload(){
+    if (mode === "id") loadById(who); else start();
+  }
 
   function render(d){
     /* the hours minimum comes from the server, so the page can't disagree with the rule */
     var MIN = d.min_hours || 100;
     $("name").textContent = d.full_name;
     $("code").textContent = d.code_name;
+    buildMonths(d);
     var p = String(d.period).split("-");
     $("month").textContent = MONTHS[Number(p[1])-1] + " " + p[0] +
       " · you are shown as " + d.code_name + " on the break-room screen";
@@ -354,6 +404,31 @@
     : lost >= 15 ? "Past 15 — written warning. " + (30-lost) + " more reaches suspension."
     : "Clear. " + (15-lost) + " more points lost in a rolling 60 days reaches a written warning.";
 
+    /* Andrew, 12 November: show which entries make up the 60-day figure, so
+       nobody has to count back through three months by hand. The server uses
+       the same window as the figure, so this list always adds up to it. */
+    var win = d.discipline_window, ent = d.discipline_entries || [];
+    if (win) {
+      var cp = String(d.period).slice(0,7), nowp = new Date().toISOString().slice(0,7);
+      $("histDek").textContent = "Every point lost from " + dayY(win.from, d.period) + " to " + dayY(win.to, d.period)
+        + (cp < nowp ? ", as it stood at the end of " + MONTHS[Number(cp.slice(5))-1] + ". " : ". ")
+        + "Each one drops out of the count " + win.days + " days after it happened.";
+    }
+    if (!ent.length) {
+      $("hist").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">Nothing lost in the last ' + ((win && win.days) || 60) + ' days.</td></tr></tbody>';
+    } else {
+      var hh = '<thead><tr><th>Date</th><th>What happened</th><th class="n">Pts</th><th class="n">Drops out</th></tr></thead><tbody>';
+      ent.forEach(function(e){
+        hh += '<tr><td>'+dayY(e.occurred_on, d.period)+'</td><td>'+esc(e.reason)
+          + (e.job_number ? ' <span style="color:var(--ink-3)">· job '+esc(e.job_number)+'</span>' : '')
+          + (e.note ? '<div style="color:var(--ink-3);font-size:13px;margin-top:2px">'+esc(e.note)+'</div>' : '')
+          + '</td><td class="n"><span class="pill minus">−'+Math.abs(e.delta)+'</span></td>'
+          + '<td class="n" style="color:var(--ink-3)">'+dayY(e.drops_on, d.period)+'</td></tr>';
+      });
+      $("hist").innerHTML = hh + '</tbody><tfoot><tr><td colspan="2">Points lost in ' + ((win && win.days) || 60) + ' days</td>'
+        + '<td class="n">'+lost+'</td><td></td></tr></tfoot>';
+    }
+
     /* eligibility */
     var pctH = Math.min(100, (d.hours/MIN)*100);
     $("elig").innerHTML = '<tbody>'
@@ -394,6 +469,7 @@
     fetch("/api/me" + qs)
       .then(function(r){
         if (r.ok) return r.json().then(function(d){
+          mode = "me";
           showReport(d);
           $("signout").hidden = false;
         });
@@ -408,6 +484,8 @@
   }
 
   function loadById(id){
+    mode = "id"; who = id;
+    $("err").style.display = "none";
     fetch("/api/me/" + encodeURIComponent(id) + qs)
       .then(function(r){
         if (!r.ok) return r.json().then(function(b){ throw new Error(b.error || "HTTP "+r.status); });
@@ -469,6 +547,17 @@
         $("signinMsg").className = "msg bad";
         btn.disabled = false; btn.textContent = "Send me the link";
       });
+  });
+
+  /* Same person, another month. The month goes in the address so a refresh
+     or a shared link keeps it. */
+  $("monthPick").addEventListener("change", function(){
+    month = this.value;
+    qs = "?month=" + month;
+    var search = location.search.replace(/[?&]month=\d{4}-\d{2}/, "").replace(/^&/, "?");
+    search = (search && search !== "?" ? search + "&" : "?") + "month=" + month;
+    history.replaceState(null, "", location.pathname + search);
+    reload();
   });
 
   $("signout").addEventListener("click", function(){
