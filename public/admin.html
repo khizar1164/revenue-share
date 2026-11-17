@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="/static/admin.css?v=23">
+<link rel="stylesheet" href="/static/admin.css?v=25">
 </head>
 <body>
 <div id="gate">
@@ -56,7 +56,7 @@
 
 <div class="grid">
   <div class="col">
-    <div class="panel">
+    <div class="panel" id="pReviewLog">
       <h2>Log a review</h2>
       <p class="dek">Type the estimate number and the crew who worked it fills in from MoveitPro. Tap a name to add or drop them.</p>
       <div class="frow">
@@ -78,13 +78,13 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pReviews">
       <h2>Reviews this month</h2>
       <p class="dek">The customer name is recorded but never used to match anyone &mdash; only the job number decides credit. Reviews in <b>Nicole's Review Log sheet</b> are read in automatically; log here only what is not in that sheet.</p>
       <div class="tblwrap scrolly"><table id="revTbl"></table></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pPoints">
       <h2>Points</h2>
       <p class="dek"><b>Late, truck not out on time, call offs and no call no shows come from Matthew's tardy log</b> &mdash; don't add those here too, or they count twice. Everything else is recorded here, including <b>came in same day</b>, which is now entered by hand and nothing else can work out: the schedule knows who was on a job, not who came in at short notice.</p>
       <div class="frow">
@@ -159,7 +159,7 @@
       <div class="tblwrap scrolly" style="margin-top:16px"><table id="ptTbl"></table></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pAdj">
       <h2>Bonus or individual deduction</h2>
       <p class="dek">Charged to one person, not the crew. <b>Private</b> &mdash; shows on their report only, never on the TV.</p>
       <div class="frow">
@@ -176,7 +176,7 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pAccess">
       <h2>Crew access</h2>
       <p class="dek">Emails every active mover a link to their own page. Anyone who
          has left is left out. Links last 20 minutes and work once, and the email
@@ -186,21 +186,24 @@
       <!-- Andrew, 9 October: the last date each crew member signed in, and a
            live list as it happens. Both read the same rows, so one request
            answers both. -->
-      <div style="border-top:1px solid var(--seam);margin-top:16px;padding-top:14px">
+      <div class="access2">
+        <div>
         <h2 style="font-size:14px;border:0;padding:0;margin:0 0 2px">Who has signed in</h2>
         <p class="hint" id="signInSummary" style="margin:0 0 7px"></p>
         <div class="tblwrap scrolly"><table id="signInTbl"></table></div>
-
-        <h2 style="font-size:14px;border:0;padding:0;margin:16px 0 2px">As it happens</h2>
+        </div>
+        <div>
+        <h2 style="font-size:14px;border:0;padding:0;margin:0 0 2px">As it happens</h2>
         <p class="hint" style="margin:0 0 7px">Newest first, and it checks again
            every 30 seconds on its own.</p>
         <div class="tblwrap scrolly"><table id="signInFeed"></table></div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="col">
-    <div class="panel">
+    <div class="panel" id="pHours">
       <h2>Hours <span id="hoursCount" style="color:var(--ink-3);font-size:13px"></span></h2>
       <p class="dek">Paste Matthew's weekly Connecteam export &mdash; name and hours, one per line. Names are matched to the roster; anything that doesn't match comes back so you can decide.</p>
       <textarea id="hoursPaste" placeholder="Aaron Schwark	41.5
@@ -211,11 +214,11 @@ Tyler Johnston  44.25"></textarea>
         <button class="go" id="hoursSave">Save hours</button>
       </div>
       <p class="hint" id="hoursHint"></p>
-      <div class="tblwrap" style="margin-top:14px"><table id="hoursTbl"></table></div>
+      <div class="tblwrap scrolly" style="margin-top:14px"><table id="hoursTbl"></table></div>
     </div>
 
 
-    <div class="panel">
+    <div class="panel" id="pClaims">
       <h2>Claim deductions</h2>
       <p class="dek">Comes off the whole pool before it splits. Type the <b>full amount including the $50 third-party handler fee</b> &mdash; nothing is added on top. Andrew, 28 September: "its something I will add into the claim amount when I enter the claim in".</p>
       <div class="frow">
@@ -240,7 +243,7 @@ Tyler Johnston  44.25"></textarea>
 
       <div class="tblwrap scrolly" style="margin-top:16px"><table id="clTbl"></table></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="pMonth">
       <h2>The month</h2>
       <div class="tblwrap"><table id="poolTbl"></table></div>
       <div style="border-top:1px solid var(--seam);margin-top:15px;padding-top:14px">
@@ -260,7 +263,7 @@ Tyler Johnston  44.25"></textarea>
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pJobs">
       <h2>Background jobs</h2>
       <p class="dek">What runs on its own, and when it last did. On their own these
          only ever rebuild <b>the current month</b>. To correct a month that has
