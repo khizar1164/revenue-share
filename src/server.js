@@ -30,6 +30,7 @@ import {
 import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { mountAdminPages } from "./admin-pages.js";
+import { lockedPeriods, refuseIfLocked, setLock } from "./locks.js";
 import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
          readCookie, setSessionCookie, clearSessionCookie, isAdmin,
@@ -493,6 +494,7 @@ app.post("/api/admin/revenue", wrap(async (req, res) => {
   if (!Number.isFinite(rev) || rev < 0) {
     return res.status(400).json({ error: "completed revenue must be a positive number" });
   }
+  if (await refuseIfLocked(res, period)) return;
   const jobs = completed_jobs === "" || completed_jobs == null ? null : Math.round(Number(completed_jobs));
   const r = await query(
     `insert into revenue_snapshots (period, completed_revenue, completed_jobs, source)
@@ -679,6 +681,7 @@ app.post("/api/admin/reviews", wrap(async (req, res) => {
   if (!Array.isArray(crew) || !crew.length) {
     return res.status(400).json({ error: "a review needs at least one mover credited to it" });
   }
+  if (await refuseIfLocked(res, occurred_on)) return;
   const points = has_photo ? 3 : 1;
   const ins = await query(
     `insert into reviews (occurred_on, job_number, customer_name, source, has_photo, points, recorded_by)
@@ -695,8 +698,9 @@ app.post("/api/admin/reviews", wrap(async (req, res) => {
 }));
 
 app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
-  const row = (await query(`select recorded_by from reviews where id = $1`, [req.params.id])).rows[0];
+  const row = (await query(`select recorded_by, to_char(occurred_on,'YYYY-MM-DD') as occurred_on from reviews where id = $1`, [req.params.id])).rows[0];
   if (!row) return res.status(404).json({ error: "that review is already gone" });
+  if (await refuseIfLocked(res, row.occurred_on)) return;
   /* the log is read back every half hour, so a removal here would not stick */
   if (row.recorded_by === "review-log" && process.env.REVIEW_SHEET_ID) {
     return res.status(409).json({ error: "this came from the Review Log sheet — " +
@@ -722,6 +726,7 @@ app.delete("/api/admin/reviews/:id", wrap(async (req, res) => {
 app.post("/api/admin/claims", wrap(async (req, res) => {
   const { occurred_on, resolved_on, job_number, reason, amount } = req.body ?? {};
   if (!(Number(amount) > 0)) return res.status(400).json({ error: "amount must be greater than zero" });
+  if (await refuseIfLocked(res, occurred_on, resolved_on || occurred_on)) return;
 
   const crew = Array.isArray(req.body?.crew) ? req.body.crew.filter(Boolean) : [];
   /* -3 is what every claim has cost a person so far, so it is the default
@@ -840,6 +845,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 app.delete("/api/admin/claims/:id", wrap(async (req, res) => {
   const id = rowId(req.params.id);
   if (!id) return res.status(400).json({ error: "not a claim id" });
+  const dated = await hasColumn("claims", "resolved_on");
+  const c = (await query(`select to_char(occurred_on,'YYYY-MM-DD') as occurred_on,
+                                 ${dated ? "to_char(resolved_on,'YYYY-MM-DD')" : "null"} as resolved_on
+                            from claims where id = $1`, [id])).rows[0];
+  if (c && await refuseIfLocked(res, c.occurred_on, c.resolved_on || c.occurred_on)) return;
   const r = await query(`delete from claims where id = $1`, [id]);
   if (!r.rowCount) return res.status(404).json({ error: "that claim is already gone" });
   res.status(204).end();
@@ -849,6 +859,7 @@ app.post("/api/admin/adjustments", wrap(async (req, res) => {
   const { employee_id, occurred_on, kind, reason, amount } = req.body ?? {};
   if (!["bonus", "deduction"].includes(kind)) return res.status(400).json({ error: "kind must be bonus or deduction" });
   if (!(Number(amount) > 0)) return res.status(400).json({ error: "amount must be greater than zero" });
+  if (await refuseIfLocked(res, occurred_on)) return;
   const r = await query(
     `insert into adjustments (employee_id, occurred_on, kind, reason, amount, recorded_by)
      values ($1,$2,$3,$4,$5,$6) returning id`,
@@ -869,6 +880,7 @@ app.put("/api/admin/settings", wrap(async (req, res) => {
   if (!/^\d{4}-\d{2}-01$/.test(String(period))) {
     return res.status(400).json({ error: "period must be the first of a month, e.g. 2026-09-01" });
   }
+  if (await refuseIfLocked(res, period)) return;
   const r = await query(
     `insert into month_settings (period, hours_gate_waived, note, updated_by)
      values ($1,$2,$3,$4)
@@ -890,6 +902,7 @@ app.put("/api/admin/hours/bulk", wrap(async (req, res) => {
   if (!Array.isArray(rows) || !rows.length) {
     return res.status(400).json({ error: "nothing to save" });
   }
+  if (await refuseIfLocked(res, period)) return;
 
   /* Include anyone who left during the month being imported, or their last
      weeks of hours would come back unmatched and could never be entered.
@@ -948,6 +961,10 @@ app.put("/api/admin/hours/bulk", wrap(async (req, res) => {
 
 app.put("/api/admin/hours", wrap(async (req, res) => {
   const { employee_id, period, hours } = req.body ?? {};
+  if (!/^\d{4}-\d{2}-01$/.test(String(period))) {
+    return res.status(400).json({ error: "period must be the first of a month" });
+  }
+  if (await refuseIfLocked(res, period)) return;
   const r = await query(
     `insert into hours (employee_id, period, hours, recorded_by)
      values ($1,$2,$3,$4)
@@ -999,6 +1016,21 @@ app.post("/api/admin/employee/:id/merge", wrap(async (req, res) => {
   if (!UUID.test(req.params.id) || !UUID.test(into)) {
     return res.status(400).json({ error: "both accounts have to be named" });
   }
+  /* A merge moves the spare account's records into every month they are in,
+     so a locked month would change underneath its lock. */
+  const lockedNow = (await lockedPeriods()).map(l => l.period);
+  if (lockedNow.length) {
+    const hit = (await query(
+      `select to_char(p, 'FMMonth YYYY') as month from unnest($2::date[]) as p
+        where exists (select 1 from point_events where employee_id = $1 and date_trunc('month', occurred_on) = p)
+           or exists (select 1 from adjustments where employee_id = $1 and date_trunc('month', occurred_on) = p)
+           or exists (select 1 from hours where employee_id = $1 and period = p)
+           or exists (select 1 from review_credits rc join reviews r on r.id = rc.review_id
+                       where rc.employee_id = $1 and date_trunc('month', r.occurred_on) = p)
+        order by p limit 1`, [req.params.id, lockedNow])).rows[0];
+    if (hit) return res.status(423).json({ error: `${hit.month} is locked and this account has records in it. ` +
+      `Unlock ${hit.month} first, merge, then lock it again.`, locked: hit.month });
+  }
   try {
     res.json(await mergeEmployees(req.params.id, into));
   } catch (e) {
@@ -1016,6 +1048,7 @@ app.post("/api/admin/employee/:id/merge", wrap(async (req, res) => {
 app.post("/api/admin/points", wrap(async (req, res) => {
   const { employee_id, occurred_on, delta, reason, job_number } = req.body ?? {};
   if (!Number.isInteger(delta) || delta === 0) return res.status(400).json({ error: "delta must be a non-zero whole number" });
+  if (await refuseIfLocked(res, occurred_on)) return;
 
   /* Andrew, 21 October: a note so the person knows what the deduction was for.
      Optional, and trimmed to something that fits the line it is shown on. */
@@ -1059,8 +1092,9 @@ app.get("/api/admin/points", wrap(async (req, res) => {
 app.delete("/api/admin/points/:id", wrap(async (req, res) => {
   const id = rowId(req.params.id);
   if (!id) return res.status(400).json({ error: "not a point entry id" });
-  const row = (await query(`select recorded_by from point_events where id = $1`, [id])).rows[0];
+  const row = (await query(`select recorded_by, to_char(occurred_on,'YYYY-MM-DD') as occurred_on from point_events where id = $1`, [id])).rows[0];
   if (!row) return res.status(404).json({ error: "that entry is already gone" });
+  if (await refuseIfLocked(res, row.occurred_on)) return;
   /* once the log is read automatically, a removed entry would come back within
      half an hour — the correction belongs in Matthew's sheet */
   if (row.recorded_by === "tardy-log" && process.env.TARDY_SHEET_ID) {
@@ -1129,6 +1163,31 @@ app.get("/api/admin/tv-link", (_req, res) => {
 
 /* What the background jobs are doing. The admin panel shows this so that
    "is it actually running" has an answer without reading a log. */
+/* Locked months. Only a finished month can be locked: the current one is
+   still being entered, and the background jobs rebuild it on their own. */
+app.get("/api/admin/locks", wrap(async (_req, res) => {
+  res.json(await lockedPeriods());
+}));
+
+app.put("/api/admin/locks/:month", wrap(async (req, res) => {
+  const month = String(req.params.month);
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "month must look like 2026-10" });
+  const locked = req.body?.locked === true;
+  if (locked) {
+    const cur = (await query(`select to_char(current_date, 'YYYY-MM') as m`)).rows[0].m;
+    if (month >= cur) return res.status(400).json({ error: "only a finished month can be locked" });
+  }
+  try {
+    await setLock(`${month}-01`, locked, req.body?.by || "admin");
+  } catch (e) {
+    if (/month_locks/.test(e.message)) {
+      return res.status(503).json({ error: "the database has not had db/023 applied yet, run npm run migrate" });
+    }
+    throw e;
+  }
+  res.json({ month, locked, locks: await lockedPeriods() });
+}));
+
 app.get("/api/admin/jobs", (_req, res) => {
   res.json(scheduler ? scheduler.status() : []);
 });
@@ -1318,6 +1377,7 @@ app.post("/api/admin/jobs/:name/run", wrap(async (req, res) => {
   if (month && !/^\d{4}-\d{2}$/.test(month)) {
     return res.status(400).json({ error: "month must look like 2026-09" });
   }
+  if (month && await refuseIfLocked(res, `${month}-01`)) return;
   try {
     const detail = await scheduler.run(req.params.name,
       month ? { period: `${month}-01` } : undefined);
