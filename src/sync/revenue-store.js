@@ -22,6 +22,7 @@
 
 import { query } from "../db.js";
 import { TZ } from "../scheduler.js";
+import { lockedMonthFor } from "../locks.js";
 
 /** The month as it is in La Porte, not on the server. A report arriving at
     11pm Central on the 30th is still that month, even though it is already
@@ -46,6 +47,8 @@ export async function ingestReport(months, { now = new Date() } = {}) {
   for (const period of [current, previous]) {
     const row = months.find(m => m.period === period);
     if (!row) { results.push({ period, action: "not in report" }); continue; }
+    /* a month locked on the admin page is not changed by a reading either */
+    if (period !== current && await lockedMonthFor(period)) { results.push({ period, action: "locked" }); continue; }
 
     const last = (await query(
       `select completed_revenue::float8 as revenue, completed_jobs, source

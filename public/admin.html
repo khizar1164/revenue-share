@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="/static/admin.css?v=22">
+<link rel="stylesheet" href="/static/admin.css?v=23">
 </head>
 <body>
 <div id="gate">
@@ -51,6 +51,8 @@
 
 <div class="stats" id="stats"></div>
 <div id="gateNote"></div>
+<!-- Andrew, 17 November: lock a finished month so nothing in it is changed by mistake. -->
+<div id="lockBar"></div>
 
 <div class="grid">
   <div class="col">
@@ -268,7 +270,8 @@ Tyler Johnston  44.25"></textarea>
            and the header scrolls away, so by the time you are down here there
            was nothing on screen saying what you were about to rebuild. -->
       <div id="jobMonthNote"></div>
-      <div class="tblwrap"><table id="jobsTbl"></table></div>
+      <!-- Andrew, 17 November: a dropdown, not the full list. -->
+      <div id="jobsBox"></div>
     </div>
   </div>
 </div>
@@ -590,27 +593,64 @@ Tyler Johnston  44.25"></textarea>
         + '</b>, the month this page is showing. To correct a month that has closed, '
         + 'pick it at the top of this page first.</div>';
 
-    if (!jobs || !jobs.length){
-      $("jobsTbl").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">'
-        + 'Not running here — the background jobs start with the deployed service.</td></tr></tbody>';
+    STATE.jobs = jobs || [];
+    if (!STATE.jobs.length){
+      $("jobsBox").innerHTML = '<p class="hint">Not running here. The background jobs start with the deployed service.</p>';
       return;
     }
-    $("jobsTbl").innerHTML = '<thead><tr><th>Job</th><th>Runs</th><th>Last</th><th></th></tr></thead><tbody>'
-      + jobs.map(function(j){
-          var bad = j.consecutive_failures > 0;
-          var state = j.running ? '<span class="pill warn">Running</span>'
-                    : bad ? '<span class="pill no">Failing</span>'
-                    : j.last_ok ? '<span class="pill ok">'+esc(ago(j.last_ok))+'</span>'
-                    : '<span class="pill warn">Not yet</span>';
-          return '<tr><td class="code">'+esc(j.name)+'</td>'
-            + '<td style="font-size:12.5px;color:var(--ink-3)">'+esc(j.schedule)+'</td>'
-            + '<td>'+state+(bad ? '<div style="font-size:12px;color:var(--crit)">'+esc(j.last_error)+'</div>' : '')
-            + (j.last_detail && !bad ? '<div style="font-size:12px;color:var(--ink-3)">'+esc(String(j.last_detail).slice(0,70))+'</div>' : '')
-            + '</td>'
-            + '<td class="n"><button class="sm" data-runjob="'+esc(j.name)+'">'
-            + (past ? 'Run for ' + esc(MON3[+STATE.month.slice(5,7)-1]) : 'Run now')
-            + '</button></td></tr>';
-        }).join("") + "</tbody>";
+    var stateOf = function(j){
+      return j.running ? "Running" : j.consecutive_failures > 0 ? "Failing"
+           : j.last_ok ? ago(j.last_ok) : "Not yet";
+    };
+    if (!STATE.jobs.some(function(j){ return j.name === STATE.job; })) STATE.job = STATE.jobs[0].name;
+    /* A failing job must not hide inside a closed dropdown, so failures are
+       named above it whichever job is picked. */
+    var failing = STATE.jobs.filter(function(j){ return j.consecutive_failures > 0; });
+    $("jobsBox").innerHTML =
+        (failing.length ? '<div class="note bad">' + failing.length + (failing.length === 1 ? ' job is' : ' jobs are')
+          + ' failing: <b>' + failing.map(function(j){ return esc(j.name); }).join(", ") + '</b></div>' : '')
+      + '<div class="frow"><div><label for="jobPick">Job</label><select id="jobPick">'
+      + STATE.jobs.map(function(j){
+          return '<option value="' + esc(j.name) + '"' + (j.name === STATE.job ? ' selected' : '') + '>'
+            + esc(j.name) + ' · ' + esc(stateOf(j)) + '</option>';
+        }).join("")
+      + '</select></div><div style="flex:0 0 auto;min-width:0"><button class="sm go" id="jobRun" data-runjob="">'
+      + (past ? 'Run for ' + esc(MON3[+STATE.month.slice(5,7)-1]) : 'Run now') + '</button></div></div>'
+      + '<div id="jobInfo" class="jobinfo"></div>';
+    renderJobInfo();
+  }
+
+  function renderJobInfo(){
+    var j = (STATE.jobs || []).filter(function(x){ return x.name === STATE.job; })[0];
+    if (!j) return;
+    var bad = j.consecutive_failures > 0;
+    var state = j.running ? '<span class="pill warn">Running</span>'
+              : bad ? '<span class="pill no">Failing</span>'
+              : j.last_ok ? '<span class="pill ok">' + esc(ago(j.last_ok)) + '</span>'
+              : '<span class="pill warn">Not yet</span>';
+    $("jobRun").setAttribute("data-runjob", j.name);
+    $("jobInfo").innerHTML = '<div><span class="k">Runs</span>' + esc(j.schedule) + '</div>'
+      + '<div><span class="k">Last</span>' + state + '</div>'
+      + (bad ? '<div class="err">' + esc(j.last_error) + '</div>'
+         : j.last_detail ? '<div class="det">' + esc(String(j.last_detail).slice(0, 140)) + '</div>' : '');
+  }
+
+  /* ------------------------------------------------------- month lock --- */
+  function lockedHere(locks){
+    return (locks || []).some(function(l){ return l.period.slice(0, 7) === STATE.month; });
+  }
+  function renderLock(locks){
+    STATE.locks = locks || [];
+    var past = STATE.month && STATE.month < thisMonth;
+    var locked = lockedHere(STATE.locks);
+    document.body.classList.toggle("is-locked", locked);
+    if (!past){ $("lockBar").innerHTML = ""; return; }
+    var name = esc(monthName(STATE.month + "-01"));
+    $("lockBar").innerHTML = locked
+      ? '<div class="lockbar on"><span>&#128274; <b>' + name + ' is locked.</b> Nothing in it can be added, edited or deleted.</span>'
+        + '<button class="sm" id="lockBtn" data-lock="0">Unlock ' + name + '</button></div>'
+      : '<div class="lockbar"><span>&#128275; <b>' + name + ' is open.</b> Lock it once it is final so nobody changes it by mistake.</span>'
+        + '<button class="sm go" id="lockBtn" data-lock="1">Lock ' + name + '</button></div>';
   }
 
   var MONTHS = ["January","February","March","April","May","June","July",
@@ -681,7 +721,8 @@ Tyler Johnston  44.25"></textarea>
       api("/api/admin/revenue" + q()).catch(function(){ return null; }),
       ytdView ? api("/api/admin/ytd" + q()) : Promise.resolve(null),
       api("/api/admin/points" + q()),
-      api("/api/admin/claims" + q())
+      api("/api/admin/claims" + q()),
+      api("/api/admin/locks").catch(function(){ return []; })
     ]).then(function(r){
       STATE.summary = r[0]; STATE.roster = r[1]; STATE.reviews = r[2]; STATE.settings = r[3];
       STATE.points = r[7]; STATE.claims = r[8];
@@ -697,7 +738,7 @@ Tyler Johnston  44.25"></textarea>
         renderStats(r[0]); renderPool(r[0]); renderRoster(r[0]);
       }
       renderReviews(); renderCrewChips(); renderClaimChips(); renderJobs(r[4]); renderRevenue(r[5]);
-      loadSignIns(); loadDuplicates();
+      loadSignIns(); loadDuplicates(); renderLock(r[9]);
     }).catch(function(e){ toast(e.message, true); });
   }
 
@@ -1004,7 +1045,25 @@ Tyler Johnston  44.25"></textarea>
       .finally(function(){ b.disabled = false; b.innerHTML = label; });
   });
 
-  $("jobsTbl").addEventListener("click", function(e){
+  $("jobsBox").addEventListener("change", function(e){
+    if (e.target.id !== "jobPick") return;
+    STATE.job = e.target.value; renderJobInfo();
+  });
+
+  $("lockBar").addEventListener("click", function(e){
+    var b = e.target.closest("#lockBtn"); if (!b) return;
+    var lock = b.getAttribute("data-lock") === "1";
+    var name = monthName(STATE.month + "-01");
+    if (!confirm(lock
+        ? "Do you want to lock " + name + "?\n\nNothing in it can be added, edited or deleted until it is unlocked."
+        : "Do you want to unlock " + name + "?\n\nAnyone signed in here will be able to change it again.")) return;
+    b.disabled = true;
+    api("/api/admin/locks/" + STATE.month, { method:"PUT", body: JSON.stringify({ locked: lock }) })
+      .then(function(r){ toast(name + (lock ? " locked." : " unlocked.")); renderLock(r.locks); load(); })
+      .catch(function(err){ toast(err.message, true); b.disabled = false; });
+  });
+
+  $("jobsBox").addEventListener("click", function(e){
     var b = e.target.closest("button[data-runjob]"); if (!b) return;
     var name = b.getAttribute("data-runjob");
     /* The month this page is already showing. A second month box beside the
