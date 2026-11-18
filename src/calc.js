@@ -133,7 +133,7 @@ async function gather(period) {
          they stay on this month's roster and drop off the next one. They are
          not paid and they count towards nothing. */
       where e.is_mover
-        and (e.status <> 'left'
+        and (e.status not in ('left', 'no_notice')
              or (e.ended_on >= $1::date and e.ended_on < $1::date + interval '1 month'))
       order by e.code_name`,
     [period, RULES.disciplineDays]);
