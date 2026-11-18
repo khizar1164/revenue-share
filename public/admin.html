@@ -442,7 +442,15 @@ Tyler Johnston  44.25"></textarea>
            number is the points lost in the last 60 days, which is the figure
            the notice is about. */
         + '<td class="n">'
-        +   ((p.discipline_lost > 0)
+        +   (p.step_mode
+              ? ((p.step_level || p.step_points > 0)
+                  ? '<button class="sm' + (p.step_level ? ' danger' : '') + '" data-writeup="'+p.employee_id+'" data-who="'+esc(p.full_name)+'"'
+                    + ' title="' + esc((p.step_level ? cap(p.step_level) + ". " : "Clean. ") + p.step_points + " of 15 points toward the "
+                      + (p.step_level === "warning" ? "suspension" : p.step_level === "suspension" ? "termination" : "warning")
+                      + (p.steps_down_on ? ". Steps down " + p.steps_down_on + " with no new write-up" : "") + ". Click to build the notice.") + '">'
+                    + (p.step_level ? cap(p.step_level) + ' · ' : '') + p.step_points + '/15</button>'
+                  : '<span style="color:var(--ink-3)">—</span>')
+              : (p.discipline_lost > 0)
               ? '<button class="sm" data-writeup="'+p.employee_id+'" data-who="'+esc(p.full_name)+'"'
                 + ' title="Build the disciplinary notice for ' + esc(p.full_name) + ' from their points">'
                 + '&minus;' + p.discipline_lost + '</button>'
@@ -660,6 +668,7 @@ Tyler Johnston  44.25"></textarea>
         + '<button class="sm go" id="lockBtn" data-lock="1">Lock ' + name + '</button></div>';
   }
 
+  var cap = function(s){ return String(s).charAt(0).toUpperCase() + String(s).slice(1); };
   var MONTHS = ["January","February","March","April","May","June","July",
                 "August","September","October","November","December"];
   var monthName = function(period){

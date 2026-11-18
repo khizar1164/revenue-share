@@ -28,6 +28,8 @@ import { join } from "node:path";
 import { query, pointNote, hasColumn } from "./db.js";
 import { RULES } from "./calc.js";
 import { fill, valueFor, fieldValues } from "../hr/render-notice.mjs";
+import { STEPS } from "./steps.js";
+import { stepsFor, cleanStep } from "./steps-db.js";
 import { makeFillable } from "../hr/make-fillable.mjs";
 
 const day = d => String(d).slice(0, 10);
@@ -70,9 +72,23 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
   const notice = open.rows[0] ?? null;
 
   const windowTo = notice ? notice.t : day(issued ?? new Date().toISOString());
-  const windowFrom = notice
-    ? notice.f
-    : day(new Date(new Date(windowTo).getTime() - days * 864e5).toISOString());
+  /* From November 2026 a write-up covers the points counted for its step,
+     from the day that count began (inclusive). One printed on request covers
+     the points counting toward the next step today. */
+  let stepMode = false, stepNow = null;
+  let windowFrom;
+  if (notice && notice.f >= STEPS.from) {
+    stepMode = true;
+    windowFrom = notice.f;
+  } else if (!notice && windowTo >= STEPS.from) {
+    stepMode = true;
+    stepNow = (await stepsFor(windowTo, [employeeId])).get(employeeId) ?? cleanStep(windowTo);
+    windowFrom = stepNow.count_from;
+  } else {
+    windowFrom = notice
+      ? notice.f
+      : day(new Date(new Date(windowTo).getTime() - days * 864e5).toISOString());
+  }
 
   /* Every deduction in the window, oldest first, which is how the table on
      page 1 reads: a sequence rather than a league table. */
@@ -83,7 +99,7 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
       where employee_id = $1
         and delta < 0
         and recorded_by is distinct from 'demo'
-        and occurred_on >  $2::date
+        and occurred_on ${stepMode ? ">=" : ">"} $2::date
         and occurred_on <= $3::date
       order by occurred_on, id`, [employeeId, windowFrom, windowTo])).rows
     .map(i => ({ ...i, delta: Number(i.delta) }));
@@ -131,6 +147,8 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
        record of a threshold being crossed; one issued on request is a
        conversation somebody chose to have. Both are legitimate and they are
        not the same thing, so the document says which. */
+    stepMode,
+    level: notice ? notice.level : stepNow ? stepNow.level : null,
     raisedOn: notice ? notice.raised : null,
     lostAtCrossing: notice ? Number(notice.lost) : null,
     basis: notice ? "raised" : "requested"

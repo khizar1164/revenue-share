@@ -13,7 +13,6 @@
 import {
   taskText, createTask, writingEnabled, taskLevels, status
 } from "../src/connecteam.js";
-import { levelFor } from "../src/sync/discipline.js";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -100,13 +99,7 @@ await withEnv({ CONNECTEAM_API_KEY: "test-key", CONNECTEAM_TASKS: "on" }, async 
   check("and so does the status", /403/.test(threw ?? ""));
 });
 
-console.log("\n4. THE THRESHOLDS");
-check("14 is nothing yet", levelFor(14) === null);
-check("15 is a written warning", levelFor(15) === "warning");
-check("29 is still a warning", levelFor(29) === "warning");
-check("30 is a suspension", levelFor(30) === "suspension");
-check("45 is termination", levelFor(45) === "termination");
-check("and so is 60", levelFor(60) === "termination");
+/* 4. The thresholds moved to steps on 18 November 2026: scripts/steps-check.js */
 
 console.log("\n5. ALL THREE LEVELS RAISE A TASK UNLESS TOLD OTHERWISE");
 withEnv({ CONNECTEAM_TASK_LEVELS: undefined }, () => {
@@ -150,7 +143,10 @@ check("a typed reason cannot inject markup",
 const sus = taskText({ name: "A Mover", level: "suspension", lost: 31,
   windowFrom: "2026-08-07", windowTo: "2026-10-06", incidents: [] });
 check("a suspension says it is seven days unpaid", /7 days unpaid/.test(sus.title), sus.title);
-check("and names the 30-point threshold", /30-point threshold/.test(sus.description));
+check("and says it took 15 new points", /15 new points/.test(sus.description));
+const third = taskText({ name: "A Mover", level: "termination", lost: 15,
+  windowFrom: "2026-11-01", windowTo: "2026-12-01", incidents: [], why: "third suspension within 365 days" });
+check("a third suspension says so", /third suspension within 365 days/.test(third.description));
 
 console.log("\n" + "=".repeat(58));
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} FAILURE(S)`);

@@ -28,88 +28,71 @@
  * task and could not keeps the reason, where somebody can see it.
  */
 import { query, withTransaction } from "../db.js";
-import { RULES } from "../calc.js";
+import { STEPS, RANK } from "../steps.js";
+import { stepsFor, todayHere } from "../steps-db.js";
 import {
   configured, writingEnabled, status as ctStatus, taskLevels,
   findUser, findBoard, findLabel, createTask, taskText
 } from "../connecteam.js";
 
-const LEVELS = [
-  ["termination", RULES.terminateAt],
-  ["suspension",  RULES.suspendAt],
-  ["warning",     RULES.warnAt]
-];
+/* 18 November 2026: the rolling 60-day thresholds (15, 30, 45) are replaced
+   by steps, worked out in src/steps.js. What stays from the original design
+   below: it decides nothing, it never raises the same write-up twice, and it
+   records a write-up whether or not Connecteam can be told. */
 
-/* Ordered worst first, so "is there already an open notice at this level or
-   worse" is a straight index comparison. */
-const RANK = { warning: 1, suspension: 2, termination: 3 };
-
-export function levelFor(lost) {
-  for (const [name, at] of LEVELS) if (lost >= at) return name;
-  return null;
-}
-
-/** Everyone's lost points over the rolling window ending today. */
-export async function standings(days = RULES.disciplineDays) {
-  const r = await query(
-    `select e.id, e.full_name, e.email,
-            coalesce((select -sum(pe.delta) from point_events pe
-                       where pe.employee_id = e.id
-                         and pe.delta < 0
-                         /* demo rows are a comparison, not something anybody
-                            did, and must never discipline a real person */
-                         and pe.recorded_by is distinct from 'demo'
-                         and pe.occurred_on >  current_date - ($1 || ' days')::interval
-                         and pe.occurred_on <= current_date), 0)::int as lost
-       from employees e
-      where e.is_mover and e.status = 'active'
-      order by e.full_name`, [days]);
-
-  return r.rows.map(p => ({ ...p, lost: Number(p.lost), level: levelFor(Number(p.lost)) }));
-}
-
-async function worstIncidents(employeeId, days, limit = 4) {
+/** The deductions that make up one write-up, worst first. */
+async function incidentsBetween(employeeId, from, to, limit = 4) {
   const r = await query(
     `select to_char(occurred_on, 'Mon DD, YYYY') as date, delta, reason
        from point_events
       where employee_id = $1 and delta < 0
         and recorded_by is distinct from 'demo'
-        and occurred_on >  current_date - ($2 || ' days')::interval
-        and occurred_on <= current_date
+        and occurred_on >= $2::date and occurred_on <= $3::date
       order by delta asc, occurred_on desc
-      limit $3`, [employeeId, days, limit]);
+      limit $4`, [employeeId, from, to, limit]);
   return r.rows.map(i => ({ ...i, delta: Number(i.delta) }));
 }
 
 /* ------------------------------------------------------------------------- */
 
 /**
- * Look at where everyone stands and act on what changed.
+ * Work out everyone's step and act on what changed.
  *
  *   dryRun   work it all out, create nothing, change nothing
  *
  * Returns a line for the job log, same as every other sync.
  */
-export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDays } = {}) {
-  const people = await standings(days);
+export async function syncDiscipline({ dryRun = false } = {}) {
+  const today = todayHere();
+  const people = (await query(
+    `select id, full_name, email from employees
+      where is_mover and status = 'active' order by full_name`)).rows;
+  const steps = await stepsFor(today, people.map(p => p.id));
 
-  const open = await query(
-    `select employee_id, level, id from discipline_notices where cleared_at is null`);
-  const openBy = new Map();
-  for (const n of open.rows) {
-    const list = openBy.get(n.employee_id) ?? [];
-    list.push(n);
-    openBy.set(n.employee_id, list);
-  }
-
-  const windowFrom = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-  const windowTo = new Date().toISOString().slice(0, 10);
+  /* write-ups already raised under the step rule */
+  const existing = (await query(
+    `select id, employee_id, level, to_char(window_to, 'YYYY-MM-DD') as d, cleared_at
+       from discipline_notices where window_from >= $1::date`, [STEPS.from])).rows;
+  const have = new Set(existing.map(n => `${n.employee_id}|${n.level}|${n.d}`));
 
   const raised = [], cleared = [], failed = [];
   const wanted = taskLevels();
 
+  /* The fresh start: anything still open from the 60-day rule is closed, so
+     nobody begins November carrying a write-up. The rows stay as the record. */
+  const old = await query(
+    `select count(*)::int as n from discipline_notices
+      where cleared_at is null and window_from < $1::date`, [STEPS.from]);
+  if (old.rows[0].n) {
+    if (!dryRun) {
+      await query(`update discipline_notices set cleared_at = now()
+                    where cleared_at is null and window_from < $1::date`, [STEPS.from]);
+    }
+    cleared.push(`${old.rows[0].n} from the old 60-day rule`);
+  }
+
   /* Who the task is for, looked up once. If Connecteam cannot say, tasks are
-     skipped and the crossings still get recorded — the worst case is that
+     skipped and the write-ups still get recorded — the worst case is that
      Matthew is told late, not that nobody ever knew. */
   let assignee = null, board = null, label = null, reachProblem = ctStatus();
   const wantTasks = !dryRun && configured() && writingEnabled();
@@ -123,69 +106,65 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
       if (board) label = await findLabel(board.id ?? board.taskBoardId);
       if (!assignee) reachProblem = "nobody in Connecteam matches the assignee";
       else if (!board) reachProblem = "no Connecteam task board to put it on";
-      /* A missing label is not a reason to withhold the task. Matthew filing
-         it himself is a smaller problem than him never hearing about it. */
     } catch (e) {
       reachProblem = e.message;
     }
   }
 
   for (const p of people) {
-    const mine = openBy.get(p.id) ?? [];
-    const worstOpen = mine.reduce((a, n) => Math.max(a, RANK[n.level] ?? 0), 0);
+    const s = steps.get(p.id);
+    if (!s) continue;
 
-    /* Fallen back under everything they were open at: those notices close, and
-       the next time they cross the line it counts as a new one. */
-    if (!p.level && mine.length) {
-      if (!dryRun) {
-        await query(`update discipline_notices set cleared_at = now()
-                      where employee_id = $1 and cleared_at is null`, [p.id]);
-      }
-      cleared.push(p.full_name);
-      continue;
-    }
-    if (!p.level) continue;
+    for (const w of s.write_ups) {
+      if (have.has(`${p.id}|${w.level}|${w.date}`)) continue;
 
-    /* Already open at this level or worse — nothing new has happened. */
-    if (RANK[p.level] <= worstOpen) continue;
-
-    const incidents = await worstIncidents(p.id, days);
-    const { title, description } = taskText({
-      name: p.full_name, level: p.level, lost: p.lost, windowFrom, windowTo, incidents
-    });
-
-    let taskId = null, taskError = null;
-    if (!dryRun && wantTasks && assignee && board && wanted.has(p.level)) {
-      try {
-        const task = await createTask({
-          boardId: board.id ?? board.taskBoardId,
-          userIds: [assignee.userId],
-          labelIds: label ? [label.id] : undefined,
-          title, description
-        });
-        taskId = String(task?.id ?? task?.taskId ?? "");
-      } catch (e) {
-        taskError = e.message;
-        failed.push(`${p.full_name}: ${e.message.slice(0, 90)}`);
-      }
-    } else if (!dryRun && wanted.has(p.level)) {
-      taskError = reachProblem ?? "task creation skipped";
-    }
-
-    if (!dryRun) {
-      await withTransaction(async c => {
-        /* Crossing 30 settles the warning that came before it: the open
-           question is now the bigger one, and leaving the old notice open
-           would stop a later drop-and-recross from being seen. */
-        await c.query(`update discipline_notices set cleared_at = now()
-                        where employee_id = $1 and cleared_at is null`, [p.id]);
-        await c.query(`insert into discipline_notices
-                         (employee_id, level, lost, window_from, window_to, task_id, task_error)
-                       values ($1,$2,$3,$4,$5,$6,$7)`,
-          [p.id, p.level, p.lost, windowFrom, windowTo, taskId || null, taskError]);
+      const incidents = await incidentsBetween(p.id, w.count_from, w.date);
+      const { title, description } = taskText({
+        name: p.full_name, level: w.level, lost: w.points,
+        windowFrom: w.count_from, windowTo: w.date, incidents, why: w.why
       });
+
+      let taskId = null, taskError = null;
+      if (!dryRun && wantTasks && assignee && board && wanted.has(w.level)) {
+        try {
+          const task = await createTask({
+            boardId: board.id ?? board.taskBoardId,
+            userIds: [assignee.userId],
+            labelIds: label ? [label.id] : undefined,
+            title, description
+          });
+          taskId = String(task?.id ?? task?.taskId ?? "");
+        } catch (e) {
+          taskError = e.message;
+          failed.push(`${p.full_name}: ${e.message.slice(0, 90)}`);
+        }
+      } else if (!dryRun && wanted.has(w.level)) {
+        taskError = reachProblem ?? "task creation skipped";
+      }
+
+      if (!dryRun) {
+        await query(`insert into discipline_notices
+                       (employee_id, level, lost, window_from, window_to, task_id, task_error)
+                     values ($1,$2,$3,$4,$5,$6,$7)`,
+          [p.id, w.level, w.points, w.count_from, w.date, taskId || null, taskError]);
+      }
+      have.add(`${p.id}|${w.level}|${w.date}`);
+      raised.push(`${p.full_name} ${w.level} on ${w.date}${w.why ? ` (${w.why})` : ""}`);
     }
-    raised.push(`${p.full_name} ${p.level} at ${p.lost}`);
+
+    /* Only the write-up for the step they are on now stays open. One they
+       stepped down from, or that a higher one replaced, closes. */
+    const keep = s.step > 0 && s.last_write_up && RANK[s.last_write_up.level] === s.step
+      ? `${s.last_write_up.level}|${s.last_write_up.date}` : null;
+    const toClose = existing.filter(n => n.employee_id === p.id && !n.cleared_at
+      && `${n.level}|${n.d}` !== keep);
+    if (toClose.length) {
+      if (!dryRun) {
+        await query(`update discipline_notices set cleared_at = now() where id = any($1::bigint[])`,
+          [toClose.map(n => n.id)]);
+      }
+      cleared.push(`${p.full_name} now ${s.level ?? "clean"}`);
+    }
   }
 
   /* Crossings recorded while Connecteam was unreachable or switched off.
@@ -212,7 +191,7 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
 
     for (const n of owed.rows) {
       if (!wanted.has(n.level)) continue;
-      const incidents = await worstIncidents(n.employee_id, days);
+      const incidents = await incidentsBetween(n.employee_id, n.window_from, n.window_to);
       const { title, description } = taskText({
         name: n.full_name, level: n.level, lost: n.lost,
         windowFrom: n.window_from,
@@ -238,8 +217,8 @@ export async function syncDiscipline({ dryRun = false, days = RULES.disciplineDa
   }
 
   const parts = [];
-  parts.push(raised.length ? `${raised.length} crossed: ${raised.join("; ")}` : "nobody newly over");
-  if (cleared.length) parts.push(`${cleared.length} back under: ${cleared.join(", ")}`);
+  parts.push(raised.length ? `${raised.length} new write-up(s): ${raised.join("; ")}` : "no new write-ups");
+  if (cleared.length) parts.push(`closed: ${cleared.join(", ")}`);
   if (caughtUp.length) parts.push(`${caughtUp.length} caught up: ${caughtUp.join(", ")}`);
   if (failed.length) parts.push(`${failed.length} task(s) not created — ${failed.join("; ")}`);
   else if (raised.length && reachProblem) parts.push(`no task sent — ${reachProblem}`);

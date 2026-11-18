@@ -276,10 +276,10 @@ export const nextActionText = level =>
   level === "termination"
     ? "This is a termination."
   : level === "suspension"
-    ? "This is a seven-day unpaid suspension. If 45 points are lost in a rolling 60-day "
-      + "period, the next step is termination."
-  : "This is a written warning. If 30 points are lost in a rolling 60-day period, the next "
-    + "step is a seven-day unpaid suspension without pay. At 45 points it is termination.";
+    ? "This is a seven-day unpaid suspension. Losing 15 new points within 30 days of it, "
+      + "or a third suspension within a year, is termination."
+  : "This is a written warning. Losing 15 new points within 30 days of it is a seven-day "
+    + "unpaid suspension. Thirty days with no new write-up clears it.";
 
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const day = d => new Date(d + "T00:00:00").toLocaleDateString("en-US",
@@ -411,7 +411,15 @@ export function fill(data, opts = {}) {
     ? `${next[0] - down} more point${next[0] - down === 1 ? "" : "s"} lost in this window reaches ${next[1]}.`
     : "This is at or past the termination threshold.";
 
-  const level = levelFor(down);
+  /* Under the step rule (from November 2026) every step is 15 points, so the
+     level comes from the write-up itself, not from the size of the number. */
+  const stepMode = !!data.stepMode;
+  const level = data.level ?? (stepMode ? "warning" : levelFor(down));
+  const NEXT = { warning: "a seven-day unpaid suspension", suspension: "termination" };
+  const stepNext = !stepMode ? null
+    : level === "termination" ? "This is the termination step."
+    : `Losing 15 new points within 30 days of this write-up reaches ${NEXT[level]}. `
+      + "With no new write-up in 30 days it steps back down.";
 
   const map = {
     EMPLOYEE_NAME: esc(data.employee),
@@ -438,9 +446,9 @@ export function fill(data, opts = {}) {
     /* When a threshold has been crossed the box names that one, not the one
        ahead of it — a notice issued at 18 points is being issued because of
        the 15, and printing "THRESHOLD 30" beside it states the wrong rule. */
-    THRESHOLD_LABEL: crossed ? "Threshold" : "Next threshold",
-    THRESHOLD: String(crossed ? crossedAt : nextAt),
-    NEXT_STEP: nextStep,
+    THRESHOLD_LABEL: stepMode ? "Points for this step" : crossed ? "Threshold" : "Next threshold",
+    THRESHOLD: stepMode ? "15" : String(crossed ? crossedAt : nextAt),
+    NEXT_STEP: stepMode ? stepNext : nextStep,
     POINTS_NOW: String(data.pointsNow),
     WINDOW_FROM: day(data.windowFrom),
     WINDOW_TO: day(data.windowTo),

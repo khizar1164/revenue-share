@@ -31,7 +31,9 @@
 <div id="main" hidden>
   <div class="panel">
     <h2>Every write-up raised</h2>
-    <p class="dek">A write-up is raised automatically when someone loses 15, 30 or 45 points over the last 60 days.
+    <p class="dek">A write-up is raised automatically. From 1 November: 15 points lost within 30 days is a warning, then each step
+      (suspension, termination) needs 15 new points within 30 days of the last write-up, and a third suspension in a
+      year is termination. Thirty days with no new write-up steps back down. A write-up marked not issued does not count.
       Once it has been given to them, mark it <b>issued</b>. If it was decided not to give it, mark it
       <b>not issued</b> and say why. That way one that never happened can be told apart.</p>
     <div id="notTracking" class="note" hidden>The issued step will work once the database update is applied. Until then this is a read-only list.</div>
@@ -102,7 +104,7 @@
       return !STATE.tracking || STATE.filter === "all" || statusOf(n) === STATE.filter;
     });
     var h = '<thead><tr><th>Raised</th><th>Person</th><th>Level</th><th class="n">Points lost</th>'
-      + '<th>60 days counted</th><th>Status</th><th></th></tr></thead><tbody>';
+      + '<th>Points counted</th><th>Status</th><th></th></tr></thead><tbody>';
     if (!rows.length) {
       h += '<tr><td colspan="7" style="color:var(--ink-3)">'
         + (STATE.filter === "pending" ? "Nothing waiting. Every write-up has been dealt with." : "None.") + '</td></tr>';

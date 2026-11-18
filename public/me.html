@@ -195,10 +195,10 @@
   </section>
 
   <section class="card">
-    <h2>Standing &mdash; rolling 60 days</h2>
+    <h2 id="standHead">Standing &mdash; rolling 60 days</h2>
     <div class="standNum" id="standNum">0 points lost</div>
     <div class="meter" id="meter"></div>
-    <div class="ticks"><span>0</span><span>15 · warning</span><span>30 · suspension</span><span>45 · termination</span></div>
+    <div class="ticks" id="ticks"><span>0</span><span>15 · warning</span><span>30 · suspension</span><span>45 · termination</span></div>
     <p style="font-size:13.5px;margin:14px 0 0" id="standNote"></p>
     <div class="histhead">What makes up this number</div>
     <p class="dek" id="histDek"></p>
@@ -397,7 +397,47 @@
         + '</tbody><tfoot><tr><td colspan="3">Total</td><td class="n">'+d.review_points+'</td></tr></tfoot>';
     }
 
-    /* discipline */
+    /* discipline: from November 2026, the write-up step (Andrew and Matthew,
+       18 November). Older months keep the rolling 60 days they ran on. */
+    var st = d.discipline_steps;
+    if (st) {
+      var NEXT = { warning: "suspension", suspension: "termination" };
+      var lvl = st.level;
+      var nextName = lvl ? NEXT[lvl] : "written warning";
+      $("standHead").textContent = "Write-up step";
+      $("standNum").textContent = lvl ? lvl.charAt(0).toUpperCase() + lvl.slice(1) : "Clean";
+      var scol = lvl === "termination" || lvl === "suspension" ? "var(--crit)" : lvl === "warning" ? "var(--warn)" : "var(--good)";
+      $("standNum").style.color = scol;
+      $("meter").innerHTML = lvl === "termination" ? '<i style="width:100%;background:var(--crit)"></i>'
+        : '<i style="width:'+Math.min(100,(st.points/st.needed)*100).toFixed(1)+'%;background:'+scol+'"></i>';
+      $("ticks").innerHTML = lvl === "termination" ? ""
+        : '<span>0</span><span>' + st.points + ' of ' + st.needed + ' points toward a ' + nextName + '</span><span>' + st.needed + '</span>';
+      $("standNote").textContent = lvl === "termination"
+        ? "Termination step reached" + (st.last_write_up && st.last_write_up.why ? " (" + st.last_write_up.why + ")." : ".")
+        : lvl
+        ? "Losing " + (st.needed - st.points) + " more points before " + dayY(st.steps_down_on, d.period)
+          + " moves you to a " + nextName + ". With no new write-up by then you step down to "
+          + (lvl === "suspension" ? "a warning" : "clean") + "."
+        : (st.needed - st.points) + " more points lost within " + st.days + " days reaches a written warning.";
+      $("histDek").textContent = "Points counting toward the next step, from " + dayY(st.count_from, d.period)
+        + ". After a write-up only new points count" + (st.carry ? ", plus " + st.carry + " carried over from the last one" : "") + ".";
+      var se = d.discipline_entries || [];
+      if (!se.length) {
+        $("hist").innerHTML = '<tbody><tr><td style="color:var(--ink-3)">No points lost since ' + dayY(st.count_from, d.period) + '.</td></tr></tbody>';
+      } else {
+        var sh = '<thead><tr><th>Date</th><th>What happened</th><th class="n">Pts</th></tr></thead><tbody>';
+        se.forEach(function(e){
+          sh += '<tr><td>'+dayY(e.occurred_on, d.period)+'</td><td>'+esc(e.reason)
+            + (e.job_number ? ' <span style="color:var(--ink-3)">· job '+esc(e.job_number)+'</span>' : '')
+            + (e.note ? '<div style="color:var(--ink-3);font-size:13px;margin-top:2px">'+esc(e.note)+'</div>' : '')
+            + '</td><td class="n"><span class="pill minus">−'+Math.abs(e.delta)+'</span></td></tr>';
+        });
+        $("hist").innerHTML = sh + '</tbody>';
+      }
+    } else {
+    $("standHead").textContent = "Standing — rolling 60 days";
+    $("standNum").style.color = "";
+    $("ticks").innerHTML = '<span>0</span><span>15 · warning</span><span>30 · suspension</span><span>45 · termination</span>';
     var lost = d.discipline_lost || 0;
     $("standNum").textContent = lost + (lost === 1 ? " point lost" : " points lost");
     var col = lost >= 45 ? "var(--crit)" : lost >= 30 ? "var(--crit)"
@@ -432,6 +472,7 @@
       });
       $("hist").innerHTML = hh + '</tbody><tfoot><tr><td colspan="2">Points lost in ' + ((win && win.days) || 60) + ' days</td>'
         + '<td class="n">'+lost+'</td><td></td></tr></tfoot>';
+    }
     }
 
     /* eligibility */
