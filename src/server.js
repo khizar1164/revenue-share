@@ -30,6 +30,7 @@ import {
 import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { mountAdminPages } from "./admin-pages.js";
+import { mountConnecteamChat } from "./sync/connecteam-chat.js";
 import { lockedPeriods, refuseIfLocked, setLock } from "./locks.js";
 import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
@@ -1136,6 +1137,7 @@ app.get("/admin", (_req, res) => res.sendFile(join(root, "public", "admin.html")
 app.get("/admin/rules", (_req, res) => res.sendFile(join(root, "public", "rules.html")));
 app.get("/admin/writeups", (_req, res) => res.sendFile(join(root, "public", "writeups.html")));
 mountAdminPages(app, wrap);
+mountConnecteamChat(app, wrap);
 
 /* One employee's private report. The id in the path is a placeholder for the
    signed-in person; once sign-in is wired the server decides who you are and
