@@ -260,15 +260,13 @@ export async function createTask({ boardId, userIds, title, description, labelId
 /* What the task says. Written to be read on a phone, by someone who is about
    to go and have an uncomfortable conversation and wants to know what it is
    about before they walk in. */
-export function taskText({ name, level, lost, windowFrom, windowTo, incidents = [] }) {
+export function taskText({ name, level, lost, windowFrom, windowTo, incidents = [], why = null }) {
   const WHAT = {
     warning:     "Written warning",
     suspension:  "Suspension — 7 days unpaid",
     termination: "Termination review"
   };
   const title = `${WHAT[level] ?? "Disciplinary action"} — ${name}`;
-
-  const at = level === "warning" ? 15 : level === "suspension" ? 30 : 45;
 
   const worst = incidents
     .filter(i => i.delta < 0)
@@ -279,11 +277,13 @@ export function taskText({ name, level, lost, windowFrom, windowTo, incidents = 
   /* The body is HTML because that is what Connecteam stores. Kept to the tags
      a task card actually renders: paragraphs, a list, bold. */
   const html = [
-    `<p><b>${esc(name)}</b> has lost <b>${lost} points</b> in the 60 days to ${esc(windowTo)}.</p>`,
-    `<p>That crosses the ${at}-point threshold, so a ` +
-      `${esc(WHAT[level]?.toLowerCase() ?? "disciplinary notice")} is due.</p>`,
-    worst.length ? `<p>Biggest deductions in the window:</p><ul>${worst.join("")}</ul>` : "",
-    `<p>Window: ${esc(windowFrom)} to ${esc(windowTo)}.</p>`,
+    why
+      ? `<p><b>${esc(name)}</b> has reached a ${esc(why)}, so a ` +
+        `${esc(WHAT[level]?.toLowerCase() ?? "disciplinary notice")} is due.</p>`
+      : `<p><b>${esc(name)}</b> has lost <b>${lost} points</b> from ${esc(windowFrom)} to ${esc(windowTo)}` +
+        `${level === "warning" ? " (15 within 30 days)" : " since their last write-up (15 new points)"}, so a ` +
+        `${esc(WHAT[level]?.toLowerCase() ?? "disciplinary notice")} is due.</p>`,
+    worst.length ? `<p>Biggest deductions counted:</p><ul>${worst.join("")}</ul>` : "",
     `<p>The write-up generates from the points record. Print it, go through it ` +
       `with them, and both sign.</p>`,
     `<p><i>Raised automatically by the revenue share system.</i></p>`

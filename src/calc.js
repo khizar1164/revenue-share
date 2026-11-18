@@ -15,6 +15,18 @@
  */
 
 import { query, pointNote, hasColumn } from "./db.js";
+import { STEPS, addDays } from "./steps.js";
+import { stepsFor, cleanStep, todayHere } from "./steps-db.js";
+
+/* The last day a month's write-up steps are worked out to: its final day, or
+   today while it is still running. */
+function stepAsOf(period) {
+  const [y, m] = period.split("-").map(Number);
+  const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  const end = addDays(next, -1), today = todayHere();
+  return end < today ? end : today;
+}
+const stepMonth = period => period >= STEPS.from;
 
 export const RULES = {
   commissionRate: 0.02,      // 2% of completed revenue
@@ -268,6 +280,11 @@ export function computeSplit(raw, rules = RULES) {
       bonuses:       Number(p.bonuses),
       deductions:    Number(p.deductions),
       discipline_lost: Number(p.discipline_lost),
+      /* From November 2026 the write-up step replaces the 60-day count. */
+      step_mode:     !!p.step_mode,
+      step_level:    p.step_level ?? null,
+      step_points:   p.step_points ?? null,
+      steps_down_on: p.steps_down_on ?? null,
       /* hours_ok still means the full 100. A part-timer is eligible without it. */
       hours_ok:   hoursOK,
       part_time:  partTime,
@@ -349,8 +366,8 @@ export function computeSplit(raw, rules = RULES) {
     r.reviews_pct = denomB.reviews ? r.review_points / denomB.reviews : 0;
     r.hours_pct   = denomB.hours   ? r.hours / denomB.hours : 0;
 
-    r.standing =
-      r.discipline_lost >= rules.terminateAt ? "termination"
+    r.standing = r.step_mode ? (r.step_level ?? "clear")
+      : r.discipline_lost >= rules.terminateAt ? "termination"
       : r.discipline_lost >= rules.suspendAt ? "suspension"
       : r.discipline_lost >= rules.warnAt    ? "warning"
       : "clear";
@@ -459,6 +476,15 @@ export function rank(rows, key = "share") {
 export async function monthly(year, month) {
   const period = periodOf(year, month);
   const raw = await gather(period);
+  if (stepMonth(period)) {
+    const asOf = stepAsOf(period);
+    const steps = await stepsFor(asOf, raw.people.map(p => p.id));
+    for (const p of raw.people) {
+      const s = steps.get(p.id) ?? cleanStep(asOf);
+      Object.assign(p, { step_mode: true, step_level: s.level, step_points: s.points,
+                         steps_down_on: s.steps_down_on });
+    }
+  }
   return { period, ...computeSplit({ ...raw, period }) };
 }
 
@@ -587,10 +613,31 @@ export async function forEmployee(year, month, employeeId) {
         and occurred_on <= least($2::date + interval '1 month', current_date)
       order by occurred_on, id`, [employeeId, period, RULES.disciplineDays]);
 
+  /* From November 2026: the step they are on and the points counting toward
+     the next one, instead of the rolling 60 days. */
+  let steps = null, stepEntries = null;
+  if (stepMonth(period)) {
+    const asOf = stepAsOf(period);
+    const s = (await stepsFor(asOf, [employeeId])).get(employeeId) ?? cleanStep(asOf);
+    steps = { level: s.level, step: s.step, points: s.points, needed: s.needed, carry: s.carry,
+              count_from: s.count_from, steps_down_on: s.steps_down_on, as_of: asOf,
+              last_write_up: s.last_write_up, suspensions_in_year: s.suspensions_in_year,
+              days: STEPS.days };
+    stepEntries = (await query(
+      `select to_char(occurred_on, 'YYYY-MM-DD') as occurred_on, delta, reason, job_number,
+              ${await pointNote()} as note
+         from point_events
+        where employee_id = $1 and delta < 0 and recorded_by is distinct from 'demo'
+          and occurred_on >= $2::date and occurred_on <= $3::date
+        order by occurred_on, id`, [employeeId, s.count_from, asOf])).rows
+      .map(r => ({ ...r, delta: Number(r.delta) }));
+  }
+
   return {
     period,
-    discipline_window: { from: win.rows[0].from_day, to: win.rows[0].to_day, days: RULES.disciplineDays },
-    discipline_entries: counted.rows.map(r => ({ ...r, delta: Number(r.delta) })),
+    discipline_steps: steps,
+    discipline_window: steps ? null : { from: win.rows[0].from_day, to: win.rows[0].to_day, days: RULES.disciplineDays },
+    discipline_entries: stepEntries ?? counted.rows.map(r => ({ ...r, delta: Number(r.delta) })),
     pool: result.pool,
     points_pool: result.points_pool,
     reviews_pool: result.reviews_pool,

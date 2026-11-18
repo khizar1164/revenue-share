@@ -196,11 +196,11 @@
   <h2>Level of action</h2>
   <div class="levels">
     <div class="lvl {{LVL_WARNING}}"><span class="box"></span>
-      <div><b>Written Warning</b><br><span>15 points lost in 60 days</span></div></div>
+      <div><b>Written Warning</b><br><span>15 points lost within 30 days</span></div></div>
     <div class="lvl {{LVL_SUSPENSION}}"><span class="box"></span>
-      <div><b>Suspension</b><br><span>30 points &middot; 7 days unpaid</span></div></div>
+      <div><b>Suspension</b><br><span>15 new points after a warning &middot; 7 days unpaid</span></div></div>
     <div class="lvl {{LVL_TERMINATION}}"><span class="box"></span>
-      <div><b>Termination</b><br><span>45 points lost in 60 days</span></div></div>
+      <div><b>Termination</b><br><span>15 new points after a suspension, or a third suspension in a year</span></div></div>
   </div>
 
   <p>This is a warning notice being issued to address performance and/or conduct.
@@ -216,9 +216,10 @@
     <div><span class="k">Points lost</span><span class="n bad">{{POINTS_LOST}}</span></div>
     <div><span class="k">{{THRESHOLD_LABEL}}</span><span class="n">{{THRESHOLD}}</span></div>
     <div><span class="k">Points now</span><span class="n">{{POINTS_NOW}}</span></div>
-    <div class="note">Everyone starts each month on 15 points. Discipline is measured
-      on a rolling 60 days, not the calendar month, so this covers
-      {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}{{BASIS_NOTE}}</div>
+    <div class="note">Everyone starts each month on 15 points. Write-ups go in steps:
+      15 points lost within 30 days is a written warning, and each step after that needs
+      15 new points within 30 days of the last write-up. Thirty days with no new write-up
+      moves back down a step. This covers {{WINDOW_FROM}} to {{WINDOW_TO}}. {{NEXT_STEP}}{{BASIS_NOTE}}</div>
   </div>
 
 {{INCIDENT_TABLE}}

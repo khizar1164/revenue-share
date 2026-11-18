@@ -150,6 +150,7 @@ export function reportView(detail, ytdResult = null) {
 
     standing:        detail.standing,
     discipline_lost: detail.discipline_lost,
+    discipline_steps:   detail.discipline_steps ?? null,
     discipline_window:  detail.discipline_window,
     discipline_entries: detail.discipline_entries,
     /* the first month there is anything to show, for the month switcher */
