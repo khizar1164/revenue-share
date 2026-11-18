@@ -108,9 +108,14 @@ export async function syncJobCrew({ from, to, now = new Date(), get = rawGet, re
 
   /* 1. link movers to MoveitPro employees */
   const mipEmployees = await listAll(get, "/v1/employees?limit=100", retry);
+  /* Only people who could be on a job in this range. Someone who left before
+     it starts has no MoveitPro record to find, and naming them in the warning
+     every run (Aaron and Blade, gone since September) buried the names that
+     needed looking at. */
   const roster = (await query(
     `select id, full_name, mip_employee_id from employees
-      where is_mover and merged_into is null`)).rows;
+      where is_mover and merged_into is null
+        and (status = 'active' or ended_on is null or ended_on >= $1::date)`, [from])).rows;
   const taken = new Set(roster.filter(r => r.mip_employee_id).map(r => r.mip_employee_id));
   const { links, unmatched, ambiguous } =
     matchEmployees(roster.filter(r => !r.mip_employee_id), mipEmployees, { taken });
