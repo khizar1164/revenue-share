@@ -118,10 +118,16 @@
       + list(f.tardyLog.map(function(t){ return row(esc(t.what), '<span class="pts down">' + signed(t.points) + '</span>'); }))
       + '</div>'
       + '<div><h3>Write-ups</h3>'
-      + list(f.thresholds.map(function(t){ return row(esc(t.level), t.at + ' points lost'); }))
-      + '<p class="hint">Counted over the last ' + f.window + ' days, not the calendar month.</p></div>'
+      + list(f.steps.map(function(t){ return row(esc(t.level), esc(t.what)); }))
+      + '<p class="hint">After a write-up only new points count, and anything over 15 carries to the next step. '
+      + f.stepDays + ' days with no new write-up steps down one, so a suspension takes ' + (f.stepDays * 2)
+      + ' days to clear. A write-up marked not issued does not count. Counted from 1 November 2026.</p></div>'
       + '<div><h3>Each month</h3>'
-      + list([row("Everyone starts the month on", f.startPoints + " points")])
+      + list([row("Everyone starts the month on", f.startPoints + " points"),
+              row("Full share", f.minHours + " hours or more"),
+              row("Part-time share", f.partTimeMin + " to " + (f.minHours - 1) + " hours, paid hours ÷ " + f.minHours),
+              row("No share", "under " + f.partTimeMin + " hours")])
+      + '<p class="hint">Part time: 60 hours earns 60% of a full share, and the rest goes to those with ' + f.minHours + ' hours.</p>'
       + '</div>';
   }
 

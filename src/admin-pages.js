@@ -13,6 +13,7 @@
  * ahead of the schema: the dropdown falls back to the built-in list and the
  * pages say the database needs updating rather than failing.
  */
+import { STEPS } from "./steps.js";
 import { query, hasColumn } from "./db.js";
 import { RULES } from "./calc.js";
 import { PENALTY } from "./sync/tardy.js";
@@ -49,12 +50,17 @@ const tracking = () => hasColumn("discipline_notices", "outcome");
 function fixedRules() {
   return {
     startPoints: RULES.startPoints,
-    window: RULES.disciplineDays,
-    thresholds: [
-      { level: "Written warning", at: RULES.warnAt },
-      { level: "Suspension", at: RULES.suspendAt },
-      { level: "Termination", at: RULES.terminateAt }
+    /* The write-up steps, 18 November 2026 (src/steps.js). */
+    steps: [
+      { level: "Written warning", what: `${STEPS.needed} points lost within ${STEPS.days} days` },
+      { level: "Suspension (7 days unpaid)", what: `${STEPS.needed} new points within ${STEPS.days} days of the warning` },
+      { level: "Termination", what: `${STEPS.needed} new points within ${STEPS.days} days of the suspension, ` +
+          `or a ${STEPS.suspensionsForTermination === 3 ? "third" : STEPS.suspensionsForTermination + "th"} suspension within ${STEPS.suspensionYear} days` }
     ],
+    stepsFrom: STEPS.from,
+    stepDays: STEPS.days,
+    minHours: RULES.minHours,
+    partTimeMin: RULES.partTimeMin,
     tardyLog: [
       { what: "Late 2 to 30 minutes", points: -1 },
       { what: "Late 31 to 60 minutes", points: -2 },
