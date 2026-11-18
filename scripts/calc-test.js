@@ -279,6 +279,33 @@ console.log("\n9. HOURS AS A WEIGHTED FACTOR  (Andrew, 11 September)");
     w.unallocated_why.join("; "));
 }
 
+/* ----------------------------------------------------------------- 10 ---- */
+console.log("\n10. PART TIME (from November 2026)");
+{
+  const nov = (o = {}) => ({ ...build(o), period: "2026-11-01" });
+  const oct = computeSplit({ ...build({ hours: { BADGER: 60 } }), period: "2026-10-01" });
+  check("October keeps the old rule: 60 hours is short", !oct.rows.find(p => p.code_name === "BADGER").paid);
+
+  const base = computeSplit(nov());
+  const r = computeSplit(nov({ hours: { BADGER: 60, HAWK: 39.75 } }));
+  const badger = r.rows.find(p => p.code_name === "BADGER");
+  const hawk = r.rows.find(p => p.code_name === "HAWK");
+  check("60 hours is paid part time", badger.paid && badger.part_time && !badger.hours_ok);
+  check("60 hours earns 60% of a full share", near(badger.share, badger.part_full_share * 0.6),
+    usd(badger.share) + " of " + usd(badger.part_full_share));
+  check("under 40 hours is still short", !hawk.paid && /40-hour part-time minimum/.test(hawk.reason), hawk.reason);
+  check("the pool still pays out in full", near(r.allocated, r.pool, 0.05) && r.unallocated < 0.05,
+    usd(r.allocated) + " of " + usd(r.pool));
+  check("what a part-timer does not get goes to the full-timers",
+    near(r.rows.filter(p => p.paid && !p.part_time).reduce((a, p) => a + p.share, 0) + badger.share, r.pool, 0.05));
+  check("counts say who is part time", r.counts.part_time === 1 && r.counts.short === 1);
+
+  const lone = computeSplit(nov({ hours: Object.fromEntries(CREW.map(c => [c[0], 50])) }));
+  check("all part time: half shares, the other half stays unallocated",
+    near(lone.allocated, lone.pool / 2, 0.05) && near(lone.part_time_withheld, lone.pool / 2, 0.05), usd(lone.allocated));
+  check("100 hours is a full share, as before", base.rows.every(p => p.hours_ok && !p.part_time));
+}
+
 console.log("\n" + "=".repeat(56));
 console.log(failures === 0 ? `ALL CHECKS PASSED` : `${failures} FAILURE(S)`);
 console.log("=".repeat(56));

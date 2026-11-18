@@ -48,6 +48,7 @@ export function boardView(result, ytdResult = null) {
     hours_pool:   result.hours_pool,
     weights:      result.weights,
     min_hours:    result.min_hours,
+    part_time_min: result.part_time_min,
     forfeited:    result.forfeited,
 
     /* a job count is safe and gives the crew something concrete */
@@ -74,6 +75,8 @@ export function boardView(result, ytdResult = null) {
       paid:          r.paid,
       forfeits:      r.forfeits,
       hours_ok:      r.hours_ok,
+      part_time:     r.part_time,
+      part_factor:   r.part_factor,
       hours_needed:  r.hours_ok ? 0 : round2(result.min_hours - r.hours)
     })),
 
@@ -110,6 +113,10 @@ export function reportView(detail, ytdResult = null) {
 
     hours:    detail.hours,
     hours_ok: detail.hours_ok,
+    part_time:   detail.part_time,
+    part_factor: detail.part_factor,
+    part_full_share: detail.part_full_share ?? null,
+    part_time_min:   detail.part_time_min ?? null,
     points:   detail.points,
     point_carry_in:  detail.point_carry_in,
     point_start:     detail.point_start,

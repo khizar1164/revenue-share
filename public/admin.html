@@ -357,7 +357,9 @@ Tyler Johnston  44.25"></textarea>
       stat("Reviews " + pct(w.reviews), usd(d.reviews_pool), d.totals.reviews + " review points") +
       stat("Hours " + pct(w.hours), usd(d.hours_pool), (d.totals.hours || 0) + " hours across " + d.counts.qualified) +
       stat("Sharing", d.counts.qualified + " of " + d.counts.roster,
-           waived ? minH(d) + "-hour minimum waived" : d.counts.short + " short of " + minH(d) + " hours") +
+           waived ? minH(d) + "-hour minimum waived"
+             : (d.counts.part_time ? d.counts.part_time + " part time, " : "")
+               + d.counts.short + " short of " + (d.part_time_min || minH(d)) + " hours") +
       (d.forfeited > 0 ? stat("Redistributed", usd(d.forfeited), d.counts.forfeited + " forfeited") : "");
 
     var notes = "";
@@ -460,7 +462,9 @@ Tyler Johnston  44.25"></textarea>
     $("hoursTbl").innerHTML = '<thead><tr><th>Name</th><th class="n">Hours</th><th class="n">Gate</th></tr></thead><tbody>'
       + d.rows.map(function(p){
           return '<tr><td>'+esc(p.full_name)+'</td><td class="n">'+p.hours+'</td>'
-               + '<td class="n">'+(p.hours_ok?'<span class="pill ok">In</span>':'<span class="pill no">Short</span>')+'</td></tr>';
+               + '<td class="n">'+(p.hours_ok?'<span class="pill ok">In</span>'
+                 : p.part_time?'<span class="pill warn" title="Paid '+Math.round(p.part_factor*100)+'% of a full share">Part '+Math.round(p.part_factor*100)+'%</span>'
+                 : '<span class="pill no">Short</span>')+'</td></tr>';
         }).join("") + "</tbody>";
   }
 
