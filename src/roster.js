@@ -27,7 +27,7 @@ export async function matchableRoster(period = null) {
   const r = await query(
     `select id, code_name, full_name from employees
       where is_mover
-        and (status <> 'left'
+        and (status not in ('left', 'no_notice')
              or ended_on >= coalesce($1::date, (current_date - interval '3 months')::date))
       order by code_name`,
     [period ?? null]);

@@ -512,7 +512,7 @@ app.get("/api/admin/roster", wrap(async (_req, res) => {
     `select id, code_name, full_name, status, sm_crew_id, email, is_mover, ended_on
        from employees
       where is_mover
-        and (status <> 'left'
+        and (status not in ('left', 'no_notice')
              or ended_on >= date_trunc('month', current_date)::date)
       order by code_name`);
   res.json(r.rows);
@@ -913,7 +913,7 @@ app.put("/api/admin/hours/bulk", wrap(async (req, res) => {
   const roster = (await query(
     `select id, full_name, code_name from employees
       where is_mover
-        and (status <> 'left'
+        and (status not in ('left', 'no_notice')
              or (ended_on >= $1::date and ended_on < $1::date + interval '1 month'))`,
     [period])).rows;
 
