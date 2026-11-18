@@ -328,9 +328,14 @@
     if (d.forfeits){
       b = '<div class="banner bad"><b>No two weeks notice on file.</b> Your share for this month — '
         + usd(d.forfeited) + ' — has been forfeited and shared out among the crew still working.</div>';
+    } else if (d.paid && d.part_time){
+      b = '<div class="banner ok"><b>You’re sharing part time this month.</b> ' + d.hours + ' hours worked, so you get '
+        + Math.round(d.part_factor * 100) + '% of a full share. Reach ' + MIN + ' hours for the full share.</div>';
     } else if (!d.paid && !d.hours_ok){
+      var floor = d.part_time_min || MIN;
       b = '<div class="banner"><b>Not eligible this month.</b> ' + d.hours + ' hours worked, '
-        + (MIN - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the ' + MIN + '-hour minimum. '
+        + (floor - d.hours).toFixed(2).replace(/\.00$/,"") + ' short of the ' + floor + '-hour '
+        + (d.part_time_min ? 'part-time minimum' : 'minimum') + '. '
         + 'Your points, reviews and hours still count — they just don’t pay this month.</div>';
     } else if (d.paid && d.points === 0){
       b = '<div class="banner"><b>No points left.</b> The points share pays nothing this month. '
@@ -433,8 +438,9 @@
     var pctH = Math.min(100, (d.hours/MIN)*100);
     $("elig").innerHTML = '<tbody>'
       + '<tr><td>Hours worked</td><td class="n"><b>'+d.hours+'</b> / '+MIN+' &nbsp;'
-      +   '<span class="pill '+(d.hours_ok?"plus":"minus")+'">'
-      +   (d.hours_ok?"Qualified":"Short "+(MIN-d.hours).toFixed(2).replace(/\.00$/,"")+" h")+'</span>'
+      +   '<span class="pill '+(d.hours_ok||d.part_time?"plus":"minus")+'">'
+      +   (d.hours_ok?"Qualified":d.part_time?"Part time, "+Math.round(d.part_factor*100)+"%"
+            :"Short "+((d.part_time_min||MIN)-d.hours).toFixed(2).replace(/\.00$/,"")+" h")+'</span>'
       +   '<div class="hoursbar"><i style="width:'+pctH.toFixed(1)+'%;background:'
       +   (d.hours_ok?"var(--good)":"var(--warn)")+'"></i></div></td></tr>'
       + '<tr><td>Points left</td><td class="n"><b>'+d.points+'</b> &nbsp;<span class="pill '

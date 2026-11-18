@@ -25,6 +25,13 @@ export const RULES = {
   hoursShare:     0.15,
   startPoints:    15,        // everyone begins each month here
   minHours:       100,       // eligibility gate — Andrew, 14 September (was 75)
+  /* Part time (Matthew and Andrew, 18 November): under the 100-hour gate but
+     at least partTimeMin, you are paid your share times hours / 100, so 60
+     hours earns 60% of it. What a part-timer does not get goes to everyone
+     who made the full 100. Months before partTimeFrom keep the old rule, so a
+     month already worked out does not change underneath anyone. */
+  partTimeMin:    40,
+  partTimeFrom:   "2026-11-01",
   disciplineDays: 60,        // rolling window
   warnAt:         15,
   suspendAt:      30,
@@ -220,6 +227,11 @@ export function computeSplit(raw, rules = RULES) {
      someone who was not there. */
   const waived = !!raw.settings?.hours_gate_waived;
 
+  /* Part time applies from partTimeFrom on. Without a period (the tests build
+     months by hand) it is off unless the rules say otherwise. */
+  const partOn = rules.partTimeMin != null &&
+    (rules.partTime === true || (raw.period != null && raw.period >= rules.partTimeFrom));
+
   /* shape each person before any money is assigned */
   const rows = raw.people.map(p => {
     /* Andrew, 9 October: a month that finishes below zero carries the
@@ -228,7 +240,10 @@ export function computeSplit(raw, rules = RULES) {
     const carried = Number(p.point_carry ?? 0);
     const balance = rules.startPoints + Number(p.point_delta) + carried;
     const points  = Math.max(0, balance);
-    const hoursOK = waived || Number(p.hours) >= rules.minHours;
+    const hrs     = Number(p.hours);
+    const hoursOK = waived || hrs >= rules.minHours;
+    const partTime = !hoursOK && partOn && hrs >= rules.partTimeMin;
+    const eligible = hoursOK || partTime;
     /* Gave notice and left during this month. Andrew, 23 September: "leaves
        with notice given = bonus earned still". So they are paid for the month
        they worked exactly like anyone else, and only drop off the roster from
@@ -240,7 +255,7 @@ export function computeSplit(raw, rules = RULES) {
       full_name:   p.full_name,
       status:      p.status,
       gone,
-      hours:       Number(p.hours),
+      hours:       hrs,
       points,
       /* What they started the month on, and how far below zero the month
          itself went. Carried so the report can say why somebody began on 10
@@ -253,17 +268,22 @@ export function computeSplit(raw, rules = RULES) {
       bonuses:       Number(p.bonuses),
       deductions:    Number(p.deductions),
       discipline_lost: Number(p.discipline_lost),
-      hours_ok: hoursOK,
-      paid:     hoursOK && (p.status === "active" || p.status === "left"),
-      forfeits: hoursOK && p.status === "no_notice"
+      /* hours_ok still means the full 100. A part-timer is eligible without it. */
+      hours_ok:   hoursOK,
+      part_time:  partTime,
+      part_factor: hoursOK ? 1 : partTime ? hrs / rules.minHours : 0,
+      paid:     eligible && (p.status === "active" || p.status === "left"),
+      forfeits: eligible && p.status === "no_notice"
     };
   });
+  const eligible = r => r.hours_ok || r.part_time;
 
-  /* two denominators — see the note at the top of the file */
-  const denomA = { points: 0, reviews: 0, hours: 0 };   // everyone who cleared the hours gate
+  /* two denominators — see the note at the top of the file. A part-timer
+     counts in both at full weight; their cut is taken off afterwards. */
+  const denomA = { points: 0, reviews: 0, hours: 0 };   // everyone eligible
   const denomB = { points: 0, reviews: 0, hours: 0 };   // only those actually being paid
   for (const r of rows) {
-    if (!r.hours_ok) continue;
+    if (!eligible(r)) continue;
     denomA.points  += r.points;
     denomA.reviews += r.review_points;
     denomA.hours   += r.hours;
@@ -290,10 +310,38 @@ export function computeSplit(raw, rules = RULES) {
       const wouldPoints  = denomA.points  ? (r.points / denomA.points) * pointsPool : 0;
       const wouldReviews = denomA.reviews ? (r.review_points / denomA.reviews) * reviewPool : 0;
       const wouldHours   = denomA.hours   ? (r.hours / denomA.hours) * hoursPool : 0;
-      r.forfeited = wouldPoints + wouldReviews + wouldHours;
+      r.forfeited = (wouldPoints + wouldReviews + wouldHours) * r.part_factor;
       forfeited  += r.forfeited;
     }
+  }
 
+  /* Part-timers keep hours / 100 of what they would have had. The rest goes
+     to the full-timers being paid, in proportion to what each already earns,
+     so the order between them does not change. With no full-timer to take it
+     it stays unallocated, like any other money with nobody to go to. */
+  let withheld = 0, fullTotal = 0;
+  for (const r of rows) {
+    if (!r.paid) continue;
+    const whole = r.points_amount + r.reviews_amount + r.hours_amount;
+    if (r.part_time) {
+      withheld += whole * (1 - r.part_factor);
+      r.part_full_share = whole;
+      r.points_amount  *= r.part_factor;
+      r.reviews_amount *= r.part_factor;
+      r.hours_amount   *= r.part_factor;
+    } else {
+      fullTotal += whole;
+    }
+  }
+  const lift = fullTotal > 0 ? 1 + withheld / fullTotal : 1;
+  for (const r of rows) {
+    if (!r.paid || r.part_time || lift === 1) continue;
+    r.points_amount  *= lift;
+    r.reviews_amount *= lift;
+    r.hours_amount   *= lift;
+  }
+
+  for (const r of rows) {
     r.share     = r.points_amount + r.reviews_amount + r.hours_amount;
     r.take_home = r.share + r.bonuses - r.deductions;
 
@@ -307,15 +355,19 @@ export function computeSplit(raw, rules = RULES) {
       : r.discipline_lost >= rules.warnAt    ? "warning"
       : "clear";
 
-    /* why someone is not being paid, in words the report can print */
-    r.reason = r.paid ? null
+    /* why someone is not being paid in full, in words the report can print */
+    const pct = Math.round(r.part_factor * 100);
+    r.reason = r.paid
+      ? (r.part_time ? `part time: ${r.hours} hours, paid ${pct}% of a full share` : null)
       : r.forfeits ? "no two weeks notice — share forfeited"
       : waived ? "not sharing this month"
+      : partOn ? `${round2(rules.partTimeMin - r.hours)} hours short of the ${rules.partTimeMin}-hour part-time minimum`
       : `${round2(rules.minHours - r.hours)} hours short of the ${rules.minHours}-hour minimum`;
 
-    for (const k of ["points_amount", "reviews_amount", "hours_amount", "forfeited", "share", "take_home", "bonuses", "deductions"]) {
-      r[k] = round2(r[k]);
+    for (const k of ["points_amount", "reviews_amount", "hours_amount", "forfeited", "share", "take_home", "bonuses", "deductions", "part_full_share"]) {
+      if (r[k] != null) r[k] = round2(r[k]);
     }
+    r.part_factor = round2(r.part_factor);
   }
 
   const paid = rows.filter(r => r.paid);
@@ -337,7 +389,9 @@ export function computeSplit(raw, rules = RULES) {
     if (!paid.length) {
       /* one reason, the true one: points and reviews may well be piling up,
          they just have nobody to pay yet */
-      unallocatedWhy.push(`nobody has reached the ${rules.minHours}-hour minimum yet`);
+      unallocatedWhy.push(partOn
+        ? `nobody has reached the ${rules.partTimeMin}-hour part-time minimum yet`
+        : `nobody has reached the ${rules.minHours}-hour minimum yet`);
     } else {
       if (!denomB.points)  unallocatedWhy.push("no points to share against");
       if (!denomB.reviews) unallocatedWhy.push("no review points recorded this month");
@@ -361,6 +415,9 @@ export function computeSplit(raw, rules = RULES) {
     hours_pool:   round2(round2(pool) - round2(pointsPool) - round2(reviewPool)),
     weights: { points: rules.pointsShare, reviews: rules.reviewsShare, hours: rules.hoursShare },
     min_hours: rules.minHours,
+    /* null when the month is before part time began */
+    part_time_min: partOn ? rules.partTimeMin : null,
+    part_time_withheld: round2(withheld),
     forfeited:    round2(forfeited),
     allocated:       round2(allocated),
     unallocated:     round2(unallocated),
@@ -376,7 +433,8 @@ export function computeSplit(raw, rules = RULES) {
       roster:    rows.length,
       qualified: paid.length,
       forfeited: rows.filter(r => r.forfeits).length,
-      short:     rows.filter(r => !r.hours_ok).length,
+      short:     rows.filter(r => !eligible(r)).length,
+      part_time: rows.filter(r => r.part_time).length,
       /* on the roster this month only because they left during it */
       left:      rows.filter(r => r.gone).length
     },
@@ -401,7 +459,7 @@ export function rank(rows, key = "share") {
 export async function monthly(year, month) {
   const period = periodOf(year, month);
   const raw = await gather(period);
-  return { period, ...computeSplit(raw) };
+  return { period, ...computeSplit({ ...raw, period }) };
 }
 
 /* ------------------------------------------------------------------ YTD ---- */
@@ -539,6 +597,7 @@ export async function forEmployee(year, month, employeeId) {
     hours_pool: result.hours_pool,
     weights: result.weights,
     min_hours: result.min_hours,
+    part_time_min: result.part_time_min,
     ...me,
     ledger: ledger.rows,
     reviews: reviews.rows,
