@@ -1031,7 +1031,7 @@ Tyler Johnston  44.25"></textarea>
     var id = b.getAttribute("data-writeup");
     var who = b.getAttribute("data-who");
     if (!confirm("Build the disciplinary notice for " + who + "?\n\n"
-        + "It is made from their points over the last 60 days. Nothing is sent "
+        + "It is made from the points counted toward their write-up step. Nothing is sent "
         + "to anyone and nothing is recorded — it downloads to you.")) return;
 
     var label = b.innerHTML;
@@ -1389,7 +1389,7 @@ Tyler Johnston  44.25"></textarea>
       if (!a.unseen || !a.unseen.length) return;
       $("wuList").innerHTML = a.unseen.map(function(n){
         return "<li><b>" + esc(n.full_name) + "</b>: " + esc(LEVEL[n.level] || n.level)
-          + ", " + n.lost + " points lost in 60 days</li>";
+          + ", " + n.lost + " points counted for this step</li>";
       }).join("");
       $("wuTitle").textContent = a.unseen.length === 1 ? "New write-up raised" : a.unseen.length + " new write-ups raised";
       $("wuModal").hidden = false;
