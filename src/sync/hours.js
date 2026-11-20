@@ -16,7 +16,7 @@ import { withTransaction } from "../db.js";
 import { matchableRoster } from "../roster.js";
 
 export const HOURS_TAB = "Hours";
-export const HOURS_HEADER = ["Employee", "Week ending", "Hours", "Notes"];
+export const HOURS_HEADER = ["First name", "Last name", "Total work hours", "Week Ending"];   // Matthew's layout, 20 Nov
 
 /* The month-end pull lives in its own tab rather than mixed in with the weeks.
    Two reasons: pasting a month total underneath the weekly rows would double
@@ -176,7 +176,7 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
      final pull into it, and a missing tab is not an error. */
   let monthRows = [];
   try {
-    const mv = await google.read(spreadsheetId, `${MONTH_TAB}!A1:D2000`, { raw: true });
+    const mv = await google.read(spreadsheetId, `${MONTH_TAB}!A1:H2000`, { raw: true });
     monthRows = parseHoursRows(mv).rows;
     if (monthRows.length) log(`read ${monthRows.length} month-end rows from ${MONTH_TAB}`);
   } catch { /* tab not there yet */ }
