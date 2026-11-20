@@ -336,7 +336,7 @@ app.get("/auth/:token", wrap(async (req, res) => {
   const action = `/auth/${encodeURIComponent(req.params.token)}`;
   res.type("html").send(`<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="robots" content="noindex"><title>Sign in · Revenue Share</title>
 <style>
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
