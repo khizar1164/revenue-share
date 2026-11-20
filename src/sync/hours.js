@@ -161,10 +161,11 @@ function monthOf(weekEnding, fallback) {
 /**
  * Read the tab and write hours into the database.
  *
- * Weekly rows for the same person in the same month are SUMMED — that is what
- * a weekly export means. Because the whole tab is re-read each time, the total
- * is rebuilt from scratch rather than added to, so correcting a cell in the
- * sheet corrects the total here instead of double-counting it.
+ * Each row is a running total for the month so far (Matthew, 20 Nov), so a
+ * person's month is their row with the latest Week Ending, never a sum. The
+ * whole tab is re-read each time, so correcting a cell corrects the total.
+ * (The weekly Connecteam files in hours-weekly.js are one week each, and those
+ * are still added up.)
  */
 export async function importHours(google, spreadsheetId, { period, log = () => {} } = {}) {
   const values = await google.read(spreadsheetId, `${HOURS_TAB}!A1:H2000`, { raw: true });
@@ -184,7 +185,7 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
   const roster = await matchableRoster();
   const match = nameMatcher(roster);
 
-  /* period -> employee -> summed hours */
+  /* period -> employee -> hours for the month */
   const totals = new Map();
   const unmatched = new Map();
 
@@ -200,17 +201,21 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
         ` — weekly rows for those months are ignored`);
   }
 
-  /* `sum` is right for weekly rows — four weeks make a month. It is wrong for
-     month-end rows: a month total is a single figure by definition, so two rows
-     for the same person mean someone pasted twice, and adding them would double
-     that person's hours. There the last row simply wins. */
-  const add = (r, p, { sum = true } = {}) => {
+  /* Matthew, 20 November: an Hours tab row is the month SO FAR, not one week.
+     So for each person the row with the latest Week Ending is the total, and
+     adding the rows would count the early weeks again. On the same date, the
+     lower row wins, so a correction typed underneath replaces the first.
+     Month-end rows pass no date: the last one wins, as before. */
+  const asOf = new Map();                           // "period|employee" -> date
+  const add = (r, p, { when = null } = {}) => {
     const emp = match(r.name);
-    if (!emp) { unmatched.set(r.name, (unmatched.get(r.name) || 0) + r.hours); return; }
+    if (!emp) { unmatched.set(r.name, Math.max(unmatched.get(r.name) || 0, r.hours)); return; }
     if (period && p !== period) return;             // only the month we were asked for
     if (!totals.has(p)) totals.set(p, new Map());
     const m = totals.get(p);
-    m.set(emp.id, sum ? (m.get(emp.id) || 0) + r.hours : r.hours);
+    if (when === null) { m.set(emp.id, r.hours); return; }
+    const key = `${p}|${emp.id}`;
+    if (!asOf.has(key) || when >= asOf.get(key)) { asOf.set(key, when); m.set(emp.id, r.hours); }
   };
 
   /* A month-end row whose Month cell is a specific day is still that month —
@@ -222,11 +227,11 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
   }).filter(Boolean));
   const suspicious = monthRows.length >= 3 && monthDays.size >= monthRows.length - 1;
 
-  for (const r of monthRows) add(r, monthOf(r.weekEnding, period), { sum: false });
+  for (const r of monthRows) add(r, monthOf(r.weekEnding, period));
   for (const r of rows) {
     const p = monthOf(r.weekEnding, period);
     if (closed.has(p)) continue;                    // superseded by the month-end pull
-    add(r, p);
+    add(r, p, { when: parseSheetDate(r.weekEnding)?.getTime() ?? 0 });
   }
 
   let written = 0;

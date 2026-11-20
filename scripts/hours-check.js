@@ -122,7 +122,7 @@ else {
     await google.write(SHEET_ID, `${HOURS_TAB}!A1:D8`, [
       HOURS_HEADER,
       [...a.full_name.split(" "), "42", "2026-09-07"],
-      [...a.full_name.split(" "), "40", "2026-09-14"],
+      [...a.full_name.split(" "), "82", "2026-09-14"],
       [...b.full_name.toUpperCase().split(" "), "31.5", "2026-09-07"],
       [c.full_name.split(" ")[0], c.full_name.split(" ")[1][0], "28", "2026-09-07"],
       ["Nobody", "McGhost", "50", "2026-09-07"],
@@ -143,8 +143,8 @@ else {
         where h.period = '2026-09-01'::date order by e.full_name`);
     const got = Object.fromEntries(saved.rows.map(x => [x.full_name, x.hours]));
 
-    check("two weeks are summed into a month total", got[a.full_name] === 82,
-      `42 + 40 = ${got[a.full_name]}`);
+    check("the later running total is the month, not a sum", got[a.full_name] === 82,
+      `42 then 82 to date = ${got[a.full_name]}`);
     check("an upper-case name landed", got[b.full_name] === 31.5);
     check("first name + initial landed", got[c.full_name] === 28);
     check("recorded as coming from the sheet",
@@ -159,12 +159,12 @@ else {
     check("re-running does not double anything", again.hours === 82, `${again.hours} hours`);
 
     /* correcting a cell corrects the total rather than adding to it */
-    await google.write(SHEET_ID, `${HOURS_TAB}!C2`, [["35"]]);
+    await google.write(SHEET_ID, `${HOURS_TAB}!C3`, [["75"]]);
     await importHours(google, SHEET_ID, { period: "2026-09-01" });
     const fixed = (await query(
       `select hours::float8 as hours from hours h join employees e on e.id = h.employee_id
         where h.period = '2026-09-01'::date and e.full_name = $1`, [a.full_name])).rows[0];
-    check("correcting a cell corrects the total", fixed.hours === 75, `35 + 40 = ${fixed.hours}`);
+    check("correcting a cell corrects the total", fixed.hours === 75, `${fixed.hours} hours`);
 
     const gate = await (await fetch("http://localhost:3000/api/admin/summary?month=2026-09")).json();
     check("the gate now passes them at exactly 75",
