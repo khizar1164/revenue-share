@@ -337,7 +337,7 @@ app.get("/auth/:token", wrap(async (req, res) => {
   res.type("html").send(`<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="robots" content="noindex"><title>Sign in · Revenue Share</title>
+<script src="/static/fit.js"></script><meta name="robots" content="noindex"><title>Sign in · Revenue Share</title>
 <style>
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
     background:#100f0d;color:#c9c3b6;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;box-sizing:border-box}

@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<script src="/static/fit.js"></script>
 <title>My Revenue Share</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
-  /* Andrew, 21 Nov: on the phone the page stays put. No pinch zoom, no sideways drift, no rubber-band pull. */ html,body{overflow-x:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-y}
+  /* Andrew, 21 Nov: on the phone the page stays put sideways and scrolls freely up and down. clip, not hidden, so the body never becomes its own scroll box (that is what stopped it reaching the bottom). */ html{overscroll-behavior-y:none;-webkit-text-size-adjust:100%;text-size-adjust:100%} body{overflow-x:clip}
   /* The hidden attribute loses to any display: rule, so an element styled
      display:flex stays on screen when told to hide. That is exactly how the
      admin sign-in overlay stayed up after a successful sign-in. */
