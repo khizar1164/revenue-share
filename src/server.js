@@ -32,6 +32,7 @@ import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { mountAdminPages } from "./admin-pages.js";
 import { mountConnecteamChat } from "./sync/connecteam-chat.js";
 import { mountPhotos } from "./photos.js";
+import { mountCrewLogin } from "./crew-login.js";
 import { lockedPeriods, refuseIfLocked, setLock } from "./locks.js";
 import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
@@ -363,7 +364,10 @@ app.post("/auth/:token", wrap(async (req, res) => {
     return res.redirect(303, "/me?expired=1");
   }
   setSessionCookie(res, session.token, { secure: PUBLIC_URL.startsWith("https") });
-  res.redirect(303, "/me");
+  /* First time in (no password yet): set one up, and Face ID, before the report. */
+  const hasLogin = await hasColumn("crew_logins", "password_hash") && (await query(
+    `select 1 from crew_logins where employee_id = $1 and password_hash is not null`, [session.employeeId])).rowCount;
+  res.redirect(303, hasLogin ? "/me" : "/account?first=1");
 }));
 
 app.post("/api/auth/logout", wrap(async (req, res) => {
@@ -1140,6 +1144,7 @@ app.get("/admin/writeups", (_req, res) => res.sendFile(join(root, "public", "wri
 mountAdminPages(app, wrap);
 mountConnecteamChat(app, wrap);
 mountPhotos(app, wrap);
+mountCrewLogin(app, wrap, { publicUrl: PUBLIC_URL });
 
 /* One employee's private report. The id in the path is a placeholder for the
    signed-in person; once sign-in is wired the server decides who you are and
@@ -1147,6 +1152,10 @@ mountPhotos(app, wrap);
 app.get("/me", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 /* the crew upload job photos here (Andrew, 19 Nov) */
 app.get("/photos", (_req, res) => res.sendFile(join(root, "public", "photos.html")));
+/* password and Face ID set-up (Andrew, 20 Nov) */
+app.get("/account", (_req, res) => res.sendFile(join(root, "public", "account.html")));
+app.get("/static/webauthn.js", (_req, res) => res.sendFile(join(root, "node_modules", "@simplewebauthn", "browser", "dist", "bundle", "index.umd.min.js")));
+app.get("/manifest.webmanifest", (_req, res) => res.type("application/manifest+json").sendFile(join(root, "public", "manifest.webmanifest")));
 app.get("/admin/photos", (_req, res) => res.sendFile(join(root, "public", "photos-admin.html")));
 app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 

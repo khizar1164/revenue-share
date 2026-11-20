@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#100f0d">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<title>Your login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  :root{--plane:#100f0d;--panel:#1a1815;--panel-2:#211e1a;--seam:#2e2a24;--ink:#fff;--ink-2:#c9c3b6;--ink-3:#8b857a;
+    --brand:#f0762e;--good:#0ca30c;--crit:#d03b3b;--sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --cond:"Barlow Condensed","Barlow",system-ui,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--plane);color:var(--ink-2);font-family:var(--sans);font-size:16px}
+  main{max-width:480px;margin:0 auto;padding:22px 16px 40px}
+  h1{font-family:var(--cond);font-size:30px;color:var(--ink);letter-spacing:.04em;text-transform:uppercase;margin:0 0 4px}
+  h1 em{color:var(--brand);font-style:normal}
+  .dek{color:var(--ink-3);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--seam);border-radius:14px;padding:16px;margin-bottom:14px}
+  .step{font-family:var(--cond);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);font-size:14px;margin:0 0 8px}
+  .done{color:#8fe28f;font-weight:600}
+  input{width:100%;font:inherit;font-size:17px;padding:12px;border-radius:10px;border:1px solid var(--seam);background:var(--panel-2);color:var(--ink);margin:6px 0}
+  button{width:100%;font:inherit;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:12px;background:var(--brand);color:#1a0e05;margin-top:6px}
+  button.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--seam)}
+  button:disabled{opacity:.5}
+  .msg{padding:10px 12px;border-radius:10px;margin-top:10px;font-size:15px}
+  .msg.ok{background:rgba(12,163,12,.15);color:#8fe28f}
+  .msg.bad{background:rgba(208,59,59,.15);color:#ff9a9a}
+  ol{margin:6px 0 0;padding-left:20px;line-height:1.6}
+  a{color:var(--brand)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Your <em>login</em></h1>
+  <p class="dek" id="hi">&nbsp;</p>
+
+  <div class="card">
+    <p class="step">1. Choose a password</p>
+    <p id="pwState"></p>
+    <form id="pwForm">
+      <input type="password" id="pw1" autocomplete="new-password" placeholder="New password (8 or more characters)" minlength="8" required>
+      <input type="password" id="pw2" autocomplete="new-password" placeholder="Type it again" minlength="8" required>
+      <button type="submit" id="pwGo">Save password</button>
+    </form>
+    <div id="pwMsg"></div>
+  </div>
+
+  <div class="card">
+    <p class="step">2. Turn on Face ID</p>
+    <p id="fidState">Sign in next time with Face ID or your fingerprint, no typing.</p>
+    <button type="button" id="fidGo">Turn on Face ID</button>
+    <div id="fidMsg"></div>
+  </div>
+
+  <div class="card">
+    <p class="step">3. Put it on your home screen</p>
+    <p><b>iPhone:</b></p>
+    <ol><li>Open this page in <b>Safari</b></li><li>Tap the <b>Share</b> button (square with an arrow)</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b></li></ol>
+    <p><b>Android:</b></p>
+    <ol><li>Open this page in <b>Chrome</b></li><li>Tap the <b>⋮</b> menu at the top right</li><li>Tap <b>Add to Home screen</b> (or <b>Install app</b>)</li></ol>
+  </div>
+
+  <button class="ghost" type="button" id="doneGo">Go to my page</button>
+</main>
+<script src="/static/webauthn.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+  function msg(id, kind, text){ $(id).innerHTML = text ? '<div class="msg ' + kind + '">' + esc(text) + '</div>' : ""; }
+  function post(path, body){
+    return fetch(path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+      body: JSON.stringify(body || {}) }).then(function(r){
+        return r.json().catch(function(){ return {}; }).then(function(b){ if (!r.ok) throw new Error(b.error || ("HTTP " + r.status)); return b; });
+      });
+  }
+  function status(){
+    return fetch("/api/crew/login-status", { credentials: "same-origin" }).then(function(r){
+      if (r.status === 401) { location.href = "/me"; throw new Error("signed out"); }
+      return r.json();
+    }).then(function(s){
+      $("hi").textContent = (location.search.indexOf("first") >= 0 ? "Welcome, " : "Hi, ") + s.name.split(" ")[0]
+        + ". Set up how you sign in, so you never need an email link again.";
+      $("pwState").innerHTML = s.hasPassword ? '<span class="done">✓ Password is set.</span> You can change it below.' : "";
+      $("pwGo").textContent = s.hasPassword ? "Change password" : "Save password";
+      if (s.faceIds > 0) { $("fidState").innerHTML = '<span class="done">✓ Face ID is on</span> for ' + s.faceIds + (s.faceIds === 1 ? " phone." : " phones.") + " Add this phone too if it's a new one."; $("fidGo").textContent = "Add this phone"; }
+    });
+  }
+
+  $("pwForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if ($("pw1").value !== $("pw2").value) return msg("pwMsg", "bad", "The two passwords don't match.");
+    $("pwGo").disabled = true;
+    post("/api/crew/password", { password: $("pw1").value })
+      .then(function(){ msg("pwMsg", "ok", "Password saved."); $("pw1").value = $("pw2").value = ""; return status(); })
+      .catch(function(err){ msg("pwMsg", "bad", err.message); })
+      .finally(function(){ $("pwGo").disabled = false; });
+  });
+
+  $("fidGo").addEventListener("click", function(){
+    var W = window.SimpleWebAuthnBrowser;
+    if (!W || !W.browserSupportsWebAuthn()) return msg("fidMsg", "bad", "This phone or browser can't do Face ID sign-in. Use your password instead.");
+    $("fidGo").disabled = true;
+    post("/api/crew/faceid/setup-options")
+      .then(function(opts){ return W.startRegistration({ optionsJSON: opts }); })
+      .then(function(att){ return post("/api/crew/faceid/setup", att); })
+      .then(function(){ msg("fidMsg", "ok", "Face ID is on. Next time, tap \"Sign in with Face ID\"."); return status(); })
+      .catch(function(err){
+        msg("fidMsg", "bad", /NotAllowed|cancel/i.test(err.name + err.message) ? "Face ID was cancelled. Tap the button to try again." : err.message);
+      })
+      .finally(function(){ $("fidGo").disabled = false; });
+  });
+
+  $("doneGo").addEventListener("click", function(){ location.href = "/me"; });
+  status().catch(function(){});
+})();
+</script>
+</body>
+</html>
