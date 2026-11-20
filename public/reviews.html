@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Share · Reviews</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/admin.css?v=25">
+<style>
+  .sheet{border-collapse:collapse;width:100%;font-size:13.5px}
+  .sheet th,.sheet td{border:1px solid var(--seam);padding:6px 8px;text-align:left;white-space:nowrap}
+  .sheet th{position:sticky;top:0;background:var(--panel-2);font-family:var(--cond);letter-spacing:.06em;text-transform:uppercase;font-size:12px}
+  .sheet th.who{writing-mode:vertical-rl;transform:rotate(180deg);height:110px;text-align:left;padding:6px 4px}
+  .sheet td.c{text-align:center;font-weight:700;color:var(--ink)}
+  .sheet td.c.p3{color:#f0762e}
+  .sheet tr.row{cursor:pointer}
+  .sheet tr.row:hover td{background:rgba(240,118,46,.06)}
+  .sheet tr.tot td{font-weight:700;background:var(--panel-2)}
+  .sheet tr.flag td:first-child{box-shadow:inset 4px 0 0 #d03b3b}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;border:1px solid var(--seam);color:var(--ink-3)}
+  .tag.brain{border-color:#3a6;color:#8fe28f}
+  .tag.flag{border-color:#d03b3b;color:#ff9a9a}
+  .detail td{background:var(--panel-2);white-space:normal}
+  .detail .body{max-width:760px;line-height:1.5;margin:4px 0 8px}
+  .detail .ph{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .detail .ph img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--seam)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .chips button{font:inherit;font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--seam);background:transparent;color:var(--ink-2);cursor:pointer}
+  .chips button.on{background:#f0762e;border-color:#f0762e;color:#1a0e05;font-weight:700}
+  .fix{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .fix input[type=text]{width:120px}
+  .needs{border-left:4px solid #d03b3b}
+  .stars{color:#fab219;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <h1>Revenue Share <em>&middot;</em> Reviews</h1>
+  <div class="mo">
+    <label for="month" style="margin:0">Month</label>
+    <input type="month" id="month" style="width:auto">
+    <span class="navlinks"><a class="nav" href="/admin">&larr; Admin</a></span>
+  </div>
+</header>
+
+<div id="notice"></div>
+
+<div class="panel needs" id="needsPanel" hidden>
+  <h2>Needs checking <span class="badge" id="needsCount"></span></h2>
+  <p class="dek">The brain logged these but could not tell who earned them, so nobody is credited yet. Open one, set the job number or tick the crew, and save. If it is right as it is, tap "Looks right".</p>
+</div>
+
+<div class="panel">
+  <h2 id="title">Reviews</h2>
+  <p class="dek" id="dek"></p>
+  <div class="tblwrap scrolly"><table class="sheet" id="sheet"></table></div>
+</div>
+</div>
+<div id="toast"></div>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+  var S = { data: null, open: null, edit: null };
+  function toast(t, bad){ var e = $("toast"); e.textContent = t; e.className = "show" + (bad ? " bad" : ""); setTimeout(function(){ e.className = ""; }, 3500); }
+  function api(path, opts){
+    return fetch(path, Object.assign({ credentials: "same-origin", headers: { "content-type": "application/json" } }, opts || {}))
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(b){ if (!r.ok) throw new Error(b.error || ("HTTP " + r.status)); return b; }); });
+  }
+  var now = new Date();
+  $("month").value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  var q = new URLSearchParams(location.search); if (/^\d{4}-\d{2}$/.test(q.get("month") || "")) $("month").value = q.get("month");
+
+  function short(n){ var w = String(n).split(" "); return w[0] + (w.length > 1 ? " " + w[w.length - 1][0] + "." : ""); }
+  function fmtDate(d){ var p = d.split("-"); return Number(p[1]) + "/" + Number(p[2]) + "/" + p[0]; }
+  function stars(n){ return n ? '<span class="stars">' + "★★★★★".slice(0, n) + '</span>' : ""; }
+
+  function draw(){
+    var d = S.data, rows = d.rows;
+    /* columns: anyone credited this month first, then the rest of the crew */
+    var credited = {}; rows.forEach(function(r){ r.crew.forEach(function(id){ credited[id] = true; }); });
+    var cols = d.people.filter(function(p){ return credited[p.id]; });
+    var label = new Date(d.month + "-15").toLocaleString("en-US", { month: "long", year: "numeric" });
+    $("title").textContent = label;
+    var flagged = rows.filter(function(r){ return r.check_status === "needs_check"; }).length;
+    $("needsPanel").hidden = !d.needs;
+    $("needsCount").textContent = d.needs;
+    $("dek").innerHTML = rows.length + " review" + (rows.length === 1 ? "" : "s") + ". 1 point each, 3 with a photo, to everyone credited."
+      + " From <b>" + esc(fmtDate(d.automaticFrom)) + "</b> the brain logs them on its own; earlier rows came from the Review Log sheet."
+      + (d.needs && !flagged ? " The ones needing a check are in another month." : "") + " Tap a row to see the review.";
+
+    var h = '<thead><tr><th>#</th><th>Job #</th><th>Source</th><th>Customer</th><th>Date</th><th>Stars</th><th>Photo</th><th></th>'
+      + cols.map(function(p){ return '<th class="who" title="' + esc(p.full_name) + '">' + esc(short(p.full_name)) + '</th>'; }).join("")
+      + '</tr></thead><tbody>';
+    if (!rows.length) h += '<tr><td colspan="' + (8 + cols.length) + '" style="color:var(--ink-3)">No reviews this month yet.</td></tr>';
+    rows.forEach(function(r, i){
+      var flag = r.check_status === "needs_check";
+      h += '<tr class="row' + (flag ? " flag" : "") + '" data-i="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(r.job_number || "") + '</b></td>'
+        + '<td>' + esc(r.source || "") + '</td><td>' + esc(r.customer_name || "") + '</td><td>' + esc(fmtDate(r.date)) + '</td>'
+        + '<td>' + stars(r.stars) + '</td><td>' + (r.has_photo ? "Yes" : "") + '</td>'
+        + '<td>' + (flag ? '<span class="tag flag">Needs checking</span>' : r.recorded_by === "brain" ? '<span class="tag brain">Brain</span>'
+                 : r.recorded_by === "review-log" ? '<span class="tag">Sheet</span>' : '<span class="tag">Admin</span>') + '</td>'
+        + cols.map(function(p){ return r.crew.indexOf(p.id) >= 0 ? '<td class="c' + (r.points >= 3 ? " p3" : "") + '">' + r.points + '</td>' : '<td></td>'; }).join("")
+        + '</tr>';
+      if (S.open === i) h += detail(r, cols.length + 8);
+    });
+    if (rows.length) {
+      h += '<tr class="tot"><td colspan="8">Total</td>' + cols.map(function(p){
+        return '<td class="c">' + rows.reduce(function(a, r){ return a + (r.crew.indexOf(p.id) >= 0 ? r.points : 0); }, 0) + '</td>'; }).join("") + '</tr>';
+    }
+    $("sheet").innerHTML = h + '</tbody>';
+  }
+
+  function detail(r, span){
+    var editable = r.recorded_by !== "review-log";
+    var e = S.edit;
+    var h = '<tr class="detail"><td colspan="' + span + '">';
+    if (r.stars || r.body) h += '<div>' + stars(r.stars) + '</div><div class="body">' + esc(r.body || "(no text)") + '</div>';
+    if (r.photo_urls && r.photo_urls.length) h += '<div class="ph">' + r.photo_urls.slice(0, 8).map(function(u){
+      return '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(u) + '" alt="review photo" referrerpolicy="no-referrer"></a>'; }).join("") + '</div>';
+    if (r.match_note) h += '<div style="color:var(--ink-3);font-size:13px">How it was matched: ' + esc(r.match_note) + '</div>';
+    if (r.url) h += '<div style="font-size:13px"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">Open the review</a></div>';
+    if (!editable) { h += '<div style="color:var(--ink-3);font-size:13px;margin-top:6px">From the Review Log sheet. Change it there.</div></td></tr>'; return h; }
+    h += '<div class="fix" style="margin-top:10px"><label>Job #</label><input type="text" id="eJob" value="' + esc(e.job_number || "") + '">'
+      + '<label><input type="checkbox" id="ePhoto"' + (e.has_photo ? " checked" : "") + '> Has a photo (3 points)</label>'
+      + '<span id="eHint" style="color:var(--ink-3);font-size:13px"></span></div>'
+      + '<div class="chips" id="eCrew">' + S.data.people.map(function(p){
+          return '<button type="button" data-p="' + esc(p.id) + '" class="' + (e.crew.indexOf(p.id) >= 0 ? "on" : "") + '">' + esc(p.full_name) + '</button>'; }).join("") + '</div>'
+      + '<div class="fix"><button class="go" type="button" id="eSave">Save</button>'
+      + (r.check_status === "needs_check" ? '<button class="ghost" type="button" id="eOk">Looks right</button>' : "")
+      + '<button class="ghost" type="button" id="eDel" style="margin-left:auto">Delete review</button></div></td></tr>';
+    return h;
+  }
+
+  function load(){
+    history.replaceState(null, "", "/admin/reviews?month=" + $("month").value);
+    api("/api/admin/reviews-log?month=" + $("month").value).then(function(d){
+      S.data = d; S.open = null; draw();
+    }).catch(function(e){
+      $("notice").innerHTML = '<div class="note">' + esc(e.message) + (/sign in/.test(e.message) ? ' <a href="/admin">Sign in</a>' : '') + '</div>';
+    });
+  }
+
+  $("sheet").addEventListener("click", function(ev){
+    var tr = ev.target.closest("tr.row");
+    if (tr) {
+      var i = Number(tr.getAttribute("data-i"));
+      S.open = S.open === i ? null : i;
+      var r = S.data.rows[i];
+      S.edit = { job_number: r.job_number, has_photo: r.has_photo, crew: r.crew.slice() };
+      draw(); return;
+    }
+    var chip = ev.target.closest("button[data-p]");
+    if (chip) {
+      var id = chip.getAttribute("data-p"), k = S.edit.crew.indexOf(id);
+      if (k >= 0) S.edit.crew.splice(k, 1); else S.edit.crew.push(id);
+      chip.classList.toggle("on"); return;
+    }
+    var r2 = S.open == null ? null : S.data.rows[S.open];
+    if (!r2) return;
+    if (ev.target.id === "eSave") {
+      var body = { job_number: $("eJob").value.trim(), has_photo: $("ePhoto").checked, crew: S.edit.crew };
+      var names = S.data.people.filter(function(p){ return body.crew.indexOf(p.id) >= 0; }).map(function(p){ return p.full_name; });
+      if (!confirm("Do you want to save this review?\n\nJob: " + (body.job_number || "none") + "\nPhoto: " + (body.has_photo ? "yes (3 points)" : "no (1 point)")
+          + "\nCredited: " + (names.length ? names.join(", ") : "nobody"))) return;
+      api("/api/admin/reviews/" + r2.id, { method: "PUT", body: JSON.stringify(body) })
+        .then(function(){ toast("Saved."); load(); }).catch(function(e){ toast(e.message, true); });
+    }
+    if (ev.target.id === "eOk") {
+      if (!confirm("Do you want to mark this review as right as it is?")) return;
+      api("/api/admin/reviews/" + r2.id + "/ok", { method: "POST" }).then(function(){ toast("Marked right."); load(); })
+        .catch(function(e){ toast(e.message, true); });
+    }
+    if (ev.target.id === "eDel") {
+      if (!confirm("Do you want to delete this review from " + (r2.customer_name || "this customer") + "?\nNobody will be credited for it.")) return;
+      api("/api/admin/reviews/" + r2.id, { method: "DELETE" }).then(function(){ toast("Deleted."); load(); })
+        .catch(function(e){ toast(e.message, true); });
+    }
+  });
+
+  /* typing a job number pulls that job's crew from MoveitPro */
+  var t;
+  $("sheet").addEventListener("input", function(ev){
+    if (ev.target.id !== "eJob") return;
+    var v = ev.target.value.trim(); clearTimeout(t);
+    if (!v) return;
+    t = setTimeout(function(){
+      api("/api/admin/job/" + encodeURIComponent(v)).then(function(j){
+        if (!j.found || !j.crew.length) { $("eHint").textContent = "No crew on job " + v + " in MoveitPro. Tick them by hand."; return; }
+        S.edit.crew = j.crew.map(function(c){ return c.id; });
+        document.querySelectorAll("#eCrew button[data-p]").forEach(function(b){ b.classList.toggle("on", S.edit.crew.indexOf(b.getAttribute("data-p")) >= 0); });
+        $("eHint").textContent = "Job " + v + ": " + j.crew.length + " on the crew in MoveitPro.";
+      }).catch(function(){});
+    }, 350);
+  });
+
+  $("month").addEventListener("change", load);
+  load();
+})();
+</script>
+</body>
+</html>

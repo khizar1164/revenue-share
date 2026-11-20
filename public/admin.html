@@ -40,6 +40,7 @@
     <a class="btn" id="tvLink" href="#" target="_blank" rel="noopener" title="The break-room board, for the month picked here" hidden>View board &#8599;</a>
     <span class="navlinks">
       <a class="nav" href="/admin/rules" title="View, edit and delete the point rules">Rules</a>
+      <a class="nav" href="/admin/reviews" title="Every review, who it was credited to, and any the brain could not place">Reviews <span class="badge" id="rvBadge" hidden></span></a>
       <a class="nav" href="/admin/photos" title="Job photos the crew uploaded, and who sent the most">Photos</a>
       <a class="nav" href="/admin/writeups" title="Every write-up raised, and whether it was given">Write-ups <span class="badge" id="wuBadge" hidden></span></a>
     </span>
@@ -1417,6 +1418,11 @@ Tyler Johnston  44.25"></textarea>
     load();
     loadRules();
     checkNotices();
+    /* Reviews the brain could not place (Andrew, 21 Nov): a red count like Write-ups. */
+    api("/api/admin/reviews-log/badge").then(function(b){
+      $("rvBadge").hidden = !(b.needs > 0);
+      $("rvBadge").textContent = b.needs;
+    }).catch(function(){});
     api("/api/admin/tv-link").then(function(t){ STATE.tv = t.path; boardLink(); })
       .catch(function(){ /* no TV token set: the button stays hidden */ });
   }
