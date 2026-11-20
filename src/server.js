@@ -31,6 +31,7 @@ import { syncDiscipline } from "./sync/discipline.js";
 import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { mountAdminPages } from "./admin-pages.js";
 import { mountConnecteamChat } from "./sync/connecteam-chat.js";
+import { mountPhotos } from "./photos.js";
 import { lockedPeriods, refuseIfLocked, setLock } from "./locks.js";
 import { chromePath } from "../hr/make-fillable.mjs";
 import { issueLoginToken, consumeLoginToken, peekLoginToken, INVITE_MINUTES, sessionFor, endSession,
@@ -1138,11 +1139,15 @@ app.get("/admin/rules", (_req, res) => res.sendFile(join(root, "public", "rules.
 app.get("/admin/writeups", (_req, res) => res.sendFile(join(root, "public", "writeups.html")));
 mountAdminPages(app, wrap);
 mountConnecteamChat(app, wrap);
+mountPhotos(app, wrap);
 
 /* One employee's private report. The id in the path is a placeholder for the
    signed-in person; once sign-in is wired the server decides who you are and
    this route stops trusting the URL. */
 app.get("/me", (_req, res) => res.sendFile(join(root, "public", "me.html")));
+/* the crew upload job photos here (Andrew, 19 Nov) */
+app.get("/photos", (_req, res) => res.sendFile(join(root, "public", "photos.html")));
+app.get("/admin/photos", (_req, res) => res.sendFile(join(root, "public", "photos-admin.html")));
 app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 
 /* Lets the report page offer a person-picker: to a signed-in admin, or to

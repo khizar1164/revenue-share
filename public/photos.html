@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#100f0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Job Photos">
+<title>Job Photos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  :root{--plane:#100f0d;--panel:#1a1815;--panel-2:#211e1a;--seam:#2e2a24;--ink:#fff;--ink-2:#c9c3b6;--ink-3:#8b857a;
+    --brand:#f0762e;--good:#0ca30c;--warn:#fab219;--crit:#d03b3b;
+    --sans:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;--cond:"Barlow Condensed","Barlow",system-ui,sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--plane);color:var(--ink-2);font-family:var(--sans);font-size:16px}
+  main{max-width:560px;margin:0 auto;padding:18px 16px 40px}
+  h1{font-family:var(--cond);font-size:30px;color:var(--ink);letter-spacing:.04em;text-transform:uppercase;margin:4px 0 2px}
+  h1 em{color:var(--brand);font-style:normal}
+  .dek{color:var(--ink-3);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--seam);border-radius:14px;padding:16px;margin-bottom:14px}
+  .step{font-family:var(--cond);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);font-size:14px;margin:0 0 10px}
+  label{display:block;font-size:14px;color:var(--ink-3);margin:8px 0 4px}
+  select,input[type=text]{width:100%;font:inherit;font-size:17px;padding:12px;border-radius:10px;border:1px solid var(--seam);
+    background:var(--panel-2);color:var(--ink)}
+  .crew{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .crew label{display:flex;align-items:center;gap:8px;margin:0;padding:10px;border:1px solid var(--seam);border-radius:10px;
+    background:var(--panel-2);color:var(--ink-2);font-size:15px}
+  .crew input{width:20px;height:20px;accent-color:var(--brand)}
+  .pick{display:block;text-align:center;padding:18px;border:2px dashed var(--seam);border-radius:12px;color:var(--ink);font-weight:600;cursor:pointer}
+  .pick input{display:none}
+  .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+  .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}
+  .go{width:100%;font:inherit;font-size:18px;font-weight:700;padding:15px;border:0;border-radius:12px;background:var(--brand);color:#1a0e05;margin-top:6px}
+  .go:disabled{opacity:.5}
+  .msg{padding:12px 14px;border-radius:10px;margin-bottom:14px}
+  .msg.ok{background:rgba(12,163,12,.15);color:#8fe28f}
+  .msg.bad{background:rgba(208,59,59,.15);color:#ff9a9a}
+  .msg.info{background:var(--panel-2);color:var(--ink-2)}
+  .bar{height:8px;background:var(--panel-2);border-radius:5px;overflow:hidden;margin-top:10px}
+  .bar i{display:block;height:100%;width:0;background:var(--brand);transition:width .2s}
+  .mine{font-size:14px;color:var(--ink-3)}
+  .mine b{color:var(--ink)}
+  a{color:var(--brand)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Job <em>Photos</em></h1>
+  <p class="dek">Send your photos from a job. They go straight to the office and count toward "most job photos".</p>
+
+  <div id="note"></div>
+
+  <form id="form" hidden>
+    <div class="card">
+      <p class="step">1. Which job</p>
+      <select id="job"></select>
+      <div id="otherBox" hidden>
+        <label for="other">Job number</label>
+        <input type="text" id="other" inputmode="numeric" placeholder="e.g. 11640" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="step">2. Who was on the job</p>
+      <div class="crew" id="crew"></div>
+    </div>
+
+    <div class="card">
+      <p class="step">3. Photos</p>
+      <label class="pick">Take or choose photos
+        <input type="file" id="files" accept="image/*" multiple>
+      </label>
+      <div class="thumbs" id="thumbs"></div>
+      <label for="note2">Note (optional)</label>
+      <input type="text" id="note2" maxlength="300" placeholder="e.g. piano wrapped, stairs protected">
+    </div>
+
+    <button class="go" id="send" type="submit" disabled>Upload photos</button>
+    <div class="bar" id="bar" hidden><i></i></div>
+  </form>
+
+  <p class="mine" id="mine"></p>
+</main>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+  var DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var S = { jobs: [], roster: [], me: null, files: [] };
+
+  function note(kind, html){ $("note").innerHTML = html ? '<div class="msg ' + kind + '">' + html + '</div>' : ""; }
+  function api(path, opts){
+    return fetch(path, Object.assign({ credentials: "same-origin" }, opts || {})).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(b){
+        if (!r.ok) { var e = new Error(b.error || ("HTTP " + r.status)); e.status = r.status; throw e; }
+        return b;
+      });
+    });
+  }
+  function label(j){
+    var d = new Date(j.service_date + "T12:00:00");
+    return "Job " + j.job_number + " · " + DAYS[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()];
+  }
+
+  function drawCrew(){
+    var j = S.jobs[$("job").value];
+    var on = new Set(j ? j.crew : []); on.add(S.me);
+    /* the job's own crew first, then everyone else */
+    var list = S.roster.slice().sort(function(a, b){ return (on.has(b.id) - on.has(a.id)) || a.full_name.localeCompare(b.full_name); });
+    $("crew").innerHTML = list.map(function(p){
+      var mine = p.id === S.me;
+      return '<label><input type="checkbox" value="' + esc(p.id) + '"' + (on.has(p.id) ? " checked" : "") + (mine ? " disabled" : "") + '> '
+        + esc(p.full_name.split(" ")[0] + " " + (p.full_name.split(" ")[1] || "").charAt(0)) + '</label>';
+    }).join("");
+  }
+
+  function ready(){ $("send").disabled = !S.files.length; }
+
+  /* Shrink each photo on the phone: 2000px on the long side, JPEG. A photo
+     the browser cannot read (some HEIC) is sent as it is. */
+  function shrink(file){
+    if (!window.createImageBitmap) return Promise.resolve(file);
+    return createImageBitmap(file).then(function(img){
+      var k = Math.min(1, 2000 / Math.max(img.width, img.height));
+      var c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      return new Promise(function(res){ c.toBlob(function(b){ res(b || file); }, "image/jpeg", 0.85); });
+    }).catch(function(){ return file; });
+  }
+
+  $("job").addEventListener("change", function(){
+    $("otherBox").hidden = $("job").value !== "other";
+    drawCrew();
+  });
+  $("files").addEventListener("change", function(){
+    S.files = Array.prototype.slice.call($("files").files || []).slice(0, 40);
+    $("thumbs").innerHTML = S.files.map(function(f, i){ return '<img id="t' + i + '" alt="">'; }).join("");
+    S.files.forEach(function(f, i){ var u = URL.createObjectURL(f); $("t" + i).src = u; });
+    if (($("files").files || []).length > 40) note("info", "Up to 40 photos at a time. The first 40 will be sent.");
+    ready();
+  });
+
+  $("form").addEventListener("submit", function(e){
+    e.preventDefault();
+    var pick = $("job").value, job = pick === "other" ? $("other").value.trim() : (S.jobs[pick] || {}).job_number;
+    if (!job) { note("bad", "Pick the job, or type its number."); return; }
+    var crew = Array.prototype.map.call(document.querySelectorAll("#crew input:checked"), function(i){ return i.value; });
+    $("send").disabled = true; $("bar").hidden = false; note("", "");
+    var bar = $("bar").firstElementChild, done = 0, total = S.files.length, id;
+    api("/api/crew/photos/start", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ job_number: job, crew: crew, note: $("note2").value }) })
+      .then(function(r){
+        id = r.id;
+        /* one at a time, so a weak signal loses one photo, not all of them */
+        return S.files.reduce(function(p, f){
+          return p.then(function(){ return shrink(f); }).then(function(blob){
+            $("send").textContent = "Uploading " + (done + 1) + " of " + total + "…";
+            return api("/api/crew/photos/" + id + "/file", { method: "POST",
+              headers: { "content-type": blob.type || "image/jpeg" }, body: blob });
+          }).then(function(){ done++; bar.style.width = (done / total * 100) + "%"; });
+        }, Promise.resolve());
+      })
+      .then(function(){ return api("/api/crew/photos/" + id + "/finish", { method: "POST" }); })
+      .then(function(r){
+        note("ok", "<b>" + r.photo_count + " photo" + (r.photo_count === 1 ? "" : "s") + "</b> saved to job " + esc(r.job_number) + ". Thank you!");
+        S.files = []; $("files").value = ""; $("thumbs").innerHTML = ""; $("note2").value = "";
+        $("send").textContent = "Upload photos"; $("bar").hidden = true; bar.style.width = "0";
+        loadMine(); window.scrollTo(0, 0);
+      })
+      .catch(function(err){
+        note("bad", "Upload stopped: " + esc(err.message) + (done ? " (" + done + " of " + total + " were saved)" : "") + ". Try again.");
+        $("send").textContent = "Upload photos"; ready();
+      });
+  });
+
+  function loadMine(){
+    api("/api/crew/photos/mine").then(function(r){
+      $("mine").innerHTML = r.total ? "This month you've sent <b>" + r.total + "</b> photos." : "";
+    }).catch(function(){});
+  }
+
+  api("/api/crew/jobs").then(function(r){
+    S.jobs = r.jobs; S.roster = r.roster; S.me = r.me;
+    if (!r.ready) { note("info", "Photo uploads are being set up. They'll be ready soon."); return; }
+    $("job").innerHTML = r.jobs.map(function(j, i){ return '<option value="' + i + '">' + esc(label(j)) + '</option>'; }).join("")
+      + '<option value="other">' + (r.jobs.length ? "A different job…" : "Type the job number…") + '</option>';
+    $("otherBox").hidden = r.jobs.length > 0;
+    if (!r.jobs.length) $("job").value = "other";
+    drawCrew();
+    $("form").hidden = false;
+    loadMine();
+  }).catch(function(e){
+    if (e.status === 401) note("info", 'Please <a href="/me">sign in</a> first, using the link we sent to your email.');
+    else note("bad", "Can't load your jobs right now. Try again in a minute.");
+  });
+})();
+</script>
+</body>
+</html>

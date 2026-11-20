@@ -49,7 +49,11 @@ export function loadCredentials() {
   return creds;
 }
 
-export function createGoogleClient(creds = loadCredentials()) {
+/* The crew photo upload writes files, so it asks for Drive write access. Only
+   that client does; the sheet readers keep the narrow scope above. */
+export const DRIVE_WRITE_SCOPE = "https://www.googleapis.com/auth/drive";
+
+export function createGoogleClient(creds = loadCredentials(), { scope = SCOPE } = {}) {
   if (!creds) throw new Error("no Google credentials configured");
 
   let token = null, expires = 0;
@@ -60,7 +64,7 @@ export function createGoogleClient(creds = loadCredentials()) {
     const now = Math.floor(Date.now() / 1000);
     const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
     const claim = b64url(JSON.stringify({
-      iss: creds.client_email, scope: SCOPE, aud: TOKEN_URL,
+      iss: creds.client_email, scope, aud: TOKEN_URL,
       iat: now, exp: now + 3600
     }));
     const signer = createSign("RSA-SHA256");
@@ -127,8 +131,47 @@ export function createGoogleClient(creds = loadCredentials()) {
     return body;
   }
 
+  /** A folder by name under a parent, created if it is not there. */
+  async function folderIn(parentId, name) {
+    const q = [`'${parentId}' in parents`, "mimeType='application/vnd.google-apps.folder'",
+               `name='${String(name).replace(/[\\']/g, c => "\\" + c)}'`, "trashed=false"].join(" and ");
+    const found = await driveCall(`/files?${new URLSearchParams({
+      q, fields: "files(id,name)", supportsAllDrives: "true", includeItemsFromAllDrives: "true" })}`);
+    if (found.files?.length) return found.files[0].id;
+    const res = await fetch(`${DRIVE}/files?supportsAllDrives=true&fields=id`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${await accessToken()}`, "content-type": "application/json" },
+      body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error?.message || `folder create HTTP ${res.status}`);
+    return body.id;
+  }
+
+  /** One file into a folder, in a single multipart request. */
+  async function uploadFile(parentId, name, mimeType, bytes) {
+    const boundary = "imv" + Math.random().toString(16).slice(2);
+    const CRLF = "\r\n";
+    const head = Buffer.from(
+      `--${boundary}${CRLF}content-type: application/json; charset=UTF-8${CRLF}${CRLF}` +
+      JSON.stringify({ name, parents: [parentId] }) +
+      `${CRLF}--${boundary}${CRLF}content-type: ${mimeType}${CRLF}${CRLF}`);
+    const tail = Buffer.from(`${CRLF}--${boundary}--`);
+    const res = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await accessToken()}`, "content-type": `multipart/related; boundary=${boundary}` },
+      body: Buffer.concat([head, bytes, tail])
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error?.message || `upload HTTP ${res.status}`);
+    return body;
+  }
+
   return {
     email: creds.client_email,
+    folderIn,
+    uploadFile,
 
     /**
      * Spreadsheets we can see, newest first. Pass a folderId to look in one

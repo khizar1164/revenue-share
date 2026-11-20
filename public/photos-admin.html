@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Share — Job Photos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/admin.css?v=25">
+</head>
+<body>
+<div class="page">
+<header>
+  <h1>Revenue Share <em>&middot;</em> Job Photos</h1>
+  <div class="mo">
+    <label for="month" style="margin:0">Month</label>
+    <input type="month" id="month" style="width:auto">
+    <span class="navlinks"><a class="nav" href="/admin">&larr; Admin</a></span>
+  </div>
+</header>
+
+<div id="notice"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Most photos this month</h2>
+    <p class="dek">For the "Most Job Photos Submitted (+3)" rule. Counts every photo each mover uploaded from their own page.</p>
+    <div class="tblwrap"><table id="totals"></table></div>
+  </div>
+  <div class="panel">
+    <h2>Every upload</h2>
+    <p class="dek">Newest first. The folder link opens the job's photos in Google Drive.</p>
+    <div class="tblwrap scrolly"><table id="uploads"></table></div>
+  </div>
+</div>
+</div>
+<div id="toast"></div>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+  var now = new Date();
+  $("month").value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+
+  function load(){
+    fetch("/api/admin/photos?month=" + $("month").value).then(function(r){
+      if (r.status === 401 || r.status === 403) { location.href = "/admin"; throw new Error("sign in"); }
+      return r.json();
+    }).then(function(d){
+      $("notice").innerHTML = d.ready ? "" : '<div class="note">Photo uploads are not switched on yet: the Google Drive folder still needs to be set.</div>';
+      $("totals").innerHTML = '<thead><tr><th>Mover</th><th class="n">Photos</th><th class="n">Jobs</th></tr></thead><tbody>'
+        + (d.totals.length ? d.totals.map(function(t, i){
+            return '<tr><td>' + (i === 0 ? '<span class="pill ok">Most</span> ' : '') + esc(t.full_name) + '</td>'
+              + '<td class="n">' + t.photos + '</td><td class="n">' + t.jobs + '</td></tr>';
+          }).join("") : '<tr><td colspan="3" style="color:var(--ink-3)">No photos yet this month.</td></tr>') + '</tbody>';
+      $("uploads").innerHTML = '<thead><tr><th>Sent</th><th>Job</th><th>By</th><th>Crew</th><th class="n">Photos</th><th></th></tr></thead><tbody>'
+        + (d.uploads.length ? d.uploads.map(function(u){
+            return '<tr><td>' + esc(u.sent) + '</td><td><b>' + esc(u.job_number) + '</b></td><td>' + esc(u.sent_by) + '</td>'
+              + '<td style="font-size:12.5px">' + esc(u.crew) + (u.note ? '<div style="color:var(--ink-3)">' + esc(u.note) + '</div>' : '') + '</td>'
+              + '<td class="n">' + u.photo_count + '</td>'
+              + '<td class="n"><a target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/' + encodeURIComponent(u.drive_folder_id) + '">Folder</a></td></tr>';
+          }).join("") : '<tr><td colspan="6" style="color:var(--ink-3)">Nothing uploaded this month.</td></tr>') + '</tbody>';
+    }).catch(function(){});
+  }
+  $("month").addEventListener("change", load);
+  load();
+})();
+</script>
+</body>
+</html>
