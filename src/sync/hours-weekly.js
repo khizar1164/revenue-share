@@ -4,7 +4,7 @@
  * spreadsheet each week, named for the week it covers:
  *
  *     Movers_Hours_2026-09-07_2026-09-13
- *     Full name | Hours Worked | Regular | Overtime | Holiday | Sick | Vacation | Tips | Mileage
+ *     Full name (or First name + Last name) | Hours Worked | Regular | Overtime | Holiday | Sick | Vacation | Tips | Mileage
  *
  * That is a better fit for how he actually works — he is already generating
  * these for payroll — so we read them where they are rather than asking him to
@@ -17,7 +17,7 @@
 
 import { withTransaction } from "../db.js";
 import { matchableRoster } from "../roster.js";
-import { nameMatcher } from "./hours.js";
+import { nameMatcher, nameReader } from "./hours.js";
 
 export const FILE_PREFIX = "Movers_Hours_";
 
@@ -83,18 +83,18 @@ export async function readWeeklyFile(google, fileId) {
   if (!values.length) return { title: info.title, week: weekFromTitle(info.title), rows: [] };
 
   const header = values[0].map(c => String(c ?? "").toLowerCase().trim());
-  const nameCol  = header.findIndex(h => /full name|employee|name/.test(h));
+  const readName = nameReader(values[0]);   // "Full name", or "First name" + "Last name"
   const hoursCol = header.findIndex(h => /hours worked/.test(h));
   const anyHours = hoursCol >= 0 ? hoursCol : header.findIndex(h => /hour/.test(h));
 
-  if (nameCol < 0 || anyHours < 0) {
+  if (!readName || anyHours < 0) {
     throw new Error(`${info.title}: could not find a name and an hours column ` +
                     `(saw: ${header.filter(Boolean).join(", ")})`);
   }
 
   const rows = [];
   for (const r of values.slice(1)) {
-    const name = String(r[nameCol] ?? "").trim();
+    const name = readName(r);
     if (!name) continue;
     const raw = r[anyHours];
     const hours = typeof raw === "number" ? raw : Number(String(raw ?? "").replace(/[^\d.]/g, ""));

@@ -84,6 +84,22 @@ export function nameMatcher(roster) {
   };
 }
 
+/* Matthew, 20 November: the sheet he fills in now has "First name" and
+ * "Last name" in two columns. The matcher wants one full name, so the two are
+ * joined. A "Full name" or "Employee" column still wins when there is one.
+ * Returns a function that reads the name out of a row, or null. */
+export function nameReader(header) {
+  const h = header.map(c => String(c ?? "").toLowerCase().trim());
+  const full  = h.findIndex(x => /full name|employee/.test(x));
+  const first = h.findIndex(x => /first/.test(x) && /name/.test(x));
+  const last  = h.findIndex(x => /(last|sur)/.test(x) && /name/.test(x));
+  const cell = (r, i) => String(r[i] ?? "").trim();
+  if (full >= 0) return r => cell(r, full);
+  if (first >= 0 && last >= 0) return r => [cell(r, first), cell(r, last)].filter(Boolean).join(" ");
+  const any = h.findIndex(x => /name/.test(x));
+  return any >= 0 ? r => cell(r, any) : null;
+}
+
 /** Parse the tab's rows into { name, weekEnding, hours }. */
 export function parseHoursRows(values) {
   if (!values.length) return { rows: [], skipped: 0 };
@@ -100,11 +116,12 @@ export function parseHoursRows(values) {
   if (!looksLikeHeader) { col.name = 0; col.week = 1; col.hours = 2; }
   if (col.hours < 0) col.hours = 2;
   if (col.name < 0) col.name = 0;
+  const readName = (looksLikeHeader && nameReader(values[0])) || (r => String(r[col.name] ?? "").trim());
 
   const rows = [];
   let skipped = 0;
   for (const r of body) {
-    const name = String(r[col.name] ?? "").trim();
+    const name = readName(r);
     const rawHours = String(r[col.hours] ?? "").replace(/[^\d.]/g, "");
     const hours = Number(rawHours);
     if (!name || !rawHours || !Number.isFinite(hours) || hours < 0) { if (name || rawHours) skipped++; continue; }
@@ -150,7 +167,7 @@ function monthOf(weekEnding, fallback) {
  * sheet corrects the total here instead of double-counting it.
  */
 export async function importHours(google, spreadsheetId, { period, log = () => {} } = {}) {
-  const values = await google.read(spreadsheetId, `${HOURS_TAB}!A1:D2000`, { raw: true });
+  const values = await google.read(spreadsheetId, `${HOURS_TAB}!A1:H2000`, { raw: true });
   const { rows, skipped } = parseHoursRows(values);
   log(`read ${rows.length} weekly rows from ${HOURS_TAB}` +
       (skipped ? `, skipped ${skipped} unreadable` : ""));
