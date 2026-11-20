@@ -35,7 +35,7 @@ import { makeFillable } from "../hr/make-fillable.mjs";
 const day = d => String(d).slice(0, 10);
 
 /** Everything the notice needs about one person, over the rolling window. */
-export async function noticeData(employeeId, { days = RULES.disciplineDays, issued } = {}) {
+export async function noticeData(employeeId, { days = RULES.disciplineDays, issued, noticeId } = {}) {
   const who = await query(
     `select id, full_name, code_name, status from employees where id = $1`, [employeeId]);
   if (!who.rowCount) throw new Error("no such person");
@@ -61,7 +61,14 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
    * Without an open notice it still builds, from the live window, for an
    * informal conversation. The two are stamped differently so nobody has to
    * guess which they are holding. */
-  const open = issued ? { rowCount: 0, rows: [] } : await query(
+  /* Andrew, 20 November: view or download any write-up already raised, open
+     or closed, issued or not. With a notice id it is built from that notice's
+     own frozen record, so it prints the same today as the day it was raised. */
+  const open = noticeId ? await query(
+    `select level, lost, window_from::text as f, window_to::text as t,
+            raised_at::date::text as raised, ${await hasColumn("discipline_notices", "outcome_on") ? "outcome_on::text" : "null"} as given
+       from discipline_notices where id = $1 and employee_id = $2`, [noticeId, employeeId])
+    : issued ? { rowCount: 0, rows: [] } : await query(
     `select level, lost, window_from::text as f, window_to::text as t,
             raised_at::date::text as raised
        from discipline_notices
@@ -70,6 +77,7 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
                raised_at desc
       limit 1`, [employeeId]);
   const notice = open.rows[0] ?? null;
+  if (noticeId && !notice) throw new Error("no such write-up");
 
   const windowTo = notice ? notice.t : day(issued ?? new Date().toISOString());
   /* From November 2026 a write-up covers the points counted for its step,
@@ -137,7 +145,8 @@ export async function noticeData(employeeId, { days = RULES.disciplineDays, issu
   return {
     employee: person.full_name,
     supervisor: process.env.WRITEUP_SUPERVISOR || "Matthew Brown",
-    issued: windowTo,
+    /* the day it was actually given, when that has been recorded */
+    issued: notice?.given || windowTo,
     pointsNow: Number(now.rows[0].pts) + RULES.startPoints,
     windowFrom, windowTo,
     incidents, claims,
