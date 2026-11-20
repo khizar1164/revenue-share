@@ -1327,6 +1327,10 @@ app.get("/api/admin/writeup/:id", wrap(async (req, res) => {
   if (issued && !/^\d{4}-\d{2}-\d{2}$/.test(issued)) {
     return res.status(400).json({ error: "issued must look like 2026-10-09" });
   }
+  /* a write-up already raised, from its own frozen record (Andrew, 20 Nov) */
+  const noticeId = req.query.notice != null ? String(req.query.notice) : undefined;
+  if (noticeId && !/^\d{1,18}$/.test(noticeId)) return res.status(400).json({ error: "not a write-up id" });
+  const view = req.query.view === "1";
 
   if (req.query.preview) {
     const d = await noticeData(id, { issued });
@@ -1345,7 +1349,7 @@ app.get("/api/admin/writeup/:id", wrap(async (req, res) => {
      and the person reading the message is the one who has to do it. */
   let built;
   try {
-    built = await writeUpPdf(id, { issued });
+    built = await writeUpPdf(id, { issued, noticeId });
   } catch (e) {
     console.error("write-up failed:", e.message);
     if (/no Chrome found/i.test(e.message)) {
@@ -1358,8 +1362,8 @@ app.get("/api/admin/writeup/:id", wrap(async (req, res) => {
         "the notice did not fit its pages, so no document was produced rather " +
         "than one with the boxes in the wrong place. " + e.message });
     }
-    if (/no such person/i.test(e.message)) {
-      return res.status(404).json({ error: "no such person" });
+    if (/no such person|no such write-up/i.test(e.message)) {
+      return res.status(404).json({ error: e.message });
     }
     return res.status(500).json({ error: e.message });
   }
@@ -1369,7 +1373,7 @@ app.get("/api/admin/writeup/:id", wrap(async (req, res) => {
   /* attachment, not inline: this is a document somebody fills in and keeps,
      and a browser's own viewer is where form fields go to be ignored. */
   res.setHeader("content-disposition",
-    `attachment; filename="${writeUpFilename(data)}"`);
+    `${view ? "inline" : "attachment"}; filename="${writeUpFilename(data)}"`);
   res.send(bytes);
 }));
 

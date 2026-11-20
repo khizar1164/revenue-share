@@ -127,11 +127,11 @@
             + '<button class="sm" data-skip="' + n.id + '">Not issued</button>'
           : '<button class="sm" data-undo="' + n.id + '">Undo</button>';
       }
-      /* The document is built from the open notice, so it is only offered
-         while there is one. A closed notice would print today's figures. */
-      if (!n.cleared_at) {
-        acts += '<button class="sm" data-pdf="' + n.id + '" title="Download the notice to print">PDF</button>';
-      }
+      /* Andrew, 20 November: view or download any write-up, open or closed.
+         Each is built from its own frozen record, so it reads the same as the
+         day it was raised. */
+      acts += '<button class="sm" data-view="' + n.id + '" title="Open this write-up in a new tab">View</button>'
+        + '<button class="sm" data-pdf="' + n.id + '" title="Download this write-up">PDF</button>';
       var task = n.task_id ? "Connecteam task sent"
         : n.task_error ? "No Connecteam task: " + n.task_error : "";
       h += '<tr' + (STATE.fresh[n.id] ? ' class="new"' : '') + '>'
@@ -166,11 +166,13 @@
       .catch(function(e){ toast(e.message, true); });
   }
 
+  function pdfUrl(n, view){
+    return "/api/admin/writeup/" + encodeURIComponent(n.employee_id) + "?notice=" + encodeURIComponent(n.id) + (view ? "&view=1" : "");
+  }
   function downloadPdf(n, btn){
     var label = btn.textContent;
     btn.disabled = true; btn.textContent = "…";
-    var issued = n.outcome === "issued" && n.outcome_on ? n.outcome_on : "";
-    fetch("/api/admin/writeup/" + encodeURIComponent(n.employee_id) + (issued ? "?issued=" + issued : ""))
+    fetch(pdfUrl(n))
       .then(function(r){
         if (!r.ok) {
           return r.json().catch(function(){ return {}; }).then(function(x){ throw new Error(x.error || ("HTTP " + r.status)); });
@@ -214,6 +216,8 @@
       setOutcome(n.id, { outcome: null }, "Back to waiting.");
     } else if ((n = find("data-pdf"))) {
       downloadPdf(n, b);
+    } else if ((n = find("data-view"))) {
+      window.open(pdfUrl(n, true), "_blank", "noopener");
     }
   });
 
