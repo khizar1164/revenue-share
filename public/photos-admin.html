@@ -55,13 +55,15 @@
             return '<tr><td>' + (i === 0 ? '<span class="pill ok">Most</span> ' : '') + esc(t.full_name) + '</td>'
               + '<td class="n">' + t.photos + '</td><td class="n">' + t.jobs + '</td></tr>';
           }).join("") : '<tr><td colspan="3" style="color:var(--ink-3)">No photos yet this month.</td></tr>') + '</tbody>';
-      $("uploads").innerHTML = '<thead><tr><th>Sent</th><th>Job</th><th>By</th><th>Crew</th><th class="n">Photos</th><th></th></tr></thead><tbody>'
+      $("uploads").innerHTML = '<thead><tr><th>Sent</th><th>Job</th><th>By</th><th>Crew</th><th class="n">Photos</th><th>Connecteam</th><th></th></tr></thead><tbody>'
         + (d.uploads.length ? d.uploads.map(function(u){
             return '<tr><td>' + esc(u.sent) + '</td><td><b>' + esc(u.job_number) + '</b></td><td>' + esc(u.sent_by) + '</td>'
               + '<td style="font-size:12.5px">' + esc(u.crew) + (u.note ? '<div style="color:var(--ink-3)">' + esc(u.note) + '</div>' : '') + '</td>'
               + '<td class="n">' + u.photo_count + '</td>'
+              + '<td style="font-size:12.5px">' + (u.connecteam_posted ? '<span class="pill ok">Posted</span> ' + esc(u.connecteam_posted)
+                  : u.connecteam_error ? '<span title="' + esc(u.connecteam_error) + '" style="color:#ff9a9a">Not posted yet</span>' : '<span style="color:var(--ink-3)">Waiting</span>') + '</td>'
               + '<td class="n"><a target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/' + encodeURIComponent(u.drive_folder_id) + '">Folder</a></td></tr>';
-          }).join("") : '<tr><td colspan="6" style="color:var(--ink-3)">Nothing uploaded this month.</td></tr>') + '</tbody>';
+          }).join("") : '<tr><td colspan="7" style="color:var(--ink-3)">Nothing uploaded this month.</td></tr>') + '</tbody>';
     }).catch(function(){});
   }
   $("month").addEventListener("change", load);

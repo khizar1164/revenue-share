@@ -11,6 +11,7 @@
  * halfway. Nothing is ever deleted by the crew; only admins see the list.
  */
 import express from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { query } from "./db.js";
 import { sessionFor, readCookie } from "./auth.js";
 import { loadCredentials, createGoogleClient, DRIVE_WRITE_SCOPE } from "./sync/google.js";
@@ -31,6 +32,25 @@ function driveClient() {
   return drive;
 }
 export const photosReady = () => Boolean(process.env.PHOTO_DRIVE_FOLDER_ID && loadCredentials());
+
+/* The link to the company brain: BRAIN_URL and BRAIN_LINK_SECRET, the same
+   secret set on both services. Without them nothing is sent anywhere. */
+const digest = s => createHash("sha256").update(String(s)).digest();
+function brainSecretOk(got) {
+  const want = process.env.BRAIN_LINK_SECRET || "";
+  if (want.length < 24 || !got) return false;
+  return timingSafeEqual(digest(got), digest(want));
+}
+function nudgeBrain(uploadId) {
+  const url = process.env.BRAIN_URL, secret = process.env.BRAIN_LINK_SECRET;
+  if (!url || !secret) return;
+  fetch(`${url.replace(/\/$/, "")}/hooks/dashboard-photos`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+    body: JSON.stringify({ uploadId: String(uploadId) }),
+    signal: AbortSignal.timeout(15000)
+  }).catch(e => console.warn("photos: brain not told (it will sweep):", e.message));
+}
 
 async function me(req) {
   const m = await sessionFor(readCookie(req));
@@ -134,9 +154,26 @@ export function mountPhotos(app, wrap) {
     if (!m) return res.status(401).json({ error: "not signed in" });
     const r = await query(
       `update job_photo_uploads set finished_at = coalesce(finished_at, now())
-        where id = $1 and employee_id = $2 returning photo_count, job_number`, [req.params.id, m.id]);
+        where id = $1 and employee_id = $2 returning id, photo_count, job_number`, [req.params.id, m.id]);
     if (!r.rowCount) return res.status(404).json({ error: "no such upload" });
+    if (r.rows[0].photo_count > 0) nudgeBrain(r.rows[0].id);
     res.json(r.rows[0]);
+  }));
+
+  /* The company brain posts each finished upload to Connecteam's Photos chat
+     (Andrew, 21 Nov). It fetches the photos here, one at a time, with the
+     shared secret; nobody else can. The Google key never leaves this service. */
+  app.get("/api/brain/photo-file/:id", wrap(async (req, res) => {
+    if (!brainSecretOk(String(req.get("authorization") || "").replace(/^Bearer\s+/i, ""))) {
+      return res.status(401).json({ error: "no" });
+    }
+    const id = /^\d{1,18}$/.test(req.params.id) ? req.params.id : null;
+    const f = id && (await query(`select drive_file_id from job_photo_files where id = $1`, [id])).rows[0];
+    if (!f) return res.status(404).json({ error: "no such photo" });
+    const d = driveClient();
+    if (!d) return res.status(503).json({ error: "photo storage is not set up" });
+    const { bytes, type } = await d.downloadFile(f.drive_file_id);
+    res.set("cache-control", "no-store").type(type).send(bytes);
   }));
 
   /* What I have sent this month. */
@@ -160,6 +197,8 @@ export function mountPhotos(app, wrap) {
       `select u.id, u.job_number, to_char(u.service_date, 'YYYY-MM-DD') as service_date,
               to_char(u.created_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') as sent,
               u.photo_count, u.note, u.drive_folder_id, e.full_name as sent_by,
+              to_char(u.connecteam_posted_at at time zone 'America/Chicago', 'Mon DD HH24:MI') as connecteam_posted,
+              u.connecteam_error,
               (select string_agg(x.full_name, ', ' order by x.full_name) from employees x where x.id = any(u.crew)) as crew
          from job_photo_uploads u join employees e on e.id = u.employee_id
         where u.photo_count > 0 and date_trunc('month', u.created_at at time zone 'America/Chicago') = $1::date

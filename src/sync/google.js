@@ -168,10 +168,20 @@ export function createGoogleClient(creds = loadCredentials(), { scope = SCOPE } 
     return body;
   }
 
+  /** One file's bytes and type, for handing a crew photo on to the brain. */
+  async function downloadFile(fileId) {
+    const res = await fetch(`${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
+      headers: { authorization: `Bearer ${await accessToken()}` }
+    });
+    if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+    return { bytes: Buffer.from(await res.arrayBuffer()), type: res.headers.get("content-type") || "application/octet-stream" };
+  }
+
   return {
     email: creds.client_email,
     folderIn,
     uploadFile,
+    downloadFile,
 
     /**
      * Spreadsheets we can see, newest first. Pass a folderId to look in one
