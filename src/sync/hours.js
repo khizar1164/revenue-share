@@ -16,7 +16,7 @@ import { withTransaction } from "../db.js";
 import { matchableRoster } from "../roster.js";
 
 export const HOURS_TAB = "Hours";
-export const HOURS_HEADER = ["Employee", "Week ending", "Hours", "Notes"];
+export const HOURS_HEADER = ["First name", "Last name", "Total work hours", "Week Ending"];   // Matthew's layout, 20 Nov
 
 /* The month-end pull lives in its own tab rather than mixed in with the weeks.
    Two reasons: pasting a month total underneath the weekly rows would double
@@ -84,6 +84,22 @@ export function nameMatcher(roster) {
   };
 }
 
+/* Matthew, 20 November: the sheet he fills in now has "First name" and
+ * "Last name" in two columns. The matcher wants one full name, so the two are
+ * joined. A "Full name" or "Employee" column still wins when there is one.
+ * Returns a function that reads the name out of a row, or null. */
+export function nameReader(header) {
+  const h = header.map(c => String(c ?? "").toLowerCase().trim());
+  const full  = h.findIndex(x => /full name|employee/.test(x));
+  const first = h.findIndex(x => /first/.test(x) && /name/.test(x));
+  const last  = h.findIndex(x => /(last|sur)/.test(x) && /name/.test(x));
+  const cell = (r, i) => String(r[i] ?? "").trim();
+  if (full >= 0) return r => cell(r, full);
+  if (first >= 0 && last >= 0) return r => [cell(r, first), cell(r, last)].filter(Boolean).join(" ");
+  const any = h.findIndex(x => /name/.test(x));
+  return any >= 0 ? r => cell(r, any) : null;
+}
+
 /** Parse the tab's rows into { name, weekEnding, hours }. */
 export function parseHoursRows(values) {
   if (!values.length) return { rows: [], skipped: 0 };
@@ -100,11 +116,12 @@ export function parseHoursRows(values) {
   if (!looksLikeHeader) { col.name = 0; col.week = 1; col.hours = 2; }
   if (col.hours < 0) col.hours = 2;
   if (col.name < 0) col.name = 0;
+  const readName = (looksLikeHeader && nameReader(values[0])) || (r => String(r[col.name] ?? "").trim());
 
   const rows = [];
   let skipped = 0;
   for (const r of body) {
-    const name = String(r[col.name] ?? "").trim();
+    const name = readName(r);
     const rawHours = String(r[col.hours] ?? "").replace(/[^\d.]/g, "");
     const hours = Number(rawHours);
     if (!name || !rawHours || !Number.isFinite(hours) || hours < 0) { if (name || rawHours) skipped++; continue; }
@@ -144,13 +161,14 @@ function monthOf(weekEnding, fallback) {
 /**
  * Read the tab and write hours into the database.
  *
- * Weekly rows for the same person in the same month are SUMMED — that is what
- * a weekly export means. Because the whole tab is re-read each time, the total
- * is rebuilt from scratch rather than added to, so correcting a cell in the
- * sheet corrects the total here instead of double-counting it.
+ * Each row is a running total for the month so far (Matthew, 20 Nov), so a
+ * person's month is their row with the latest Week Ending, never a sum. The
+ * whole tab is re-read each time, so correcting a cell corrects the total.
+ * (The weekly Connecteam files in hours-weekly.js are one week each, and those
+ * are still added up.)
  */
 export async function importHours(google, spreadsheetId, { period, log = () => {} } = {}) {
-  const values = await google.read(spreadsheetId, `${HOURS_TAB}!A1:D2000`, { raw: true });
+  const values = await google.read(spreadsheetId, `${HOURS_TAB}!A1:H2000`, { raw: true });
   const { rows, skipped } = parseHoursRows(values);
   log(`read ${rows.length} weekly rows from ${HOURS_TAB}` +
       (skipped ? `, skipped ${skipped} unreadable` : ""));
@@ -159,7 +177,7 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
      final pull into it, and a missing tab is not an error. */
   let monthRows = [];
   try {
-    const mv = await google.read(spreadsheetId, `${MONTH_TAB}!A1:D2000`, { raw: true });
+    const mv = await google.read(spreadsheetId, `${MONTH_TAB}!A1:H2000`, { raw: true });
     monthRows = parseHoursRows(mv).rows;
     if (monthRows.length) log(`read ${monthRows.length} month-end rows from ${MONTH_TAB}`);
   } catch { /* tab not there yet */ }
@@ -167,7 +185,7 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
   const roster = await matchableRoster();
   const match = nameMatcher(roster);
 
-  /* period -> employee -> summed hours */
+  /* period -> employee -> hours for the month */
   const totals = new Map();
   const unmatched = new Map();
 
@@ -183,17 +201,21 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
         ` — weekly rows for those months are ignored`);
   }
 
-  /* `sum` is right for weekly rows — four weeks make a month. It is wrong for
-     month-end rows: a month total is a single figure by definition, so two rows
-     for the same person mean someone pasted twice, and adding them would double
-     that person's hours. There the last row simply wins. */
-  const add = (r, p, { sum = true } = {}) => {
+  /* Matthew, 20 November: an Hours tab row is the month SO FAR, not one week.
+     So for each person the row with the latest Week Ending is the total, and
+     adding the rows would count the early weeks again. On the same date, the
+     lower row wins, so a correction typed underneath replaces the first.
+     Month-end rows pass no date: the last one wins, as before. */
+  const asOf = new Map();                           // "period|employee" -> date
+  const add = (r, p, { when = null } = {}) => {
     const emp = match(r.name);
-    if (!emp) { unmatched.set(r.name, (unmatched.get(r.name) || 0) + r.hours); return; }
+    if (!emp) { unmatched.set(r.name, Math.max(unmatched.get(r.name) || 0, r.hours)); return; }
     if (period && p !== period) return;             // only the month we were asked for
     if (!totals.has(p)) totals.set(p, new Map());
     const m = totals.get(p);
-    m.set(emp.id, sum ? (m.get(emp.id) || 0) + r.hours : r.hours);
+    if (when === null) { m.set(emp.id, r.hours); return; }
+    const key = `${p}|${emp.id}`;
+    if (!asOf.has(key) || when >= asOf.get(key)) { asOf.set(key, when); m.set(emp.id, r.hours); }
   };
 
   /* A month-end row whose Month cell is a specific day is still that month —
@@ -205,11 +227,11 @@ export async function importHours(google, spreadsheetId, { period, log = () => {
   }).filter(Boolean));
   const suspicious = monthRows.length >= 3 && monthDays.size >= monthRows.length - 1;
 
-  for (const r of monthRows) add(r, monthOf(r.weekEnding, period), { sum: false });
+  for (const r of monthRows) add(r, monthOf(r.weekEnding, period));
   for (const r of rows) {
     const p = monthOf(r.weekEnding, period);
     if (closed.has(p)) continue;                    // superseded by the month-end pull
-    add(r, p);
+    add(r, p, { when: parseSheetDate(r.weekEnding)?.getTime() ?? 0 });
   }
 
   let written = 0;

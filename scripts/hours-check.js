@@ -67,7 +67,7 @@ console.log(`\n1. NAME MATCHING  (roster of ${roster.length})`);
 console.log("\n2. PARSING WHAT A PASTE LOOKS LIKE");
 {
   const { rows, skipped } = parseHoursRows([
-    HOURS_HEADER,
+    ["Employee", "Week ending", "Hours", "Notes"],
     ["Aaron Schwark", "2026-09-07", "41.5", ""],
     ["Adam Fredenburg", "2026-09-07", "38", "corrected"],
     ["Tyler Johnston", "2026-09-07", "44.25", ""],
@@ -85,6 +85,21 @@ console.log("\n2. PARSING WHAT A PASTE LOOKS LIKE");
   check("a blank line is ignored silently", skipped === 1, `${skipped} skipped`);
   check("two weeks for one person are kept separate",
     rows.filter(r => r.name === "Aaron Schwark").length === 2);
+}
+
+console.log("\n2b. MATTHEW'S LAYOUT: FIRST NAME AND LAST NAME IN TWO COLUMNS");
+{
+  const { rows, skipped } = parseHoursRows([
+    HOURS_HEADER,
+    ["Joshua", "Pama", 91.38, 46345],
+    ["Joshua", "Trim", 108.37, 46345],
+    ["Landon", "Rodriguez", "91.27", "2026-11-19"]
+  ]);
+  check("first and last are joined into one name",
+    rows.map(r => r.name).join("|") === "Joshua Pama|Joshua Trim|Landon Rodriguez");
+  check("hours come from Total work hours", rows[0].hours === 91.38 && rows[2].hours === 91.27);
+  check("the Week Ending column is the date", rows[0].weekEnding === "46345" && rows[2].weekEnding === "2026-11-19");
+  check("nothing skipped", skipped === 0);
 }
 
 console.log("\n3. HEADERLESS PASTE");
@@ -106,11 +121,11 @@ else {
     const a = roster[0], b = roster[1], c = roster[2];
     await google.write(SHEET_ID, `${HOURS_TAB}!A1:D8`, [
       HOURS_HEADER,
-      [a.full_name, "2026-09-07", "42", "week 1"],
-      [a.full_name, "2026-09-14", "40", "week 2"],
-      [b.full_name.toUpperCase(), "2026-09-07", "31.5", ""],
-      [`${c.full_name.split(" ")[0]} ${c.full_name.split(" ")[1][0]}`, "2026-09-07", "28", ""],
-      ["Nobody McGhost", "2026-09-07", "50", "not one of ours"],
+      [...a.full_name.split(" "), "42", "2026-09-07"],
+      [...a.full_name.split(" "), "82", "2026-09-14"],
+      [...b.full_name.toUpperCase().split(" "), "31.5", "2026-09-07"],
+      [c.full_name.split(" ")[0], c.full_name.split(" ")[1][0], "28", "2026-09-07"],
+      ["Nobody", "McGhost", "50", "2026-09-07"],
       ["", "", "", ""],
       ["", "", "", ""]
     ]);
@@ -128,8 +143,8 @@ else {
         where h.period = '2026-09-01'::date order by e.full_name`);
     const got = Object.fromEntries(saved.rows.map(x => [x.full_name, x.hours]));
 
-    check("two weeks are summed into a month total", got[a.full_name] === 82,
-      `42 + 40 = ${got[a.full_name]}`);
+    check("the later running total is the month, not a sum", got[a.full_name] === 82,
+      `42 then 82 to date = ${got[a.full_name]}`);
     check("an upper-case name landed", got[b.full_name] === 31.5);
     check("first name + initial landed", got[c.full_name] === 28);
     check("recorded as coming from the sheet",
@@ -144,12 +159,12 @@ else {
     check("re-running does not double anything", again.hours === 82, `${again.hours} hours`);
 
     /* correcting a cell corrects the total rather than adding to it */
-    await google.write(SHEET_ID, `${HOURS_TAB}!C2`, [["35"]]);
+    await google.write(SHEET_ID, `${HOURS_TAB}!C3`, [["75"]]);
     await importHours(google, SHEET_ID, { period: "2026-09-01" });
     const fixed = (await query(
       `select hours::float8 as hours from hours h join employees e on e.id = h.employee_id
         where h.period = '2026-09-01'::date and e.full_name = $1`, [a.full_name])).rows[0];
-    check("correcting a cell corrects the total", fixed.hours === 75, `35 + 40 = ${fixed.hours}`);
+    check("correcting a cell corrects the total", fixed.hours === 75, `${fixed.hours} hours`);
 
     const gate = await (await fetch("http://localhost:3000/api/admin/summary?month=2026-09")).json();
     check("the gate now passes them at exactly 75",
