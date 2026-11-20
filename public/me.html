@@ -111,6 +111,7 @@
     border:0;border-radius:9px;padding:14px 20px;width:100%;margin-top:12px;cursor:pointer}
   .signin button:hover{filter:brightness(1.07)}
   .signin button:disabled{opacity:.55;cursor:default}
+  .signin #signinGo{background:transparent;color:var(--ink-2);border:1px solid var(--seam)}
   .signin .msg{margin-top:18px;font-size:14.5px;line-height:1.5}
   .signin .msg.ok{color:var(--good)}
   .signin .msg.bad{color:var(--crit)}
@@ -176,7 +177,7 @@
   <div id="err"></div>
   <div id="banner"></div>
   <!-- Andrew, 19 November: job photos are sent from here now -->
-  <a href="/account" style="display:block;text-align:right;margin:0 0 8px;color:#8b857a;font-size:14px">Login &amp; Face ID settings</a>
+  <a href="/account" id="setupLink" hidden style="display:block;margin:0 0 10px;padding:12px 14px;border-radius:12px;border:1px solid #f0762e;color:#f0762e;font-weight:600;text-decoration:none;font-size:15px">Set up a password and Face ID, so you never need an email link &rarr;</a>
   <a href="/photos" style="display:block;text-align:center;margin:0 0 14px;padding:14px;border-radius:12px;background:#f0762e;color:#1a0e05;font-weight:700;text-decoration:none;font-size:17px">Upload job photos</a>
 
   <div class="headline">
@@ -228,6 +229,7 @@
 
   <div style="text-align:center;margin-top:26px">
     <button class="signout" id="signout" hidden>Sign out</button>
+    <a class="signout" id="settingsLink" href="/account" hidden style="text-decoration:none;margin-left:8px">Password &amp; Face ID</a>
   </div>
 
   </div>
@@ -520,6 +522,7 @@
   function showSignIn(msg, bad){
     $("app").hidden = true;
     $("signin").hidden = false;
+    try { var em = localStorage.getItem("imv_email"); if (em) { $("pwEmail").value = em; $("signinEmail").value = em; } } catch (e) {}
     if (msg){
       $("signinMsg").textContent = msg;
       $("signinMsg").className = "msg " + (bad ? "bad" : "ok");
@@ -528,7 +531,41 @@
 
   /* Try the signed-in report first. Falling back to the preview picker only
      happens while the server still allows it. */
+  /* Andrew, 20 November: closing the app signs you out. A phone keeps the
+     cookie, so the page does it: sessionStorage lives only as long as the app
+     window, so an empty one means the app was closed and opened again. Only
+     for someone with a password or Face ID, who can get back in with one tap;
+     a link-only mover would otherwise need a new email every time. */
+  var OPEN = "imv_open";
+  function markOpen(){ try { sessionStorage.setItem(OPEN, "1"); } catch (e) {} }
+  function wasOpen(){ try { return sessionStorage.getItem(OPEN) === "1"; } catch (e) { return true; } }
+
   function start(){
+    var sp = new URLSearchParams(location.search);
+    if (sp.get("fresh") === "1") {          // just arrived from an email link
+      markOpen(); sp.delete("fresh");
+      history.replaceState(null, "", location.pathname + (sp.toString() ? "?" + sp : ""));
+    }
+    fetch("/api/crew/login-status", { credentials: "same-origin" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(s){
+        if (s && (s.hasPassword || s.faceIds) && !wasOpen()) {
+          return fetch("/api/auth/logout", { method: "POST" }).then(function(){ showSignIn(); });
+        }
+        if (s) {
+          markOpen();
+          var setUp = s.hasPassword || s.faceIds > 0;
+          $("setupLink").hidden = setUp;
+          $("settingsLink").hidden = !setUp;
+          $("signout").hidden = false;
+          if (s.email) { try { localStorage.setItem("imv_email", s.email); } catch (e) {} }
+        }
+        loadReport();
+      })
+      .catch(loadReport);
+  }
+
+  function loadReport(){
     fetch("/api/me" + qs)
       .then(function(r){
         if (r.ok) return r.json().then(function(d){
@@ -589,7 +626,7 @@
       });
   }
 
-  function signedIn(){ location.href = "/me"; }
+  function signedIn(){ markOpen(); location.href = "/me"; }
   function loginMsg(text, ok){ $("signinMsg").textContent = text; $("signinMsg").className = "msg " + (ok ? "ok" : "bad"); }
   $("fidLogin").addEventListener("click", function(){
     var W = window.SimpleWebAuthnBrowser;

@@ -367,7 +367,7 @@ app.post("/auth/:token", wrap(async (req, res) => {
   /* First time in (no password yet): set one up, and Face ID, before the report. */
   const hasLogin = await hasColumn("crew_logins", "password_hash") && (await query(
     `select 1 from crew_logins where employee_id = $1 and password_hash is not null`, [session.employeeId])).rowCount;
-  res.redirect(303, hasLogin ? "/me" : "/account?first=1");
+  res.redirect(303, hasLogin ? "/me?fresh=1" : "/account?first=1");
 }));
 
 app.post("/api/auth/logout", wrap(async (req, res) => {

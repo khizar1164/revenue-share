@@ -117,6 +117,8 @@
       .finally(function(){ $("fidGo").disabled = false; });
   });
 
+  /* arrived from the email link in this window: the app is open (see me.html) */
+  if (location.search.indexOf("first") >= 0) { try { sessionStorage.setItem("imv_open", "1"); } catch (e) {} }
   $("doneGo").addEventListener("click", function(){ location.href = "/me"; });
   status().catch(function(){});
 })();

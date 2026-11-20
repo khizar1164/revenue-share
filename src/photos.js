@@ -80,8 +80,15 @@ export function mountPhotos(app, wrap) {
     const day = known?.d || new Date().toISOString().slice(0, 10);
     const [y, mo, dd] = day.split("-");
 
-    const monthFolder = await d.folderIn(process.env.PHOTO_DRIVE_FOLDER_ID, `${y}-${mo}`);
-    const jobFolder = await d.folderIn(monthFolder, `Job ${jobNumber} (${Number(dd)} ${MON[Number(mo) - 1]})`);
+    /* A Drive problem is the office's to fix, not the mover's: say so plainly. */
+    let jobFolder;
+    try {
+      const monthFolder = await d.folderIn(process.env.PHOTO_DRIVE_FOLDER_ID, `${y}-${mo}`);
+      jobFolder = await d.folderIn(monthFolder, `Job ${jobNumber} (${Number(dd)} ${MON[Number(mo) - 1]})`);
+    } catch (e) {
+      console.error("photo upload: Google Drive refused:", e.message);
+      return res.status(503).json({ error: "photo storage isn't working right now, the office has been told" });
+    }
 
     const r = await query(
       `insert into job_photo_uploads (employee_id, job_ref, job_number, service_date, crew, note, drive_folder_id)
@@ -110,7 +117,12 @@ export function mountPhotos(app, wrap) {
 
       const ext = type.split("/")[1].replace("jpeg", "jpg");
       const name = `Job ${up.job_number} - ${String(up.photo_count + 1).padStart(2, "0")}.${ext}`;
-      const f = await driveClient().uploadFile(up.drive_folder_id, name, type, req.body);
+      let f;
+      try { f = await driveClient().uploadFile(up.drive_folder_id, name, type, req.body); }
+      catch (e) {
+        console.error("photo upload: Google Drive refused a file:", e.message);
+        return res.status(503).json({ error: "photo storage isn't working right now, the office has been told" });
+      }
       await query(`insert into job_photo_files (upload_id, drive_file_id, file_name, bytes) values ($1,$2,$3,$4)`,
         [up.id, f.id, name, req.body.length]);
       const c = await query(`update job_photo_uploads set photo_count = photo_count + 1 where id = $1 returning photo_count`, [up.id]);

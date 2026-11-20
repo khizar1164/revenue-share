@@ -34,7 +34,11 @@
   .pick{display:block;text-align:center;padding:18px;border:2px dashed var(--seam);border-radius:12px;color:var(--ink);font-weight:600;cursor:pointer}
   .pick input{display:none}
   .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
-  .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}
+  .thumbs .t{aspect-ratio:1;border-radius:8px;background:var(--panel-2);border:1px solid var(--seam);overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--ink-3)}
+  .thumbs canvas{width:100%;height:100%;object-fit:cover;display:block}
+  .back{display:inline-block;color:var(--ink-3);text-decoration:none;font-size:15px;padding:6px 0}
+  .nojobs{color:var(--ink-3);font-size:15px;margin:0 0 4px}
   .go{width:100%;font:inherit;font-size:18px;font-weight:700;padding:15px;border:0;border-radius:12px;background:var(--brand);color:#1a0e05;margin-top:6px}
   .go:disabled{opacity:.5}
   .msg{padding:12px 14px;border-radius:10px;margin-bottom:14px}
@@ -50,6 +54,7 @@
 </head>
 <body>
 <main>
+  <a href="/me" class="back">&larr; My page</a>
   <h1>Job <em>Photos</em></h1>
   <p class="dek">Send your photos from a job. They go straight to the office and count toward "most job photos".</p>
 
@@ -58,6 +63,7 @@
   <form id="form" hidden>
     <div class="card">
       <p class="step">1. Which job</p>
+      <p class="nojobs" id="noJobs" hidden>None of your jobs from the last 7 days are on the schedule. Type the job number instead.</p>
       <select id="job"></select>
       <div id="otherBox" hidden>
         <label for="other">Job number</label>
@@ -141,8 +147,24 @@
   });
   $("files").addEventListener("change", function(){
     S.files = Array.prototype.slice.call($("files").files || []).slice(0, 40);
-    $("thumbs").innerHTML = S.files.map(function(f, i){ return '<img id="t' + i + '" alt="">'; }).join("");
-    S.files.forEach(function(f, i){ var u = URL.createObjectURL(f); $("t" + i).src = u; });
+    /* Small previews, drawn one after another. Showing the full photos made
+       the phone decode several 12 MP images at once, which is what made the
+       page stutter, and a photo the browser can't show (some HEIC) became a
+       broken image. Now it is a numbered tile instead. */
+    $("thumbs").innerHTML = S.files.map(function(f, i){ return '<div class="t" id="t' + i + '">' + (i + 1) + '</div>'; }).join("");
+    var gen = (S.gen = (S.gen || 0) + 1);
+    S.files.reduce(function(p, f, i){
+      return p.then(function(){
+        if (gen !== S.gen || !window.createImageBitmap) return;
+        return createImageBitmap(f).then(function(img){
+          var k = 160 / Math.min(img.width, img.height), c = document.createElement("canvas");
+          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          if (img.close) img.close();
+          var t = $("t" + i); if (t && gen === S.gen) { t.textContent = ""; t.appendChild(c); }
+        }).catch(function(){});
+      });
+    }, Promise.resolve());
     if (($("files").files || []).length > 40) note("info", "Up to 40 photos at a time. The first 40 will be sent.");
     ready();
   });
@@ -177,6 +199,7 @@
       .catch(function(err){
         note("bad", "Upload stopped: " + esc(err.message) + (done ? " (" + done + " of " + total + " were saved)" : "") + ". Try again.");
         $("send").textContent = "Upload photos"; ready();
+        window.scrollTo(0, 0);              // the message is at the top
       });
   });
 
@@ -192,7 +215,7 @@
     $("job").innerHTML = r.jobs.map(function(j, i){ return '<option value="' + i + '">' + esc(label(j)) + '</option>'; }).join("")
       + '<option value="other">' + (r.jobs.length ? "A different job…" : "Type the job number…") + '</option>';
     $("otherBox").hidden = r.jobs.length > 0;
-    if (!r.jobs.length) $("job").value = "other";
+    if (!r.jobs.length) { $("job").value = "other"; $("job").hidden = true; $("noJobs").hidden = false; }
     drawCrew();
     $("form").hidden = false;
     loadMine();
