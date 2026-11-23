@@ -30,6 +30,7 @@ import { syncJobCrew } from "./sync/mip-crew.js";
 import { configured as moveitproConfigured } from "./moveitpro.js";
 import { importTardies } from "./sync/tardy.js";
 import { importReviews } from "./sync/reviews-sheet.js";
+import { writeReviewBackup } from "./reviews-page.js";
 import { syncDiscipline } from "./sync/discipline.js";
 import { syncCrew } from "./sync/crew.js";
 import { syncLeadDates } from "./sync/lead-dates.js";
@@ -122,9 +123,14 @@ export async function syncTardies({ period } = {}) {
 export async function syncReviews({ period } = {}) {
   if (!process.env.REVIEW_SHEET_ID) throw new Error("REVIEW_SHEET_ID is not set");
   if (!loadCredentials()) throw new Error("no Google credentials configured");
-  const r = await importReviews(createGoogleClient(), process.env.REVIEW_SHEET_ID,
-    { period: period ?? thisMonth().period });
-  return r.summary;
+  const google = createGoogleClient();
+  const p = period ?? thisMonth().period;
+  const r = await importReviews(google, process.env.REVIEW_SHEET_ID, { period: p });
+  /* the dashboard is the main record now; the sheet gets a backup tab */
+  let backup;
+  try { backup = await writeReviewBackup(google, process.env.REVIEW_SHEET_ID, p); }
+  catch (e) { backup = `backup tab not written (${e.message.slice(0, 120)})`; }
+  return `${r.summary}; ${backup}`;
 }
 
 /* -------------------------------------------------------------- writeback --- */

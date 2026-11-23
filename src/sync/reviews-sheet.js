@@ -170,6 +170,13 @@ export async function importReviews(google, sheetId, { period, dryRun = false })
 
   const grid = await google.read(sheetId, `'${tab.title}'!A1:AZ1200`);
   const parsed = parseMonthBlock(grid, { year, month });
+  /* From 21 November the company brain logs reviews on its own and the sheet
+     is only a backup, so rows typed from that date on are not imported: they
+     would count twice. */
+  const from = process.env.REVIEWS_AUTOMATIC_FROM || "2026-11-21";
+  const late = parsed.reviews.filter(r => r.occurred_on >= from).length;
+  parsed.reviews = parsed.reviews.filter(r => r.occurred_on < from);
+  if (late) parsed.warnings.push(`${late} row(s) dated ${from} or later left to the brain`);
   if (parsed.problem) throw new Error(`review log: ${parsed.problem} — nothing changed`);
 
   const roster = await matchableRoster(period);

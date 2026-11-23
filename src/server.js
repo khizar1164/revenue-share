@@ -32,6 +32,7 @@ import { writeUpPdf, writeUpFilename, noticeData } from "./writeup.js";
 import { mountAdminPages } from "./admin-pages.js";
 import { mountConnecteamChat } from "./sync/connecteam-chat.js";
 import { mountPhotos } from "./photos.js";
+import { mountReviewsPage } from "./reviews-page.js";
 import { mountCrewLogin } from "./crew-login.js";
 import { lockedPeriods, refuseIfLocked, setLock } from "./locks.js";
 import { chromePath } from "../hr/make-fillable.mjs";
@@ -1144,6 +1145,7 @@ app.get("/admin/writeups", (_req, res) => res.sendFile(join(root, "public", "wri
 mountAdminPages(app, wrap);
 mountConnecteamChat(app, wrap);
 mountPhotos(app, wrap);
+mountReviewsPage(app, wrap);
 mountCrewLogin(app, wrap, { publicUrl: PUBLIC_URL });
 
 /* One employee's private report. The id in the path is a placeholder for the
@@ -1157,6 +1159,7 @@ app.get("/account", (_req, res) => res.sendFile(join(root, "public", "account.ht
 app.get("/static/webauthn.js", (_req, res) => res.sendFile(join(root, "node_modules", "@simplewebauthn", "browser", "dist", "bundle", "index.umd.min.js")));
 app.get("/manifest.webmanifest", (_req, res) => res.type("application/manifest+json").sendFile(join(root, "public", "manifest.webmanifest")));
 app.get("/admin/photos", (_req, res) => res.sendFile(join(root, "public", "photos-admin.html")));
+app.get("/admin/reviews", (_req, res) => res.sendFile(join(root, "public", "reviews.html")));
 app.get("/me/:employeeId", (_req, res) => res.sendFile(join(root, "public", "me.html")));
 
 /* Lets the report page offer a person-picker: to a signed-in admin, or to
