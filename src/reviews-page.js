@@ -60,7 +60,13 @@ export function mountReviewsPage(app, wrap) {
       `select count(*)::int n from company_brain.review_inbox i join reviews r on r.id = i.review_id
         where i.status = 'needs_check'`)).rows[0].n : 0;
 
-    res.json({ month: period.slice(0, 7), automaticFrom: AUTOMATIC_FROM(), needs, people, rows });
+    /* every month that has reviews, newest first, for the month picker */
+    const months = (await query(
+      `select to_char(date_trunc('month', occurred_on), 'YYYY-MM') as month, count(*)::int as reviews
+         from reviews group by 1 order by 1 desc limit 36`)).rows;
+    const sheet = process.env.REVIEW_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${process.env.REVIEW_SHEET_ID}/edit` : null;
+
+    res.json({ month: period.slice(0, 7), automaticFrom: AUTOMATIC_FROM(), needs, people, rows, months, sheet });
   }));
 
   /* Fix a review: job, photo, crew. Credits are replaced, points follow the photo. */

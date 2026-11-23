@@ -9,55 +9,104 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/static/admin.css?v=25">
 <style>
-  .sheet{border-collapse:collapse;width:100%;font-size:13.5px}
-  .sheet th,.sheet td{border:1px solid var(--seam);padding:6px 8px;text-align:left;white-space:nowrap}
-  .sheet th{position:sticky;top:0;background:var(--panel-2);font-family:var(--cond);letter-spacing:.06em;text-transform:uppercase;font-size:12px}
-  .sheet th.who{writing-mode:vertical-rl;transform:rotate(180deg);height:110px;text-align:left;padding:6px 4px}
-  .sheet td.c{text-align:center;font-weight:700;color:var(--ink)}
-  .sheet td.c.p3{color:#f0762e}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:26px 0 18px;border-bottom:1px solid var(--seam);margin-bottom:18px}
+  .top h1{margin:0}
+  .acts{display:flex;gap:8px;flex-wrap:wrap}
+  .btnl{display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:600;font-size:14px;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--seam);border-radius:9px;padding:8px 13px;text-decoration:none;cursor:pointer}
+  .btnl:hover{border-color:var(--ink-3)}
+  .btnl.brand{background:var(--brand);border-color:var(--brand);color:#1a0e05}
+
+  /* month bar */
+  .monthbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .monthbar .arrow{width:38px;height:38px;border-radius:9px;border:1px solid var(--seam);background:var(--panel);color:var(--ink);font-size:18px;cursor:pointer}
+  .monthbar .arrow:disabled{opacity:.35;cursor:default}
+  .monthbar select{font:inherit;font-size:16px;font-weight:700;color:var(--ink);background:var(--panel);border:1px solid var(--seam);border-radius:9px;padding:8px 12px;width:auto;min-width:220px;cursor:pointer;margin:0}
+  .monthbar .chips{margin-left:6px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font:inherit;font-size:13px;padding:6px 11px;border-radius:999px;border:1px solid var(--seam);background:transparent;color:var(--ink-2);cursor:pointer}
+  .chip.on{background:var(--brand);border-color:var(--brand);color:#1a0e05;font-weight:700}
+
+  /* summary */
+  .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--seam);border-radius:11px;padding:14px 16px}
+  .stat .k{font-family:var(--cond);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:var(--ink-3)}
+  .stat .v{font-family:var(--cond);font-weight:700;font-size:30px;color:var(--ink);margin-top:2px}
+  .stat.alert{border-color:var(--crit)}
+  .stat.alert .v{color:#ff9a9a}
+  .leaders{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .leader{font-size:13px;background:var(--panel-2);border:1px solid var(--seam);border-radius:999px;padding:3px 9px;color:var(--ink-2)}
+  .leader b{color:var(--brand)}
+
+  /* the sheet */
+  .wrap{overflow-x:auto;border:1px solid var(--seam);border-radius:11px;background:var(--panel)}
+  table.sheet{border-collapse:collapse;width:100%;font-size:14px}
+  .sheet th{font-family:var(--cond);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;color:var(--ink-3);
+    text-align:left;padding:11px 10px;border-bottom:1px solid var(--seam);background:var(--panel-2);white-space:nowrap}
+  .sheet th.who{text-align:center;min-width:58px;line-height:1.15}
+  .sheet th.who span{display:block;color:var(--ink-2);font-size:12.5px;letter-spacing:.04em}
+  .sheet td{padding:10px;border-bottom:1px solid var(--seam);vertical-align:middle;white-space:nowrap;color:var(--ink-2)}
   .sheet tr.row{cursor:pointer}
-  .sheet tr.row:hover td{background:rgba(240,118,46,.06)}
-  .sheet tr.tot td{font-weight:700;background:var(--panel-2)}
-  .sheet tr.flag td:first-child{box-shadow:inset 4px 0 0 #d03b3b}
-  .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;border:1px solid var(--seam);color:var(--ink-3)}
-  .tag.brain{border-color:#3a6;color:#8fe28f}
-  .tag.flag{border-color:#d03b3b;color:#ff9a9a}
-  .detail td{background:var(--panel-2);white-space:normal}
-  .detail .body{max-width:760px;line-height:1.5;margin:4px 0 8px}
-  .detail .ph{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
-  .detail .ph img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--seam)}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
-  .chips button{font:inherit;font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--seam);background:transparent;color:var(--ink-2);cursor:pointer}
-  .chips button.on{background:#f0762e;border-color:#f0762e;color:#1a0e05;font-weight:700}
-  .fix{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .fix input[type=text]{width:120px}
-  .needs{border-left:4px solid #d03b3b}
+  .sheet tr.row:hover td{background:rgba(240,118,46,.05)}
+  .sheet tr.open td{background:rgba(240,118,46,.07)}
+  .sheet tr.flag td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
+  .sheet td.cust b{color:var(--ink);font-weight:600}
+  .sheet td.cust small{display:block;color:var(--ink-3);font-size:12px}
+  .sheet td.c{text-align:center}
+  .pt{display:inline-block;min-width:24px;padding:2px 0;border-radius:6px;font-weight:700;font-size:13px;background:var(--panel-2);color:var(--ink)}
+  .pt.p3{background:rgba(240,118,46,.18);color:var(--brand)}
+  .sheet tr.tot td{font-weight:700;color:var(--ink);background:var(--panel-2);border-bottom:0}
+  .src{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+  .src i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+  .src.google i{background:#4f8ff7}.src.bbb i{background:#2bb5a8}.src.snoball i{background:#a978f0}.src.facebook i{background:#3b6fe0}
   .stars{color:#fab219;letter-spacing:1px}
+  .tag{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--seam);color:var(--ink-3)}
+  .tag.brain{border-color:rgba(12,163,12,.5);color:#8fe28f}
+  .tag.flag{border-color:var(--crit);color:#ff9a9a}
+  .empty{padding:34px;text-align:center;color:var(--ink-3)}
+
+  /* a row opened */
+  .detail td{background:var(--plane);white-space:normal;padding:16px 18px}
+  .card{max-width:820px}
+  .card .body{line-height:1.55;color:var(--ink);margin:6px 0 10px}
+  .card .meta{color:var(--ink-3);font-size:13px;margin:4px 0}
+  .ph{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .ph img{width:92px;height:92px;object-fit:cover;border-radius:9px;border:1px solid var(--seam)}
+  .fix{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .fix input[type=text]{width:130px}
+  .crewpick{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .crewpick button{font:inherit;font-size:13px;padding:5px 11px;border-radius:999px;border:1px solid var(--seam);background:transparent;color:var(--ink-2);cursor:pointer}
+  .crewpick button.on{background:var(--brand);border-color:var(--brand);color:#1a0e05;font-weight:700}
+  #toast.show{opacity:1;transform:none}
+
+  @media (max-width:760px){
+    .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .monthbar select{min-width:0;flex:1}
+    .monthbar .chips{flex-basis:100%;margin-left:0}
+  }
 </style>
 </head>
 <body>
 <div class="page">
-<header>
-  <h1>Revenue Share <em>&middot;</em> Reviews</h1>
-  <div class="mo">
-    <label for="month" style="margin:0">Month</label>
-    <input type="month" id="month" style="width:auto">
-    <span class="navlinks"><a class="nav" href="/admin">&larr; Admin</a></span>
+  <div class="top">
+    <h1>Revenue Share <em>&middot;</em> Reviews</h1>
+    <div class="acts">
+      <a class="btnl" id="sheetLink" href="#" target="_blank" rel="noopener" hidden>Review Log sheet &#8599;</a>
+      <a class="btnl" href="/admin">&larr; Admin</a>
+    </div>
   </div>
-</header>
 
-<div id="notice"></div>
+  <div class="monthbar">
+    <button class="arrow" id="prev" type="button" title="Earlier month">&lsaquo;</button>
+    <select id="month" aria-label="Month"></select>
+    <button class="arrow" id="next" type="button" title="Later month">&rsaquo;</button>
+    <div class="chips" id="recent"></div>
+  </div>
 
-<div class="panel needs" id="needsPanel" hidden>
-  <h2>Needs checking <span class="badge" id="needsCount"></span></h2>
-  <p class="dek">The brain logged these but could not tell who earned them, so nobody is credited yet. Open one, set the job number or tick the crew, and save. If it is right as it is, tap "Looks right".</p>
-</div>
-
-<div class="panel">
-  <h2 id="title">Reviews</h2>
-  <p class="dek" id="dek"></p>
-  <div class="tblwrap scrolly"><table class="sheet" id="sheet"></table></div>
-</div>
+  <div class="stats" id="stats"></div>
+  <div id="notice"></div>
+  <div class="wrap"><table class="sheet" id="sheet"></table></div>
+  <p style="color:var(--ink-3);font-size:13px;margin-top:10px" id="foot"></p>
 </div>
 <div id="toast"></div>
 <script>
@@ -65,92 +114,125 @@
   "use strict";
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
-  var S = { data: null, open: null, edit: null };
-  function toast(t, bad){ var e = $("toast"); e.textContent = t; e.className = "show" + (bad ? " bad" : ""); setTimeout(function(){ e.className = ""; }, 3500); }
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var S = { data: null, open: null, edit: null, month: null };
+
+  function toast(t, bad){ var e = $("toast"); e.textContent = t; e.className = "on" + (bad ? " bad" : ""); setTimeout(function(){ e.className = ""; }, 3500); }
   function api(path, opts){
     return fetch(path, Object.assign({ credentials: "same-origin", headers: { "content-type": "application/json" } }, opts || {}))
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(b){ if (!r.ok) throw new Error(b.error || ("HTTP " + r.status)); return b; }); });
   }
-  var now = new Date();
-  $("month").value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-  var q = new URLSearchParams(location.search); if (/^\d{4}-\d{2}$/.test(q.get("month") || "")) $("month").value = q.get("month");
+  function ym(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+  function label(m){ var p = m.split("-"); return FULL[Number(p[1]) - 1] + " " + p[0]; }
+  function shift(m, n){ var p = m.split("-").map(Number), d = new Date(p[0], p[1] - 1 + n, 1); return ym(d); }
+  function day(d){ var p = d.split("-"); return MON[Number(p[1]) - 1] + " " + Number(p[2]); }
+  function first(n){ return String(n).split(" ")[0]; }
+  function init(n){ var w = String(n).split(" "); return w.length > 1 ? w[w.length - 1][0] + "." : ""; }
+  function stars(n){ return n ? '<span class="stars" title="' + n + ' stars">' + "★★★★★".slice(0, Math.min(5, n)) + '</span>' : '<span style="color:var(--ink-3)">&middot;</span>'; }
+  function srcClass(s){ s = String(s || "").toLowerCase(); return /google/.test(s) ? "google" : /bbb/.test(s) ? "bbb" : /snoball|bestcompany/.test(s) ? "snoball" : /facebook/.test(s) ? "facebook" : ""; }
 
-  function short(n){ var w = String(n).split(" "); return w[0] + (w.length > 1 ? " " + w[w.length - 1][0] + "." : ""); }
-  function fmtDate(d){ var p = d.split("-"); return Number(p[1]) + "/" + Number(p[2]) + "/" + p[0]; }
-  function stars(n){ return n ? '<span class="stars">' + "★★★★★".slice(0, n) + '</span>' : ""; }
+  var q = new URLSearchParams(location.search);
+  S.month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : ym(new Date());
+
+  function drawMonths(){
+    var d = S.data, now = ym(new Date());
+    var list = d.months.map(function(m){ return m.month; });
+    if (list.indexOf(now) < 0) list.unshift(now);
+    if (list.indexOf(S.month) < 0) list.push(S.month);
+    list.sort().reverse();
+    var counts = {}; d.months.forEach(function(m){ counts[m.month] = m.reviews; });
+    $("month").innerHTML = list.map(function(m){
+      return '<option value="' + m + '"' + (m === S.month ? " selected" : "") + '>' + label(m) + (counts[m] ? "  (" + counts[m] + ")" : "") + '</option>';
+    }).join("");
+    $("next").disabled = S.month >= now;
+    /* quick buttons for the last few months */
+    var recent = list.slice(0, 4);
+    $("recent").innerHTML = recent.map(function(m){
+      return '<button type="button" class="chip' + (m === S.month ? " on" : "") + '" data-m="' + m + '">' + MON[Number(m.split("-")[1]) - 1] + '</button>';
+    }).join("");
+    if (d.sheet) { $("sheetLink").href = d.sheet; $("sheetLink").hidden = false; }
+  }
 
   function draw(){
     var d = S.data, rows = d.rows;
-    /* columns: anyone credited this month first, then the rest of the crew */
-    var credited = {}; rows.forEach(function(r){ r.crew.forEach(function(id){ credited[id] = true; }); });
+    var credited = {}; rows.forEach(function(r){ r.crew.forEach(function(id){ credited[id] = (credited[id] || 0) + r.points; }); });
     var cols = d.people.filter(function(p){ return credited[p.id]; });
-    var label = new Date(d.month + "-15").toLocaleString("en-US", { month: "long", year: "numeric" });
-    $("title").textContent = label;
+    var photos = rows.filter(function(r){ return r.has_photo; }).length;
     var flagged = rows.filter(function(r){ return r.check_status === "needs_check"; }).length;
-    $("needsPanel").hidden = !d.needs;
-    $("needsCount").textContent = d.needs;
-    $("dek").innerHTML = rows.length + " review" + (rows.length === 1 ? "" : "s") + ". 1 point each, 3 with a photo, to everyone credited."
-      + " From <b>" + esc(fmtDate(d.automaticFrom)) + "</b> the brain logs them on its own; earlier rows came from the Review Log sheet."
-      + (d.needs && !flagged ? " The ones needing a check are in another month." : "") + " Tap a row to see the review.";
+    var leaders = cols.slice().sort(function(a, b){ return credited[b.id] - credited[a.id]; }).slice(0, 4);
 
-    var h = '<thead><tr><th>#</th><th>Job #</th><th>Source</th><th>Customer</th><th>Date</th><th>Stars</th><th>Photo</th><th></th>'
-      + cols.map(function(p){ return '<th class="who" title="' + esc(p.full_name) + '">' + esc(short(p.full_name)) + '</th>'; }).join("")
+    $("stats").innerHTML =
+        '<div class="stat"><div class="k">Reviews</div><div class="v">' + rows.length + '</div></div>'
+      + '<div class="stat"><div class="k">With a photo</div><div class="v">' + photos + '</div></div>'
+      + '<div class="stat"><div class="k">Top this month</div>' + (leaders.length ? '<div class="leaders">' + leaders.map(function(p){
+          return '<span class="leader">' + esc(first(p.full_name) + " " + init(p.full_name)) + ' <b>' + credited[p.id] + '</b></span>'; }).join("") + '</div>' : '<div class="v">&middot;</div>') + '</div>'
+      + '<div class="stat' + (d.needs ? " alert" : "") + '"><div class="k">Needs checking</div><div class="v">' + d.needs + '</div></div>';
+
+    var span = 7 + cols.length;
+    var h = '<thead><tr><th>#</th><th>Date</th><th>Customer &middot; Job</th><th>Source</th><th>Stars</th><th>Photo</th><th></th>'
+      + cols.map(function(p){ return '<th class="who" title="' + esc(p.full_name) + '"><span>' + esc(first(p.full_name)) + '</span>' + esc(init(p.full_name)) + '</th>'; }).join("")
       + '</tr></thead><tbody>';
-    if (!rows.length) h += '<tr><td colspan="' + (8 + cols.length) + '" style="color:var(--ink-3)">No reviews this month yet.</td></tr>';
+    if (!rows.length) h += '<tr><td colspan="' + span + '" class="empty">No reviews in ' + esc(label(S.month)) + ' yet.</td></tr>';
     rows.forEach(function(r, i){
-      var flag = r.check_status === "needs_check";
-      h += '<tr class="row' + (flag ? " flag" : "") + '" data-i="' + i + '"><td>' + (i + 1) + '</td><td><b>' + esc(r.job_number || "") + '</b></td>'
-        + '<td>' + esc(r.source || "") + '</td><td>' + esc(r.customer_name || "") + '</td><td>' + esc(fmtDate(r.date)) + '</td>'
-        + '<td>' + stars(r.stars) + '</td><td>' + (r.has_photo ? "Yes" : "") + '</td>'
-        + '<td>' + (flag ? '<span class="tag flag">Needs checking</span>' : r.recorded_by === "brain" ? '<span class="tag brain">Brain</span>'
-                 : r.recorded_by === "review-log" ? '<span class="tag">Sheet</span>' : '<span class="tag">Admin</span>') + '</td>'
-        + cols.map(function(p){ return r.crew.indexOf(p.id) >= 0 ? '<td class="c' + (r.points >= 3 ? " p3" : "") + '">' + r.points + '</td>' : '<td></td>'; }).join("")
+      var flag = r.check_status === "needs_check", open = S.open === i;
+      h += '<tr class="row' + (flag ? " flag" : "") + (open ? " open" : "") + '" data-i="' + i + '">'
+        + '<td>' + (i + 1) + '</td><td>' + esc(day(r.date)) + '</td>'
+        + '<td class="cust"><b>' + esc(r.customer_name || "Customer") + '</b><small>' + (r.job_number ? "Job " + esc(r.job_number) : "No job yet") + '</small></td>'
+        + '<td><span class="src ' + srcClass(r.source) + '"><i></i>' + esc(r.source || "") + '</span></td>'
+        + '<td>' + stars(r.stars) + '</td><td>' + (r.has_photo ? "📷" : "") + '</td>'
+        + '<td>' + (flag ? '<span class="tag flag">Needs checking</span>' : r.recorded_by === "brain" ? '<span class="tag brain">Automatic</span>'
+                 : r.recorded_by === "review-log" ? '<span class="tag">From sheet</span>' : '<span class="tag">Added here</span>') + '</td>'
+        + cols.map(function(p){ return '<td class="c">' + (r.crew.indexOf(p.id) >= 0 ? '<span class="pt' + (r.points >= 3 ? " p3" : "") + '">' + r.points + '</span>' : "") + '</td>'; }).join("")
         + '</tr>';
-      if (S.open === i) h += detail(r, cols.length + 8);
+      if (open) h += detail(r, span);
     });
-    if (rows.length) {
-      h += '<tr class="tot"><td colspan="8">Total</td>' + cols.map(function(p){
-        return '<td class="c">' + rows.reduce(function(a, r){ return a + (r.crew.indexOf(p.id) >= 0 ? r.points : 0); }, 0) + '</td>'; }).join("") + '</tr>';
-    }
+    if (rows.length) h += '<tr class="tot"><td colspan="7">Total points</td>' + cols.map(function(p){ return '<td class="c">' + credited[p.id] + '</td>'; }).join("") + '</tr>';
     $("sheet").innerHTML = h + '</tbody>';
+    $("foot").innerHTML = "1 point per review, 3 with a photo, to everyone credited. From " + esc(day(d.automaticFrom)) + " the company brain logs reviews on its own; earlier ones came from the Review Log sheet. Tap a row to see the review.";
   }
 
   function detail(r, span){
-    var editable = r.recorded_by !== "review-log";
-    var e = S.edit;
-    var h = '<tr class="detail"><td colspan="' + span + '">';
-    if (r.stars || r.body) h += '<div>' + stars(r.stars) + '</div><div class="body">' + esc(r.body || "(no text)") + '</div>';
+    var e = S.edit, editable = r.recorded_by !== "review-log";
+    var h = '<tr class="detail"><td colspan="' + span + '"><div class="card">';
+    h += '<div>' + stars(r.stars) + ' <span class="meta">' + esc(r.source || "") + ' &middot; ' + esc(day(r.date)) + '</span></div>';
+    h += '<div class="body">' + (r.body ? esc(r.body) : '<span style="color:var(--ink-3)">The review text is in the Review Log sheet.</span>') + '</div>';
     if (r.photo_urls && r.photo_urls.length) h += '<div class="ph">' + r.photo_urls.slice(0, 8).map(function(u){
       return '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(u) + '" alt="review photo" referrerpolicy="no-referrer"></a>'; }).join("") + '</div>';
-    if (r.match_note) h += '<div style="color:var(--ink-3);font-size:13px">How it was matched: ' + esc(r.match_note) + '</div>';
-    if (r.url) h += '<div style="font-size:13px"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">Open the review</a></div>';
-    if (!editable) { h += '<div style="color:var(--ink-3);font-size:13px;margin-top:6px">From the Review Log sheet. Change it there.</div></td></tr>'; return h; }
-    h += '<div class="fix" style="margin-top:10px"><label>Job #</label><input type="text" id="eJob" value="' + esc(e.job_number || "") + '">'
-      + '<label><input type="checkbox" id="ePhoto"' + (e.has_photo ? " checked" : "") + '> Has a photo (3 points)</label>'
-      + '<span id="eHint" style="color:var(--ink-3);font-size:13px"></span></div>'
-      + '<div class="chips" id="eCrew">' + S.data.people.map(function(p){
+    if (r.match_note) h += '<div class="meta">How it was matched: ' + esc(r.match_note) + '</div>';
+    if (r.url) h += '<div class="meta"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">Open the review &#8599;</a></div>';
+    if (!editable) return h + '<div class="meta" style="margin-top:8px">This one came from the Review Log sheet, so any change is made there.</div></div></td></tr>';
+    h += '<div class="fix"><label style="margin:0">Job #</label><input type="text" id="eJob" value="' + esc(e.job_number || "") + '" placeholder="e.g. 11640">'
+      + '<label style="margin:0"><input type="checkbox" id="ePhoto"' + (e.has_photo ? " checked" : "") + '> Has a photo (3 points)</label>'
+      + '<span id="eHint" class="meta"></span></div>'
+      + '<div class="crewpick" id="eCrew">' + S.data.people.map(function(p){
           return '<button type="button" data-p="' + esc(p.id) + '" class="' + (e.crew.indexOf(p.id) >= 0 ? "on" : "") + '">' + esc(p.full_name) + '</button>'; }).join("") + '</div>'
-      + '<div class="fix"><button class="go" type="button" id="eSave">Save</button>'
-      + (r.check_status === "needs_check" ? '<button class="ghost" type="button" id="eOk">Looks right</button>' : "")
-      + '<button class="ghost" type="button" id="eDel" style="margin-left:auto">Delete review</button></div></td></tr>';
-    return h;
+      + '<div class="fix"><button class="btnl brand" type="button" id="eSave">Save</button>'
+      + (r.check_status === "needs_check" ? '<button class="btnl" type="button" id="eOk">Looks right</button>' : "")
+      + '<button class="btnl" type="button" id="eDel" style="margin-left:auto">Delete review</button></div>';
+    return h + '</div></td></tr>';
   }
 
   function load(){
-    history.replaceState(null, "", "/admin/reviews?month=" + $("month").value);
-    api("/api/admin/reviews-log?month=" + $("month").value).then(function(d){
-      S.data = d; S.open = null; draw();
+    history.replaceState(null, "", "/admin/reviews?month=" + S.month);
+    api("/api/admin/reviews-log?month=" + S.month).then(function(d){
+      S.data = d; S.open = null; drawMonths(); draw();
     }).catch(function(e){
-      $("notice").innerHTML = '<div class="note">' + esc(e.message) + (/sign in/.test(e.message) ? ' <a href="/admin">Sign in</a>' : '') + '</div>';
+      $("notice").innerHTML = '<div class="note bad">' + esc(e.message) + (/sign in/.test(e.message) ? ' <a href="/admin">Sign in</a>' : '') + '</div>';
     });
   }
+  function go(m){ S.month = m; load(); }
+
+  $("month").addEventListener("change", function(){ go(this.value); });
+  $("prev").addEventListener("click", function(){ go(shift(S.month, -1)); });
+  $("next").addEventListener("click", function(){ go(shift(S.month, 1)); });
+  $("recent").addEventListener("click", function(e){ var b = e.target.closest("button[data-m]"); if (b) go(b.getAttribute("data-m")); });
 
   $("sheet").addEventListener("click", function(ev){
     var tr = ev.target.closest("tr.row");
     if (tr) {
-      var i = Number(tr.getAttribute("data-i"));
+      var i = Number(tr.getAttribute("data-i")), r = S.data.rows[i];
       S.open = S.open === i ? null : i;
-      var r = S.data.rows[i];
       S.edit = { job_number: r.job_number, has_photo: r.has_photo, crew: r.crew.slice() };
       draw(); return;
     }
@@ -198,7 +280,6 @@
     }, 350);
   });
 
-  $("month").addEventListener("change", load);
   load();
 })();
 </script>
