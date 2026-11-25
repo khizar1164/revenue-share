@@ -3,7 +3,7 @@
  * Cadences are set by how fast each source really changes, not by how fast we
  * could ask:
  *
- *   crew-jobs    every 3 hours   who worked each job, from MoveitPro. Crews
+ *   crew-jobs    every hour      who worked each job, from MoveitPro. Crews
  *                                are set the day before and adjusted on the
  *                                day; an hour is soon enough for a review or a
  *                                claim logged that afternoon.
@@ -12,7 +12,7 @@
  *                                board should move while he is still looking
  *                                at it. Reading a small sheet is nearly free.
  *
- *   revenue      every 6 hours   closed-out job bills from MoveitPro. A bill
+ *   revenue      every 2 hours   closed-out job bills from MoveitPro. A bill
  *                                is closed out in the office through the day.
  *
  *   writeback    daily 02:15     quiet hour, and after the day's jobs have
@@ -168,7 +168,7 @@ export function registerJobs(scheduler) {
       const line = await syncJobCrew(o ?? {});
       await syncSameDayPoints(thisMonth().period);
       return line;
-    }, { everyMs: 3 * 60 * MIN, runAtStartAfterMs: 20_000 });
+    }, { everyMs: 60 * MIN, runAtStartAfterMs: 20_000 });
   }
   scheduler.add("hours", o => syncHours(o), {
     everyMs: 10 * MIN, runAtStartAfterMs: 45_000 });
@@ -177,15 +177,17 @@ export function registerJobs(scheduler) {
      or it would declare the figure fresh for ever. */
   if (moveitproConfigured()) {
     scheduler.add("revenue", () => syncMipRevenue(), {
-      everyMs: 6 * 60 * MIN, runAtStartAfterMs: 150_000 });
-  /* Why these two are not more often. MoveitPro's free API plan stops at 1,000
-     requests a day, shared with the Discord relay and lead dating. On 12
-     November the revenue read ran every two hours over October and November,
-     about 180 requests a run, used the day up by early evening, and the next
-     booking (#11602) could not be fetched and never reached dispatch-updates.
-     The relay is the one that matters; these two can wait hours. */
+      everyMs: 2 * 60 * MIN, runAtStartAfterMs: 150_000 });
+  /* How often. MoveitPro's API plan was 1,000 requests a day until Andrew
+     raised it to 5,000 on 25 Nov 2026, shared with the Discord relay, lead
+     dating and the company brain. On 12 November, on the old plan, a two-hourly
+     revenue read over two months (about 180 requests a run) used the day up by
+     early evening and a booking (#11602) never reached dispatch-updates. Now
+     October is held by hand, a run reads November only (about 70 requests), so
+     every 2 hours is about 850 a day, and crews hourly fit as well. The relay
+     is still the one that matters: if the limit is ever hit, slow these first. */
   }
-  scheduler.add("revenue-watch", () => revenueFreshness({ maxHours: 14 }), {
+  scheduler.add("revenue-watch", () => revenueFreshness({ maxHours: 6 }), {
     everyMs: 2 * 60 * MIN, runAtStartAfterMs: 60 * MIN });
   /* Matthew updates his log through the day; half-hourly keeps the board
      current without reading the sheet for no reason */
