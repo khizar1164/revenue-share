@@ -19,6 +19,7 @@
  *                                landed, so the sheet reflects a settled day.
  */
 
+import { maybeRotate } from "./codenames.js";
 import { syncSameDayPoints } from "./sync/points.js";
 import { importHours } from "./sync/hours.js";
 import { importWeeklyHours } from "./sync/hours-weekly.js";
@@ -234,5 +235,7 @@ export function registerJobs(scheduler) {
       { dailyAt: "09:30" });
   }
   scheduler.add("writeback", () => syncWriteBack(), { dailyAt: "02:15" });
+  /* new code names on the 1st of each month, from December 2026 (Andrew, 21 Nov) */
+  scheduler.add("code-names", () => maybeRotate(), { everyMs: 60 * MIN, runAtStartAfterMs: 120_000 });
   return scheduler;
 }

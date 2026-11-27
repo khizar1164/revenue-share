@@ -296,7 +296,7 @@
     buildMonths(d);
     var p = String(d.period).split("-");
     $("month").textContent = MONTHS[Number(p[1])-1] + " " + p[0] +
-      " · you are shown as " + d.code_name + " on the break-room screen";
+      " · you are shown as " + d.code_name + " on the break-room screen this month. It changes on the 1st of every month: sign in to see your new one.";
 
     $("take").textContent = usd(d.take_home);
 
