@@ -35,16 +35,12 @@
  * notice or no notice changes whether they are paid — and it is made in the
  * admin panel by a person.
  */
+import { freeCodeName } from "../codenames.js";
 import { query } from "../db.js";
 import { listUsers, configured, status as ctStatus } from "../connecteam.js";
 
 const DEPARTMENT = process.env.CONNECTEAM_CREW_GROUP || "Operations";
 
-/* The pool code names are drawn from; it must not repeat a name already used. */
-const NAME_POOL = ["RANGER","JAGUAR","LYNX","BEAR","BISON","RHINO","WOLF","OTTER",
-  "FALCON","HERON","BADGER","MARTEN","STOAT","OSPREY","KESTREL","RAVEN","HAWK",
-  "EAGLE","PUMA","TIGER","COBRA","VIPER","MAMBA","DINGO","JACKAL","CARIBOU",
-  "MOOSE","ELK","STAG","BOAR"];
 
 /** Lowercase, no punctuation, single spaces — enough to match a roster by hand. */
 export const normName = n => String(n ?? "")
@@ -93,8 +89,8 @@ export async function syncCrew({ dryRun = false, fetchImpl } = {}) {
 
     if (dryRun) { added.push(name); continue; }
 
-    const taken = new Set((await query(`select code_name from employees`)).rows.map(r => r.code_name));
-    const code = NAME_POOL.find(n => !taken.has(n)) ?? `CREW${taken.size + 1}`;
+    /* a random free name: handing them out in order let the crew guess who a new hire was */
+    const code = await freeCodeName();
     const ins = await query(
       `insert into employees (code_name, full_name, email, status, is_mover)
        values ($1, $2, nullif($3, ''), 'active', true)
